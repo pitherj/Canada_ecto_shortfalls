@@ -20,6 +20,8 @@ Galen et al. (2025) dark-taxa dataset.
 
 ## Quick start
 
+**NOTE**: Raw data files are not stored on this repo. They will be archived (subject to copyright) at an appropriate data repository. 
+
 ```r
 # 1. From the project root (where ECM_manuscript.Rproj lives):
 #    place the raw inputs in data_raw/ (see data_raw/DATA-DICTIONARY.md).
@@ -181,14 +183,9 @@ For the code and data archive, cite the repository release DOI once minted
 
 ## License
 
-- **Code** (`scripts/`, `supplemental_materials.qmd`): CC BY-NC 4.0.
+- **Code** (`scripts/`, `supplemental_materials.qmd`): MIT License.
 - **Derived data** (`data_derived/`): CC BY-NC 4.0, subject to the terms of the
   upstream source databases.
-- **Raw data** (`data_raw/`): governed by the licenses of the original
-  providers (GlobalFungi, UNITE, GenBank, FungalTraits, FungalRoot, BIEN/BIEN2,
-  MycoCosm, BioTIME, WorldClim, van Galen et al.). See
-  `data_raw/DATA-DICTIONARY.md` for each source and consult the provider's terms
-  before redistribution.
 
 ## References
 
