@@ -1,0 +1,6 @@
+# Tell renv to skip directories that contain no R code, so dependency scanning
+# only reads scripts/ and supplemental_materials.qmd. Without this, renv tries
+# to scan the thousands of data files (e.g. data_raw/bien2_ranges/) and warns.
+data_raw/
+data_derived/
+figures/

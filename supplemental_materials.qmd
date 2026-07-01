@@ -1,0 +1,555 @@
+---
+title: "Supplemental Materials"
+subtitle: "The current state of knowledge and data on ectomycorrhizal fungi in Canada"
+author: "Eckert, Qin, Kivlin, Shelton, Yusta Belsham, Fischer, Karst & Pither"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    theme: cosmo
+    df-print: kable
+execute:
+  echo: false
+  warning: false
+  message: false
+editor: source
+---
+
+```{r setup}
+#| include: false
+# Source the shared pipeline setup: loads packages, the `paths` list, helper
+# functions, and (if it exists) the primary EcM dataset `emf`.
+source(here::here("scripts", "00_setup.R"))
+
+# Small helper for rendering data-frame tables with a caption.
+show_table <- function(x, caption = NULL, ...) {
+  knitr::kable(x, caption = caption, format = "html", escape = FALSE, ...)
+}
+
+# Convenience: absolute path to a figure by file name.
+fig <- function(name) here::here("figures", name)
+```
+
+# Supplemental methods
+
+These methods provide the detailed procedures underlying every analysis and
+result reported in the main text. They are organized to follow the logic of the
+pipeline: first the assembly of the Canadian ectomycorrhizal (EcM) fungal
+dataset and its supporting reference layers, then the methods for each of the
+seven biodiversity shortfalls in the order they appear in the manuscript
+(Linnean, Wallacean, Prestonian, Darwinian, Raunkiæran, Hutchinsonian,
+Eltonian). All analyses were conducted in R (v4.5.2; R Core Team 2026); the
+complete, ordered code base is described in `scripts/README.md`.
+
+## Assembly of the Canadian EcM fungal dataset
+
+### Data sources
+
+We compiled EcM fungal records for Canada from two publicly accessible sequence
+sources: version 5 of the GlobalFungi database (Větrovský et al. 2020) and NCBI
+GenBank (accessed 29 June 2026). GlobalFungi is a curated, purpose-built
+database of community-survey amplicon data, consistently processed but
+aggregated from studies using varied sequencing platforms and protocols, and
+primarily derived from soil samples. GenBank is a general-purpose sequence
+repository comprising records deposited from diverse studies and sampling
+efforts, including targeted root sampling. Unlike GlobalFungi records, GenBank
+records lack per-sample read counts or a consistent sampling frame, so they
+cannot be used to estimate facets of diversity that require a defined sampling
+unit.
+
+### UNITE reference database and SH assignment
+
+We assigned fungal species hypothesis (SH) codes and taxonomy using the UNITE
+general FASTA release (build 4 April 2024, UNITE v10.0, DOI
+10.15156/BIO/2959332; dynamic clustering, full-length ITS; Nilsson et al. 2019).
+This release provides one representative sequence per SH code, each with a
+single unambiguous taxonomy string in its header, which we parsed into a lookup
+table mapping each SH code to kingdom through species. Because each SH is
+represented by exactly one sequence, that representative's taxonomy is taken
+directly as the SH-level taxonomy, with no consensus step. We used the
+full-length (`_dev`) variant, which retains flanking rRNA regions and is
+appropriate for matching full-length GenBank query sequences.
+
+We pinned the pipeline to the 4 April 2024 build. UNITE SH identifiers are
+renumbered between dated builds of the same major version, so taxonomy must be
+decoded against the same build that assigned the SH codes; the 4 April 2024
+build resolves taxonomy for >99% of GlobalFungi's pre-assigned Canadian SH
+codes, and GenBank SH codes are assigned in-house against this same build (see
+below), so both sources are internally consistent.
+
+### GlobalFungi records
+
+We downloaded the GlobalFungi v5 sample-metadata file and the combined
+ITS1/ITS2 SH abundance matrix (samples × SH codes). We retained Canadian samples
+by filtering for country = Canada; barcoding region in {ITS2, ITSboth};
+non-manipulated conditions (`manipulated == "NO"`); and exclusion of substrate
+types irrelevant to EcM fungi (shoot, air, water, sediment). We pivoted the
+resulting wide abundance matrix to long format and removed zero-abundance
+records, then joined UNITE taxonomy by SH code. Because GlobalFungi's SH codes
+are pre-assigned to UNITE, no additional sequence-similarity searching was
+required for this source. We confirmed that the GlobalFungi dataset already
+included all 12 Canadian samples from the Global Soil Mycobiome Consortium
+(GSMc; Tedersoo et al. 2021), so no independent GSMc ingestion was needed.
+
+### GenBank records
+
+We searched GenBank (nuccore) for fungal ITS sequences from Canada using the
+query `"Canada"[Country] AND "Fungi"[Organism] AND ("internal transcribed
+spacer"[All Fields] OR "ITS"[All Fields])`, with no date cutoff and no
+lifestyle keyword, so the search returns all matching fungal ITS records
+regardless of guild. We retrieved FASTA sequences and record metadata
+(coordinates, collection date, host, isolation source) in batches through the
+NCBI Entrez API (`rentrez`; Winter 2017).
+
+We assigned sequences to UNITE SH codes with `vsearch` v2.30.4 (Rognes et al.
+2016) at 98.5% global-alignment identity, retaining only the top hit per query.
+This threshold matches GlobalFungi's documented SH-assignment criterion,
+ensuring both sources apply the same membership rule. Taxonomy was read directly
+from the matched SH representative. Host taxon was taken from the structured
+GenBank `host` qualifier where available, with a fallback regex extraction of
+binomial names from `isolation_source`. The raw extracted string is preserved
+as `host_taxon_raw`; the canonicalized `host_taxon` used by all downstream
+analyses is derived from it via the shared `canonicalize_host()` helper (strip
+surrounding punctuation, collapse whitespace, truncate to the first two tokens,
+apply a curated typo-correction lookup, case-normalize, and reject entries that
+fail a Latin-name pattern check).
+
+We applied two post-assignment quality filters to improve sequence quality and
+ITS-marker consistency with the GlobalFungi component: we excluded sequences
+shorter than 200 bp, and records whose `vsearch` alignment against the UNITE
+reference was shorter than 200 bp. The second filter acts as a practical proxy
+for ITS-region consistency: very short alignments are characteristic of
+ITS1-only sequences, and screening them out gives marker-type consistency with
+the ITS2/ITSboth GlobalFungi component. Each GenBank record was also assigned a
+`canada_basis` provenance category recording the evidence for its inclusion
+(structured country field, coordinates, both, or search-only).
+
+### Combining sources, spatial validation, and EcM filtering
+
+We combined the two datasets by row-binding, retaining source-specific columns
+as `NA` for the other source. For all records with parsed coordinates we applied
+a spatial-containment check against the GADM administrative boundary for Canada,
+recording the result in a logical `coord_in_canada` column (TRUE = validated
+inside the boundary; FALSE = coordinates present but outside; NA = no
+coordinates); original coordinates are always preserved. Spatial analyses filter
+on `coord_in_canada == TRUE`, while non-spatial enumerations (taxon richness,
+record counts) include all records, treating a GlobalFungi `country == Canada`
+label as authoritative even where coordinates fall marginally outside the
+polygon. We disabled S2 spherical geometry locally around GADM predicate
+operations (`sf::sf_use_s2(FALSE)`), which the GEOS engine handles despite minor
+boundary-topology imperfections, and re-enabled it immediately afterward.
+
+We determined EcM status at the genus level using FungalTraits (Põlme et al.
+2020): we retained records whose UNITE-assigned genus carries
+`primary_lifestyle = ectomycorrhizal` in FungalTraits (genus names lower-cased
+before matching), and carried two additional FungalTraits fields — EcM lineage
+and exploration type — into the final dataset. The resulting primary analysis
+dataset (`data_derived/emf_canada_em_only.csv`) has one row per
+(sample × SH code) detection.
+
+### Definition of a "site"
+
+For analyses requiring georeferenced sampling units, we binned sample
+coordinates to three decimal places of latitude and longitude (~100 m at
+temperate latitudes), and refer to these bins as sampling "sites". This
+collapses GPS-precision noise across repeat readings at one physical location
+without merging biologically distinct sites, and is applied through the shared
+`add_site_id()` helper. Site binning is used for the incidence-based Chao2 and
+accumulation analyses; the Wallacean occurrence counts (below) are intentionally
+left unbinned so that each distinct coordinate contributes an occurrence.
+
+## Reference data preparation
+
+### FungalRoot host-determination rule
+
+We determined EcM host status for plant species from the FungalRoot database
+(Soudzilovskaia et al. 2020), accessed as occurrence-level Darwin Core Archive
+records from GBIF (DOI 10.15468/a7ujmj). We joined the occurrence file to the
+measurements extension on the mycorrhiza-type field, yielding one row per
+(plant binomial, raw mycorrhizal-type label). A species is classified as
+EcM-demonstrated if FungalRoot carries at least one occurrence with an
+unambiguous EcM-positive label (`EcM`, `EcM, no AM colonization`, or
+`ErM,EcM`). Two labels are excluded as ambiguous: `EcM, AM undetermined` (which
+does not distinguish a genuine EcM record from a non-EcM record for which AM
+status was not assessed) and `EcM,AM` (a dual-positive call that, on inspection,
+introduced implausible hosts with no other EcM evidence). Plant names were
+standardized through the GBIF taxonomic backbone
+(`rgbif::name_backbone_checklist()`) before classification. This rule requires
+no free parameters (no vote threshold or proportion cutoff).
+
+### Native Canadian EcM host species
+
+We identified native EcM host plant species occurring in Canada by querying BIEN
+(Maitner et al. 2018) for the plant species with Canadian distributions,
+filtering to natives via the Native Status Resolver, and intersecting that
+native flora directly against the species-level EcM-demonstrated list above
+(species-level selection only, with no genus-level inference and no growth-form
+restriction). The resulting list
+(`data_derived/ecm_native_canada_host_species.csv`) is the universe of EcM host
+species used in the Hutchinsonian and Eltonian analyses.
+
+Because BIEN's occurrence-name scrubbing, the Native Status Resolver, and the
+GBIF backbone underlying FungalRoot are independent taxonomic resolvers, a
+genuinely native, EcM-demonstrated species can be excluded if no single name
+string clears both the native filter and the demonstrated filter
+simultaneously. A confirmed example is the green/mountain alder complex
+(*Alnus alnobetula* / *A. crispa* / *A. viridis*): the native filter returns
+"Native" only under *Alnus alnobetula* while FungalRoot's unambiguous EcM
+evidence is filed under *Alnus crispa*, so the intersection finds no shared name
+and the species drops out. We flag this as a known limitation of unresolved
+cross-database synonymy rather than applying a general synonym-harmonization
+step (which could shift counts for many species).
+
+### BIEN2 host ranges and richness rasters
+
+We obtained MaxEnt-based modelled range polygons (BIEN2; Moulatlet et al. 2025)
+for the native Canadian EcM host species from biendata.org, downloaded
+programmatically through the REST API, reprojected to WGS84, and clipped to the
+Canada boundary. We rasterized these polygons onto a 0.5° geographic grid to
+produce three layers: host species richness (count of host species with a range
+polygon per cell); host data richness (count of host species with at least one
+Canadian EcM molecular-detection record per cell); and host data proportion
+(the ratio of the two). We also flagged ecoregions containing at least one
+0.5° cell with predicted EcM host habitat, restricting ecoregion-level gap
+analyses to ecologically relevant areas.
+
+## Spatial layers
+
+We obtained Canadian national, provincial, and territorial boundaries from GADM
+via `geodata`, a higher-resolution Canada boundary and major-lake polygons from
+Natural Earth via `rnaturalearth`, and Canadian ecoregions (National Ecological
+Framework for Canada) with their ecozone-name lookup. Layers were reprojected to
+WGS84 for coordinate operations and to the Canada Albers Equal Area Conic
+projection for mapping, simplified with `rmapshaper` where appropriate, and
+written to `data_derived/spatial/`.
+
+## Shortfall analyses
+
+### Linnean shortfall — taxonomic knowledge
+
+We quantified the Canadian EcM fungal inventory at three taxonomic levels:
+unique UNITE SH codes, genera, and named species (excluding unresolved UNITE
+entries ending in `_sp`). SH codes are the primary richness unit because they
+provide a consistent operational taxonomic unit applicable to both sources, and
+because many EcM taxa are not yet formally named. We compared observed Canadian
+EcM genera to the global EcM genus inventory in FungalTraits, and quantified the
+overlap between the GlobalFungi and GenBank components at the named-species SH
+level using set operations (shared, GlobalFungi-only, GenBank-only). We
+characterized the dataset "dark fraction" as the proportion of detected SH codes
+lacking a species-level UNITE name, computed for the combined dataset and for
+each source separately. This SH-level dark fraction is not directly comparable
+to the OTU-level dark-diversity estimates of van Galen et al. (2025), whose
+denominators include OTUs matched only to genus level; for reference we also
+computed the average per-sample proportion of species-assigned OTUs among van
+Galen et al.'s Canadian forest and tundra samples from their published
+per-sample table.
+
+For a within-footprint lower bound on richness, we constructed a site × SH
+incidence matrix from the georeferenced Canadian GlobalFungi data (sites defined
+by 3-decimal binning; singletons retained) and applied the incidence-based
+Chao2 asymptotic estimator through `iNEXT::iNEXT()` (`datatype =
+"incidence_freq"`, q = 0, 50 bootstrap replicates, 95% CI). GenBank records are
+excluded from this estimator because opportunistic one-off accessions inflate
+the singleton count (Q1) without reflecting genuine rarity. To complement the
+spatial estimator, we also computed per-sample abundance-based rarefaction and
+extrapolation for each Canadian GlobalFungi sample (`iNEXT`, q = 0, `datatype =
+"abundance"`, 50 bootstrap replicates, endpoint = 2 × per-sample EcM read sum),
+extracting observed richness, the Chao1 asymptotic estimator, and sample
+completeness Ĉ. Per-sample read counts are the sum of reads mapping to
+EcM-genus SHs (not total sequencing depth) and vary over several orders of
+magnitude across the pooled studies; per-sample Chao1 from reads is therefore
+interpreted as a standardized completeness index rather than a count of
+unobserved taxa. We additionally compiled physical EcM specimen records from
+GBIF (preserved and fossil specimens, Kingdom Fungi, Canada; filtered to EcM
+genera via FungalTraits) as a vouchered complement to the sequence data.
+
+### Wallacean shortfall — geographic-range knowledge
+
+We characterized geographic sampling breadth for each EcM taxon at three levels
+(SH code, genus, named species). For each taxon we counted unique sampling
+occurrences as distinct 30 arc-second grid cells (~1 km²), and produced
+frequency distributions of occurrences per taxon within Canada and globally. We
+report the proportion of taxa known from a single occurrence, and from fewer
+than 30 occurrences, both within Canada and globally, as straightforward
+measures of the shortfall. The within-Canada and global occurrence counts are
+drawn from the GlobalFungi dataset only, because it provides the structured
+sampling frame required for meaningful occupancy comparison; the global counts
+map each named Canadian species (or SH code) to all globally-known SH codes
+carrying that identity and match them against the full global GlobalFungi v5 SH
+abundance matrix under the same quality filters used for the Canadian data. As a
+complementary view relevant to species distribution modelling, we tabulated how
+many taxa meet common minimum-occurrence thresholds for modelling.
+
+### Prestonian shortfall — temporal knowledge
+
+We searched the BioTIME database (Dornelas et al. 2018) for time-series records
+of EcM fungal communities in Canada, filtering to studies with at least one
+Canadian location, at least two sampling time points, and an organism type
+consistent with fungi, and cross-referencing matching studies against the EcM
+dataset by taxonomy. We operationalize the Prestonian shortfall as the
+percentage of named EcM fungal species present in Canada that lack any abundance
+time-series data recorded anywhere on Earth.
+
+### Darwinian shortfall — phylogenomic knowledge
+
+We assessed genome-sequence availability for Canadian EcM genera by
+cross-referencing detected genera against the JGI MycoCosm fungal-genomics
+portal, matching organism names to genera after lower-case normalization and
+fuzzy string matching. We operationalize the Darwinian shortfall as the
+percentage of named Canadian EcM fungal species absent from the database.
+
+### Raunkiæran shortfall — trait knowledge
+
+We quantified trait-data availability using FungalTraits (a genus-level
+compilation) for all EcM genera detected in Canada; every detected genus was
+present in FungalTraits, so the shortfall is one of trait completeness rather
+than genus coverage. We assessed the six FungalTraits columns carrying
+information meaningful for EcM fungi, in two classes: three
+morphological/structural traits derivable from taxonomic description (fruitbody
+type, hymenium type, mycorrhizal exploration type) and three
+ecological/interaction traits (secondary lifestyle, endophytic-interaction
+capability, host specificity). The seventh potentially relevant column, growth
+form, is "filamentous mycelium" for all EcM genera and was excluded as
+uninformative. Coverage is the proportion of genus × trait cells with a
+documented value, where "documented" means non-missing and not the literal
+entry "unknown". Blanks in secondary lifestyle and endophytic-interaction
+capability are ambiguous between "not assessed" and "trait absent", so coverage
+for those two traits is a lower bound.
+
+### Hutchinsonian shortfall — environmental and geographic coverage
+
+We addressed environmental coverage at two levels. For **ecoregion coverage**,
+we determined which Canadian ecoregions contain at least one EcM sampling
+location, excluding ecoregions without predicted EcM host habitat (from the
+BIEN2 host raster) before calculating the shortfall, and for ecoregions meeting
+site thresholds we estimated ecozone-level SH richness with the same
+incidence-based Chao2 estimator used for the Linnean shortfall.
+
+For **climate-space coverage**, we characterized how completely Canada's climate
+space has been sampled. We defined climate space using WorldClim 2.1
+bioclimatic variables BIO1 (mean annual temperature) and BIO12 (mean annual
+precipitation), aggregating the 30 arc-second rasters to ~10 arc-minutes and
+masking to the Canada boundary, then binned the two-dimensional
+temperature × precipitation space into a 50 × 50 grid of equal-width climate
+zones. For each zone we computed coverage as the proportion of its Canadian grid
+cells containing at least one EcM sample (each cell counted once), with a
+coverage of zero denoting a climate present in Canada but never sampled.
+Coverage was mapped in both geographic and climate space, separately for
+GlobalFungi samples and for the combined GlobalFungi + GenBank dataset, against
+the available-climate frequency (the number of Canadian cells per zone). The
+code producing this figure was adapted from Hébert et al. (2026).
+
+### Eltonian shortfall — biotic-interaction knowledge
+
+We focused on EcM fungus–host plant associations, in two scopes. For the
+**Canadian scope**, host information was extracted from the GenBank `host`
+qualifier (with fallback from `isolation_source`) and from GlobalFungi's
+`dominant_plant_species` and `other_plant_species` fields, restricted to root
+samples (direct root extractions provide the strongest evidence of a
+mycorrhizal association, whereas bulk-soil samples indicate only spatial
+proximity). All host strings were canonicalized with the shared helper and
+matched against the native Canadian EcM host species list, which serves as the
+denominator of potential interactions. We built fungus × host interaction
+matrices at the SH-code, named-species, and genus levels, and computed the
+proportion of Canadian EcM host species with at least one documented fungal
+association, the fill rate of the full host × named-fungal-species matrix, and
+the proportion of observed pairs supported by only a single record. For the
+**global scope**, we queried the full GlobalFungi global metadata for root
+samples matching Canadian host species, and queried GenBank globally for each
+Canadian EcM genus (capped at 2,000 records per genus), to establish which
+Canadian hosts and fungi have any documented association anywhere. To
+contextualize the sampling gap relative to host diversity, we produced a
+bivariate map classifying each 0.5° grid cell by EcM host species richness
+versus the proportion of those host species with EcM molecular-detection data in
+Canada, shown separately for tree and non-tree hosts.
+
+## Software
+
+Analyses were conducted in R (v4.5.2; R Core Team 2026). Key packages: `sf`
+(Pebesma 2018) for vector spatial operations; `terra` (Hijmans 2024) for
+rasters; `ggplot2` (Wickham 2016) and `patchwork` (Pedersen 2024) for figures;
+`vegan` (Oksanen et al. 2022) and `iNEXT` (Hsieh, Ma & Chao 2016) for
+rarefaction, extrapolation, and asymptotic richness estimation; `rentrez`
+(Winter 2017) for GenBank retrieval; `rgbif` (Chamberlain et al. 2024) for GBIF
+access; `BIEN` (Maitner et al. 2018) for plant range and native-status data;
+`geodata` and `rnaturalearth` for spatial base layers; `rmapshaper` for boundary
+simplification; and `httr` for programmatic download of BIEN2 range shapefiles.
+Sequence-similarity searching used `vsearch` v2.30.4 (Rognes et al. 2016), and
+extraction from the GlobalFungi abundance matrix used `awk`.
+
+# Supplemental tables and figures
+
+The tables and figures below are generated directly from the pipeline outputs in
+`data_derived/` and `figures/`. They render once the pipeline has been run; each
+chunk reports if its input is not yet present.
+
+## Table S1. Per-ecozone sample completeness
+
+```{r table-s1-ecozone-completeness}
+cov_path <- file.path(paths$out_linnean, "linnean_extrapolation_coverage.csv")
+est_path <- file.path(paths$out_linnean, "linnean_extrapolation_estimators.csv")
+if (file.exists(cov_path)) {
+  cov_tbl <- readr::read_csv(cov_path, show_col_types = FALSE)
+  if (file.exists(est_path)) {
+    est_tbl <- readr::read_csv(est_path, show_col_types = FALSE) |>
+      dplyr::filter(singletons == "included") |>
+      dplyr::mutate(
+        S_Chao2      = dplyr::if_else(is.na(chao2),     NA_integer_, as.integer(round(chao2))),
+        Chao2_95_LCI = dplyr::if_else(is.na(chao2_lci), NA_integer_, as.integer(round(chao2_lci))),
+        Chao2_95_UCI = dplyr::if_else(is.na(chao2_uci), NA_integer_, as.integer(round(chao2_uci)))
+      ) |>
+      dplyr::select(stratum, S_Chao2, Chao2_95_LCI, Chao2_95_UCI)
+    cov_tbl <- dplyr::left_join(cov_tbl, est_tbl, by = "stratum")
+  }
+  cov_tbl |>
+    dplyr::filter(!startsWith(stratum, "Canada"), n_sites >= 10) |>
+    show_table(caption = paste(
+      "Table S1. Per-ecozone sample completeness (Ĉ) for Canadian EcM fungal SH",
+      "codes, from the georeferenced GlobalFungi site × SH incidence matrix",
+      "(ecozones with ≥10 unique sites; named and unnamed SH types included).",
+      "n_sites: unique 3-decimal-binned sites (~100 m); Q1/Q2: SH codes detected",
+      "at exactly 1 or 2 sites; coverage_hat: Ĉ at observed site count. S_Chao2:",
+      "asymptotic SH richness (iNEXT, incidence_freq, q = 0, singletons",
+      "included); Chao2_95_LCI/UCI: bootstrap 95% CI; NA where n_sites < 30."))
+} else {
+  cat("`linnean_extrapolation_coverage.csv` not found — run 09_linnean.R first.")
+}
+```
+
+## Table S2. Host species with recorded EcM associations
+
+```{r table-s2-host-species}
+elt_match_path <- file.path(paths$out_eltonian, "eltonian_host_matching.csv")
+if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
+  host_tbl      <- readr::read_csv(paths$host_species, show_col_types = FALSE)
+  elt_matching  <- readr::read_csv(elt_match_path, show_col_types = FALSE)
+
+  # A host_clean string is a species-level identification only if it has exactly
+  # two tokens and is neither an "sp."/"cf."/"aff." epithet nor an "unidentified"
+  # genus token.
+  is_species_level <- function(x) {
+    toks <- strsplit(x, " ", fixed = TRUE)
+    vapply(toks, function(p) {
+      length(p) == 2L &&
+        !grepl("^(sp\\.?|spp\\.?|cf\\.?|aff\\.?|indet\\.?)$", p[2], ignore.case = TRUE) &&
+        !grepl("^(unidentified|indet|unknown)$", p[1], ignore.case = TRUE)
+    }, logical(1))
+  }
+
+  recorded_raw     <- sort(unique(elt_matching$host_clean))
+  recorded_species <- recorded_raw[is_species_level(recorded_raw)]
+  host_intersection <- intersect(host_tbl$species, recorded_species)
+
+  tibble::tibble(`Host species` = paste0("<em>", sort(host_intersection), "</em>")) |>
+    show_table(caption = paste0(
+      "Table S2. The ", length(host_intersection), " FungalRoot/BIEN native ",
+      "Canadian EcM host species with ≥1 recorded, species-level host taxon in ",
+      "Canadian GlobalFungi or GenBank EcM records (the intersection between the ",
+      "native host list and the distinct species-level host taxa recorded across ",
+      "both sources)."))
+} else {
+  cat("`eltonian_host_matching.csv` or the host-species list not found — run 19_eltonian.R first.")
+}
+```
+
+## Figure S1. Global GlobalFungi sampling density
+
+```{r fig-s1-density}
+#| out-width: "100%"
+if (file.exists(paths$fig_density_world)) {
+  knitr::include_graphics(paths$fig_density_world)
+} else {
+  cat("`Figure-S1_gf_sampling_density_world.png` not found — run 12_wallacean_density_map.R.")
+}
+```
+
+**Figure S1.** Sampling density of GlobalFungi samples in which at least one EcM
+fungal taxon was detected. Each coloured pixel represents a single
+100 × 100 km region.
+
+## Figure S2. EcM sampling locations by ecozone
+
+```{r fig-s2-ecozone-map}
+#| out-width: "100%"
+if (file.exists(paths$fig_ecozone_sampling)) {
+  knitr::include_graphics(paths$fig_ecozone_sampling)
+} else {
+  cat("`Figure-S2_ecozone_sampling_map.png` not found — run 17_hutchinsonian.R.")
+}
+```
+
+**Figure S2.** EcM fungal sampling locations (GlobalFungi and GenBank) projected
+in Canada Albers Equal Area and overlaid on Canadian ecozone polygons (National
+Ecological Framework for Canada).
+
+## Figure S3. GBIF physical specimen records
+
+```{r fig-s3-gbif}
+#| out-width: "100%"
+if (file.exists(paths$fig_gbif_specimens)) {
+  knitr::include_graphics(paths$fig_gbif_specimens)
+} else {
+  cat("`Figure-S3_gbif_specimens.png` not found — run 20_sampling_maps.R.")
+}
+```
+
+**Figure S3.** GBIF physical EcM specimen records in Canada, split by whether the
+genus also has molecular sequence data in Canada. Blue circles: genera with
+sequence data; orange triangles: genera without.
+
+# References
+
+Chamberlain S et al. (2024) *rgbif: Interface to the GBIF API.* R package.
+
+Chao A (1984) Nonparametric estimation of the number of classes in a
+population. *Scandinavian Journal of Statistics* 11: 265–270.
+
+Chao A & Jost L (2012) Coverage-based rarefaction and extrapolation. *Ecology*
+93: 2533–2547.
+
+Dornelas M et al. (2018) BioTIME: A database of biodiversity time series for the
+Anthropocene. *Global Ecology and Biogeography* 27: 760–786.
+
+Hijmans RJ (2024) *terra: Spatial Data Analysis.* R package.
+
+Hsieh TC, Ma KH & Chao A (2016) iNEXT: rarefaction and extrapolation of species
+diversity. *Methods in Ecology and Evolution* 7: 1451–1456.
+
+Maitner BS et al. (2018) The BIEN R package. *Methods in Ecology and Evolution*
+9: 373–379.
+
+Moulatlet GM et al. (2025) Climatic niches predict plant range size and
+ecological dominance globally. *Proceedings of the National Academy of Sciences*
+122: e2517585122.
+
+Nilsson RH et al. (2019) The UNITE database for molecular identification of
+fungi. *Nucleic Acids Research* 47: D259–D264.
+
+Oksanen J et al. (2022) *vegan: Community Ecology Package.* R package.
+
+Pebesma EJ (2018) Simple features for R. *The R Journal* 10: 439–446.
+
+Pedersen TL (2024) *patchwork: The Composer of Plots.* R package.
+
+Põlme S et al. (2020) FungalTraits. *Fungal Diversity* 105: 1–16.
+
+R Core Team (2026) *R: A Language and Environment for Statistical Computing.*
+R Foundation for Statistical Computing, v4.5.2.
+
+Rognes T et al. (2016) VSEARCH: a versatile open-source tool for metagenomics.
+*PeerJ* 4: e2584.
+
+Soudzilovskaia NA et al. (2020) FungalRoot. *New Phytologist* 227: 955–966.
+
+Tedersoo L et al. (2021) The Global Soil Mycobiome consortium dataset. *Fungal
+Diversity* 111: 573–588.
+
+Větrovský T et al. (2020) GlobalFungi. *Scientific Data* 7: 228.
+
+Wickham H (2016) *ggplot2: Elegant Graphics for Data Analysis.* Springer.
+
+Winter DJ (2017) rentrez: an R package for the NCBI eUtils API. *The R Journal*
+9: 520–526.
