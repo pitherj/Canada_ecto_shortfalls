@@ -7,8 +7,7 @@
 #         Output: data_derived/emf_canada_combined.csv
 #
 # Step 2: Filter combined dataset to ectomycorrhizal taxa only using
-#         FungalTraits v1.2 genus-level primary_lifestyle.
-#         Checks GitHub API for newer FungalTraits release; downloads if found.
+#         FungalTraits v1.2 genus-level primary_lifestyle (pinned reference).
 #         Output: data_derived/emf_canada_em_only.csv  (primary dataset for all
 #                 downstream analyses)
 #
@@ -30,11 +29,11 @@ if (file.exists(paths$emf_combined)) {
 
   gf <- readr::read_csv(paths$gf_long_out, show_col_types = FALSE)
   ts(sprintf("  GlobalFungi: %d rows, %d unique SHs, %d unique samples",
-             nrow(gf), dplyr::n_distinct(gf$sh_code), dplyr::n_distinct(gf$sample_ID)))
+             nrow(gf), dplyr::n_distinct(gf$sh_code, na.rm = TRUE), dplyr::n_distinct(gf$sample_ID)))
 
   gb <- readr::read_csv(paths$gb_long_out, show_col_types = FALSE)
   ts(sprintf("  GenBank:     %d rows, %d unique SHs, %d unique accessions",
-             nrow(gb), dplyr::n_distinct(gb$sh_code), dplyr::n_distinct(gb$accession)))
+             nrow(gb), dplyr::n_distinct(gb$sh_code, na.rm = TRUE), dplyr::n_distinct(gb$accession)))
 
   # Harmonise lat/lon column names
   if (all(c("latitude", "longitude") %in% names(gf)))
@@ -53,15 +52,15 @@ if (file.exists(paths$emf_combined)) {
 
   # SH overlap summary
   ts(sprintf("  SH overlap — GF: %d, GB: %d, shared: %d, either: %d",
-             dplyr::n_distinct(gf$sh_code),
-             dplyr::n_distinct(gb$sh_code),
+             dplyr::n_distinct(gf$sh_code, na.rm = TRUE),
+             dplyr::n_distinct(gb$sh_code, na.rm = TRUE),
              length(intersect(unique(gf$sh_code), unique(gb$sh_code))),
-             dplyr::n_distinct(combined$sh_code)))
+             dplyr::n_distinct(combined$sh_code, na.rm = TRUE)))
 
   # Spatial containment check — applied to ALL records (GlobalFungi + GenBank)
   # with parsed coordinates. A logical column `coord_in_canada` is added:
-  #   TRUE  — coordinates present and within the GADM Canada boundary
-  #   FALSE — coordinates present but outside the GADM Canada boundary
+  #   TRUE  — coordinates present and within the (buffered) GADM Canada boundary
+  #   FALSE — coordinates present but outside the buffered boundary
   #   NA    — no coordinates in the source data
   #
   # Original lat/lon values are preserved in all cases. Downstream spatial
@@ -69,14 +68,27 @@ if (file.exists(paths$emf_combined)) {
   # records with out-of-boundary coordinates are excluded from spatial work
   # but retain their coordinates for enumeration and traceability.
   #
-  # The small number of records with coord_in_canada == FALSE in GlobalFungi
-  # data are expected to be real Canadian samples whose GPS coordinates fall
-  # marginally outside the GADM polygon (precision/topology artefact); their
-  # country = "Canada" metadata takes precedence for non-spatial purposes.
+  # The boundary is buffered by 2 km (in the equal-area CRS `crs_albers`, so
+  # the buffer distance is a true 2,000 m regardless of latitude) before the
+  # containment test. This absorbs GADM coastline simplification / topology
+  # artefacts: a handful of GlobalFungi records with country == "Canada"
+  # metadata but coordinates on the coast or on small islands (e.g. Gulf of
+  # St. Lawrence) fell just outside the unbuffered polygon, which silently
+  # dropped them from every downstream analysis gated on
+  # coord_in_canada == TRUE (this caused the Table 1 vs Table 3 discrepancy
+  # in the manuscript: 2 named species / 4 SH codes; see Supp. Methods,
+  # Decisions Log E2/E3). Any records still flagged coord_in_canada == FALSE
+  # after the 2 km buffer are far enough outside the boundary that their
+  # country == "Canada" metadata (if present) should be treated as
+  # authoritative only for non-spatial enumeration, not spatial analyses.
   # For GenBank records, canada_basis is also updated to
   # "coordinates_outside_canada" for traceability.
-  ts("  Checking coordinate containment within Canada boundary (GADM)...")
+  ts("  Checking coordinate containment within Canada boundary (GADM, +2 km buffer)...")
   canada_bound_sf <- sf::st_read(paths$canada_bound, quiet = TRUE)
+  canada_bound_buffered <- canada_bound_sf |>
+    sf::st_transform(crs_albers) |>
+    sf::st_buffer(dist = 2000) |>   # 2 km, in metres (crs_albers is equal-area, units = m)
+    sf::st_transform(4326)
   coord_idx <- which(!is.na(combined$lat) & !is.na(combined$lon))
   ts(sprintf("  Records with coordinates: %d", length(coord_idx)))
 
@@ -86,7 +98,7 @@ if (file.exists(paths$emf_combined)) {
   if (length(coord_idx) > 0) {
     pts <- sf::st_as_sf(combined[coord_idx, ], coords = c("lon", "lat"), crs = 4326)
     sf::sf_use_s2(FALSE)
-    in_can <- lengths(sf::st_intersects(pts, canada_bound_sf)) > 0
+    in_can <- lengths(sf::st_intersects(pts, canada_bound_buffered)) > 0
     sf::sf_use_s2(TRUE)
     n_outside <- sum(!in_can)
     ts(sprintf("  In Canada: %d | outside boundary (coord_in_canada = FALSE): %d",
@@ -113,68 +125,9 @@ if (file.exists(paths$emf_data)) {
 
   ts("Step 2: Filtering for ectomycorrhizal taxa using FungalTraits...")
 
-  # Optional: check GitHub for newer FungalTraits version
-  ft_dir           <- file.path(paths$data_raw, "fungaltraits")
-  ft_download_path <- file.path(ft_dir, "polme2020-s1-fungal-traits-genera.csv")
-  ft_version_file  <- file.path(ft_dir, "fungaltraits_version.txt")
-  fungaltraits_path <- if (file.exists(ft_download_path)) ft_download_path else paths$fungaltraits
-
-  CHECK_VERSION <- TRUE
-  for (pkg in c("httr", "jsonlite")) {
-    if (!requireNamespace(pkg, quietly = TRUE)) { CHECK_VERSION <- FALSE; break }
-  }
-
-  if (CHECK_VERSION) {
-    ts("  Checking FungalTraits version via GitHub API...")
-    ft_api <- paste0("https://api.github.com/repos/globalbioticinteractions/fungaltraits/",
-                     "commits?path=polme2020-s1-fungal-traits-genera.csv&per_page=1")
-    ft_raw <- paste0("https://raw.githubusercontent.com/globalbioticinteractions/",
-                     "fungaltraits/main/polme2020-s1-fungal-traits-genera.csv")
-
-    api_res <- tryCatch(
-      httr::GET(ft_api, httr::add_headers(Accept = "application/vnd.github+json"),
-                httr::timeout(30)),
-      error = function(e) NULL
-    )
-
-    if (!is.null(api_res) && httr::status_code(api_res) == 200L) {
-      commits <- jsonlite::fromJSON(httr::content(api_res, "text", encoding = "UTF-8"))
-      if (length(commits) > 0 && !is.null(commits$sha)) {
-        latest_sha  <- commits$sha[1L]
-        commit_date <- commits$commit$committer$date[1L]
-        stored_sha  <- if (file.exists(ft_version_file)) {
-          vl <- readLines(ft_version_file)
-          sl <- grep("^SHA:", vl, value = TRUE)
-          if (length(sl)) sub("^SHA:\\s*", "", sl[1L]) else ""
-        } else ""
-
-        if (!identical(latest_sha, stored_sha) || !file.exists(ft_download_path)) {
-          ts(sprintf("  Downloading updated FungalTraits (commit %s, %s)...",
-                     substr(latest_sha, 1L, 7L), commit_date))
-          dl <- tryCatch(
-            httr::GET(ft_raw, httr::write_disk(ft_download_path, overwrite = TRUE),
-                      httr::timeout(120)),
-            error = function(e) NULL
-          )
-          if (!is.null(dl) && httr::status_code(dl) == 200L) {
-            writeLines(c(paste("SHA:         ", latest_sha),
-                         paste("Commit date :", commit_date),
-                         paste("Downloaded  :", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"))),
-                       ft_version_file)
-            fungaltraits_path <- ft_download_path
-          }
-        } else {
-          ts("  FungalTraits is up to date.")
-        }
-        if (file.exists(ft_download_path)) fungaltraits_path <- ft_download_path
-      }
-    } else {
-      ts("  Could not reach GitHub API — using existing FungalTraits file.")
-    }
-  }
-
-  ts(sprintf("  Using: %s", basename(fungaltraits_path)))
-  ft <- readr::read_csv(fungaltraits_path, show_col_types = FALSE) |>
+  # FungalTraits v1.2 (Põlme et al. 2020): pinned reference file (see 00_setup.R
+  # and data_raw/fungaltraits/fungaltraits_version.txt for provenance).
+  ft <- readr::read_csv(paths$fungaltraits, show_col_types = FALSE) |>
     dplyr::rename_with(tolower)
 
   em_genera <- ft |>
@@ -201,7 +154,7 @@ if (file.exists(paths$emf_data)) {
     dplyr::select(-genus_lower)
 
   ts(sprintf("  EM records: %d | SHs: %d | genera: %d",
-             nrow(em_only), dplyr::n_distinct(em_only$sh_code),
+             nrow(em_only), dplyr::n_distinct(em_only$sh_code, na.rm = TRUE),
              dplyr::n_distinct(em_only$genus)))
   ts("  By source:"); print(dplyr::count(em_only, source))
 

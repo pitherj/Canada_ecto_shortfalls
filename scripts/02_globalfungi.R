@@ -268,7 +268,7 @@ if (!file.exists(paths$gf_long_out)) {
   readr::write_csv(canada_long, paths$gf_long_out)
   ts(sprintf("  Saved globalfungi_canada_long.csv  (%d rows, %d unique SHs, %d unique samples)",
              nrow(canada_long),
-             dplyr::n_distinct(canada_long$sh_code),
+             dplyr::n_distinct(canada_long$sh_code, na.rm = TRUE),
              dplyr::n_distinct(canada_long$sample_ID)))
 
 } else {

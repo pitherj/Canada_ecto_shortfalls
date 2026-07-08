@@ -24,11 +24,11 @@ aborts the run or is logged so the run continues.
 You can also run scripts individually in numeric order — each is
 checkpoint-guarded, so completed steps are skipped on re-run.
 
-Then render the Supplemental Materials:
-
-```r
-quarto::quarto_render(here::here("supplemental_materials.qmd"))
-```
+The manuscript (`manuscript.qmd`) and Supplemental Information documents
+(`supplemental_information_S1.qmd`, `supplemental_information_S2.qmd`) read
+from `data_derived/` to report in-text statistics and tables/figures, but are
+prepared and archived separately for journal submission — rendering them is
+outside this repo's scope (see root `README.md` > Project structure).
 
 ## External requirements
 
@@ -56,18 +56,19 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 06 | `06_host_species.R` | Native Canadian EcM host species list | 05 output, BIEN native flora | `ecm_native_canada_host_species.csv` | Eltonian/Hutchinsonian denominator |
 | 07 | `07_bien2_ranges.R` | Download BIEN2 modelled host ranges | 06 output, biendata.org | `data_raw/bien2_ranges/*` | host rasters input |
 | 08 | `08_host_rasters.R` | Rasterize host richness + data coverage | 06 + 07 outputs, `emf` | `bien_host_*` rasters | Figure 4, Hutchinsonian |
-| 09 | `09_linnean.R` | Taxonomic accounting, dark fraction, Chao2, GBIF specimens | `emf`, FungalTraits, UNITE, GBIF, van Galen CSV | `linnean_*` outputs | Table 1, Table 2, Table S1, in-text Linnean |
-| 10 | `10_linnean_inext.R` | Per-sample abundance-based rarefaction (iNEXT) | `emf` (GlobalFungi rows) | `linnean_inext_*` | in-text per-sample completeness |
+| 09 | `09_linnean.R` | Taxonomic accounting, dark fraction, GBIF specimens | `emf`, FungalTraits, UNITE, GBIF, van Galen CSV | `linnean_*` outputs (incl. `linnean_gbif_ecm_nosequence_canada.csv`) | Table 1, Table 2, Table S3, in-text Linnean |
+| 10 | `10_dark_diversity.R` | Dark ("undescribed") EcM taxa map | van Galen raster, Canada boundary | `Figure-S1_dark_diversity.png` (+ `..._grey.png`) | Figure S1 |
 | 11 | `11_wallacean.R` | Occurrence/occupancy + SDM sufficiency | `emf`, global GF SH matrix | `wallacean_*` | Table 3, Figure 2 |
-| 12 | `12_wallacean_density_map.R` | Global GF EcM sampling-density map | global GF matrix + metadata | `Figure-S1_gf_sampling_density_world.png` | Figure S1 |
+| 12 | `12_wallacean_density_map.R` | Global GF EcM sampling-density map | global GF matrix + metadata | `Figure-S2_gf_sampling_density_world.png` | Figure S2 |
 | 13 | `13_wallacean_global_comparator.R` | Global GF comparator metrics | global GF SH matrix | `gf_global_comparator_*.csv` | Table 1 (GlobalFungi-wide column) |
 | 14 | `14_prestonian.R` | Temporal coverage vs. BioTIME | BioTIME, `emf` | `prestonian_*` | in-text Prestonian |
 | 15 | `15_darwinian.R` | Genome availability vs. MycoCosm | MycoCosm list, `emf` | `darwinian_*` | in-text Darwinian |
 | 16 | `16_raunkiaeran.R` | Trait coverage from FungalTraits | FungalTraits, `emf` | `raunkiaeran_*` | Table 4 |
-| 17 | `17_hutchinsonian.R` | Ecoregion coverage, host bivariate map, ecozone sampling map | `emf`, host rasters, ecoregions | `hutchinsonian_*`, `Figure-04_host_bivariate_map.png`, `Figure-S2_ecozone_sampling_map.png` | Figure 4, Figure S2, Table S1 |
-| 18 | `18_climate_gap.R` | Climate-space coverage figure | WorldClim, `emf` | `Figure-03_climate_gap.png` | Figure 3 |
+| 17 | `17_hutchinsonian.R` | Per-ecozone coverage, host bivariate map, ecozone sampling map | `emf`, host rasters, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-04_host_bivariate_map.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 4, Figure S4, Table S1 |
+| 18 | `18_climate_gap.R` | Climate-space coverage figure | WorldClim, `emf` | `Figure-03_climate_gap.png` (+ `..._grey.png`) | Figure 3 |
 | 19 | `19_eltonian.R` | Host–fungus interaction coverage (Canada + global) | `emf`, host list, global GF/GenBank | `eltonian_*` | Table S2, in-text Eltonian |
-| 20 | `20_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png`, `Figure-S3_gbif_specimens.png` | Figure 1, Figure S3 |
+| 20 | `20_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
+| 21 | `21_depth_discard.R` | % sequencing depth discarded by EcM-genus filtering | GF metadata (02), `emf` | `Figure-S3_depth_discard.png` | Figure S3 |
 
 ## Cross-step dependencies to note
 
@@ -81,6 +82,14 @@ shortfall analyses (in manuscript order) and the sampling maps.
 
 - **Paths**: always via `here::here()` / the `paths` list in `00_setup.R` — no
   absolute or relative paths in analysis code.
+- **Figure 5 grey-background variants**: Figure 5 (`Figure-05_shortfalls_summary.png`)
+  is a hand-assembled schematic composite manually built from panels taken
+  from Figures 1, 3, 4, S1, S4, and S5, placed on a light-grey (`fig5_grey_bg`,
+  `#F2F2F2` in `00_setup.R`) backdrop. Scripts `10`, `17`, `18`, and `20`
+  therefore each save two versions of their figure(s): the normal
+  white-background copy (`paths$fig_*`, used in the manuscript/SI) and an
+  additional grey copy (`paths$fig_*_grey`, filename suffixed `_grey`) used
+  only when manually assembling Figure 5. Both are written to `figures/`.
 - **Namespacing**: package functions are called explicitly (`dplyr::filter()`,
   `sf::st_read()`, …); only `here`, `dplyr`, `tidyr`, `readr`, `ggplot2` are
   attached in `00_setup.R`.

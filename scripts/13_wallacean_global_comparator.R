@@ -174,27 +174,47 @@ if (file.exists(out_volume)) {
 } else {
 
   ts("Stage 2: Scanning full abundance matrix for global EcM detection volume...")
-  ts("  (Reads several hundred EcM SH columns from ~13 GB; expect 5-15+ minutes.)")
+  ts("  (Streams ~13,000 EcM SH columns from ~13 GB with awk; expect several minutes.)")
 
   ecm  <- identify_ecm_columns()
   filt <- quality_filtered_sample_ids()
 
-  gf_ecm_mat <- data.table::fread(
-    paths$gf_sh_abundance, sep = "\t", quote = "",
-    select = c("sample_ID", ecm$ecm_cols_present)
+  # We need three aggregates over the EcM columns of quality-filtered samples:
+  #   (1) count of positive cells (detection records),
+  #   (2) sum of all EcM read counts,
+  #   (3) number of samples with >= 1 positive EcM cell.
+  # Loading ~13,000 columns as a wide matrix overruns R's 2^31-byte string limit,
+  # so we compute all three in a single awk streaming pass instead. awk reads the
+  # quality-filtered sample IDs into a set, then for each matching row tallies the
+  # EcM columns. Output: "records<TAB>reads<TAB>samples".
+  gf_header_cols <- names(
+    data.table::fread(paths$gf_sh_abundance, sep = "\t", quote = "", nrows = 0L)
   )
-  gf_ecm_mat <- gf_ecm_mat[sample_ID %in% filt$filtered_ids]
-  ts(sprintf("  Matrix read and filtered: %d quality-filtered samples x %d EcM SH columns",
-             nrow(gf_ecm_mat), length(ecm$ecm_cols_present)))
-
-  vals <- gf_ecm_mat[, -"sample_ID", with = FALSE]
-  n_ecm_records_global <- sum(vals > 0L)
-  n_ecm_reads_global   <- sum(as.numeric(unlist(vals, use.names = FALSE)))
-  # Samples with at least one positive-abundance EcM detection (row-wise any()
-  # over the EcM columns already loaded above for n_ecm_records_global — this
-  # is the global analogue of the Canadian "quality-filtered, with EcM fungal
-  # records" sample count, and requires no additional matrix read).
-  n_samples_with_ecm_global <- sum(rowSums(vals > 0L) > 0L)
+  scol    <- match("sample_ID", gf_header_cols)       # full-header column positions
+  ecm_idx <- match(ecm$ecm_cols_present, gf_header_cols)
+  id_file <- tempfile(fileext = ".txt")
+  writeLines(filt$filtered_ids, id_file)
+  on.exit(unlink(id_file), add = TRUE)
+  awk_prog <- paste0(
+    'BEGIN{FS="\\t"; n=split(cols,a,","); while((getline line < idfile)>0) keep[line]=1} ',
+    'NR==1{next} ',
+    '{ if($scol in keep){ any=0; ',
+    '   for(i=1;i<=n;i++){ v=$(a[i])+0; if(v>0){ records++; reads+=v; any=1 } } ',
+    '   if(any) samples++ } } ',
+    'END{ printf "%d\\t%.0f\\t%d\\n", records, reads, samples }'
+  )
+  awk_cmd <- sprintf("awk -v scol=%d -v cols=%s -v idfile=%s %s %s",
+                     scol, shQuote(paste(ecm_idx, collapse = ",")),
+                     shQuote(id_file), shQuote(awk_prog),
+                     shQuote(paths$gf_sh_abundance))
+  agg <- system(awk_cmd, intern = TRUE)
+  if (length(agg) == 0L) stop("awk EcM-volume scan of the GF SH abundance matrix failed.")
+  agg_vals <- as.numeric(strsplit(agg[length(agg)], "\t")[[1]])
+  n_ecm_records_global      <- agg_vals[1]
+  n_ecm_reads_global        <- agg_vals[2]
+  n_samples_with_ecm_global <- agg_vals[3]
+  ts(sprintf("  EcM detection records: %.0f | total reads: %.0f | samples with EcM: %.0f",
+             n_ecm_records_global, n_ecm_reads_global, n_samples_with_ecm_global))
 
   out <- tibble::tibble(
     metric = c(

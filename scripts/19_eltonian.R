@@ -276,6 +276,7 @@ readr::write_csv(genus_matrix,
                  file.path(paths$out_eltonian, "eltonian_matrix_genus.csv"))
 
 sh_pairs <- matched_interactions |>
+  dplyr::filter(!is.na(sh_code)) |>   # genus-resolved GenBank rows carry sh_code = NA
   dplyr::distinct(host_clean, sh_code) |>
   dplyr::rename(host_species = host_clean)
 
@@ -480,9 +481,9 @@ n_obs_sh_pairs          <- nrow(sh_pairs)
 n_hosts_with_genus_data <- dplyr::n_distinct(genus_pairs$host_species)
 n_hosts_with_sh_data    <- dplyr::n_distinct(sh_pairs$host_species)
 n_genera_with_host      <- dplyr::n_distinct(genus_pairs$fungal_genus)
-n_sh_with_host          <- dplyr::n_distinct(sh_pairs$sh_code)
+n_sh_with_host          <- dplyr::n_distinct(sh_pairs$sh_code, na.rm = TRUE)
 n_potential_genus       <- n_host_species * dplyr::n_distinct(emf$genus)
-n_potential_sh          <- n_host_species * dplyr::n_distinct(emf$sh_code)
+n_potential_sh          <- n_host_species * dplyr::n_distinct(emf$sh_code, na.rm = TRUE)
 genus_per_host          <- dplyr::count(genus_pairs, host_species, name = "n_genera")
 host_per_genus          <- dplyr::count(genus_pairs, fungal_genus, name = "n_hosts")
 
@@ -651,15 +652,11 @@ if (!file.exists(gf_sh_path)) {
     ts("  No SH codes matched in GlobalFungi file — skipping Q2/Q3 (GF).")
     gf_sh_ecm_wide <- NULL
   } else {
-    ts("  Reading GlobalFungi SH abundance matrix (this may take 10-30 min)...")
-    ts("  Selecting only matched EcM SH columns from the full 13 GB file...")
-    gf_sh_ecm_wide <- data.table::fread(
-      gf_sh_path,
-      sep          = "\t",
-      quote        = "",
-      select       = c("sample_ID", present_sh),
-      showProgress = TRUE
-    )
+    ts("  Reading GlobalFungi SH abundance matrix (this may take several minutes)...")
+    ts("  Selecting only matched EcM SH columns from the full 13 GB file (awk subset)...")
+    # awk-streaming subset helper (00_setup.R) avoids fread()'s 2^31-byte string
+    # limit on the ~13 GB matrix.
+    gf_sh_ecm_wide <- read_big_tsv_subset(gf_sh_path, c("sample_ID", present_sh))
   }
 
   ts(sprintf("  Read: %d samples x %d EcM SH columns",
@@ -886,42 +883,27 @@ if (file.exists(global_gb_ckpt)) {
       )
       if (search$count == 0L) return(NULL)
 
-      # Cap at 2000 records per genus to keep runtime manageable
-      n_fetch    <- min(search$count, 2000L)
+      # Retrieve metadata for ALL matching records (no per-genus cap). Pagination
+      # goes through the NCBI history server (web_history), which — unlike a
+      # historyless retstart search — has no ~10,000-record ceiling, so even the
+      # most heavily sequenced genera are retrieved in full.
       batch_size <- 200L
-      n_batches  <- ceiling(n_fetch / batch_size)
-      all_ids    <- character(0L)
+      starts     <- seq(0L, search$count - 1L, by = batch_size)
+      meta_list  <- vector("list", length(starts))
 
-      for (i in seq_len(n_batches)) {
-        batch <- tryCatch(
-          rentrez::entrez_search(
-            db          = "nuccore",
-            term        = search_term,
-            retmax      = batch_size,
-            retstart    = (i - 1L) * batch_size,
-            use_history = FALSE
-          ),
-          error = function(e) NULL
-        )
-        if (!is.null(batch)) all_ids <- c(all_ids, batch$ids)
-        Sys.sleep(0.15)
-      }
-
-      if (length(all_ids) == 0L) return(NULL)
-
-      # Fetch metadata (esummary) for these IDs
-      meta_batches <- split(all_ids,
-                            ceiling(seq_along(all_ids) / 200L))
-      meta_list    <- vector("list", length(meta_batches))
-
-      for (j in seq_along(meta_batches)) {
+      for (k in seq_along(starts)) {
         summ <- tryCatch(
-          rentrez::entrez_summary(db = "nuccore", id = meta_batches[[j]]),
+          rentrez::entrez_summary(
+            db          = "nuccore",
+            web_history = search$web_history,
+            retstart    = starts[k],
+            retmax      = batch_size
+          ),
           error = function(e) NULL
         )
         if (!is.null(summ)) {
           if (inherits(summ, "esummary")) summ <- list(summ)
-          meta_list[[j]] <- dplyr::bind_rows(lapply(summ, function(s) {
+          meta_list[[k]] <- dplyr::bind_rows(lapply(summ, function(s) {
             subtype <- strsplit(if (!is.null(s$subtype)) s$subtype else "", "\\|")[[1L]]
             subname <- strsplit(if (!is.null(s$subname)) s$subname else "", "\\|")[[1L]]
             get_sub <- function(key) {
@@ -1136,6 +1118,18 @@ for (nm in names(eltonian_interactions)) {
 
 ts("Saving summary tables...")
 
+# Mycobiont-focal association counts (named fungal species -> host species),
+# for the Eltonian "mycobiont side" paragraph. Canada scope from the Canadian
+# EMF dataset; global scope from GlobalFungi root samples + GenBank worldwide
+# (species_host_canada / species_host_global are assembled in Part C).
+myco_counts <- function(df) {
+  if (is.null(df) || nrow(df) == 0L) return(c(n = 0L, mx = 0L))
+  cts <- dplyr::count(df, fungal_species, name = "n")
+  c(n = nrow(cts), mx = max(cts$n))
+}
+myco_can  <- myco_counts(species_host_canada)
+myco_glob <- myco_counts(species_host_global)
+
 eltonian_summary <- tibble::tibble(
   metric = c(
     # Canadian-scope denominators and basic interaction counts
@@ -1177,7 +1171,12 @@ eltonian_summary <- tibble::tibble(
     "% of Canadian host species with any global GlobalFungi root record",
     "Canadian host species recorded as hosts in GenBank EcM records anywhere in the world",
     "Canadian host species with documented global EcM-species associations (GlobalFungi root samples)",
-    "Canadian EcM species with documented global host associations (GlobalFungi root samples)"
+    "Canadian EcM species with documented global host associations (GlobalFungi root samples)",
+    # Mycobiont-focal: named fungal species with >= 1 documented host species, by scope
+    "Named EcM fungal species with >= 1 documented host species (Canada scope)",
+    "Max host species documented for any named EcM fungal species (Canada scope)",
+    "Named EcM fungal species with >= 1 documented host species (global scope; GlobalFungi root + GenBank worldwide)",
+    "Max host species documented for any named EcM fungal species (global scope)"
   ),
   value = c(
     n_host_species,
@@ -1215,7 +1214,11 @@ eltonian_summary <- tibble::tibble(
     ifelse(!is.na(pct_with_gf), pct_with_gf, NA_real_),
     length(gb_q1_hosts),
     ifelse(!is.null(q2), nrow(q2), NA_real_),
-    ifelse(!is.null(q3), nrow(q3), NA_real_)
+    ifelse(!is.null(q3), nrow(q3), NA_real_),
+    unname(myco_can["n"]),
+    unname(myco_can["mx"]),
+    unname(myco_glob["n"]),
+    unname(myco_glob["mx"])
   )
 )
 

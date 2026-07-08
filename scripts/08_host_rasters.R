@@ -1,9 +1,8 @@
 # =============================================================================
-# Build BIEN2 EcM Host Rasters and Ecoregion Habitat Layer
+# Build BIEN2 EcM Host Rasters
 # =============================================================================
 # Loads BIEN2 modelled range shapefiles for all EcM host plant species native
-# to Canada (from 06_host_species.R), rasterizes them at 0.5°
-# resolution, and identifies which ecoregions contain EcM host habitat.
+# to Canada (from 06_host_species.R), and rasterizes them at 0.5° resolution.
 #
 # Range shapefiles must already be present in data_raw/bien2_ranges/ — run
 # scripts/07_bien2_ranges.R first.
@@ -13,7 +12,15 @@
 #   2.  Load BIEN2 range shapefiles from data_raw/bien2_ranges/
 #   3.  Filter ranges to those overlapping Canada
 #   4.  Rasterize: count host species richness per 0.5° cell
-#   5.  Identify ecoregions with EcM host habitat (spatial join)
+#
+# Design history: this script previously also built an ecoregion-level EcM
+# host-habitat layer (Step 5, bien_ecoregions_with_host_habitat.gpkg), used by
+# an ecoregion-level coverage metric in 17_hutchinsonian.R
+# (hutchinsonian_ecoregion_summary.csv). Neither was ever reported in the
+# manuscript or supplemental materials -- all reported Hutchinsonian coverage
+# is ecozone-level, not ecoregion-level -- so both were removed 2026-07-05
+# (pruned by Jason's request) rather than left as unused, potentially
+# confusing code paths.
 #
 # Checkpoint files (data_derived/checkpoints/):
 #   bien2_ecm_host_ranges.gpkg      — BIEN2 range polygons (filtered to Canada)
@@ -23,8 +30,6 @@
 #   data_derived/spatial/bien_host_species_stack.tif      — per-species binary raster
 #                                                      stack (one layer per host
 #                                                      species; named by species)
-#   data_derived/spatial/bien_ecoregions_with_host_habitat.gpkg — ecoregion polygons
-#                                                      with EcM host presence
 #
 # Runtime notes:
 #   - Step 2 (shapefile loading) ~1–5 min depending on species count
@@ -182,37 +187,6 @@ if (file.exists(paths$bien_richness) && file.exists(paths$bien_species_stack)) {
   rich_vals <- rich_vals[!is.na(rich_vals)]
   ts(sprintf("  Cells with host habitat: %d  |  median richness: %.0f  |  max: %d",
              length(rich_vals), median(rich_vals), max(rich_vals)))
-}
-
-# ---- Step 5: Ecoregion habitat layer -----------------------------------------
-
-ts("Step 5: Building ecoregion host habitat layer...")
-
-if (!file.exists(paths$ecoregions_processed)) {
-  warning("Ecoregion file not found: ", paths$ecoregions_processed,
-          "\nSkipping ecoregion habitat layer.")
-} else {
-  ecoregions <- sf::st_read(paths$ecoregions_processed, quiet = TRUE) |>
-    sf::st_make_valid() |>
-    sf::st_transform(4326)
-
-  ts(sprintf("  Ecoregions loaded: %d", nrow(ecoregions)))
-
-  # Determine which ecoregions intersect any host range polygon
-  # Use st_intersects for a sparse logical matrix
-  intersects_mat <- sf::st_intersects(ecoregions, ranges_canada,
-                                       sparse = TRUE)
-  ecoregions$has_ecm_host_habitat <- lengths(intersects_mat) > 0
-
-  n_habitat_ecor  <- sum(ecoregions$has_ecm_host_habitat)
-  n_total_ecor    <- nrow(ecoregions)
-  ts(sprintf("  Ecoregions with EcM host habitat: %d / %d (%.1f%%)",
-             n_habitat_ecor, n_total_ecor,
-             100 * n_habitat_ecor / n_total_ecor))
-
-  sf::st_write(ecoregions, paths$bien_ecoregions,
-               delete_dsn = TRUE, quiet = TRUE)
-  ts(sprintf("  Saved -> %s", basename(paths$bien_ecoregions)))
 }
 
 ts("08_host_rasters.R complete.")

@@ -24,7 +24,7 @@
 #        - valid (non-NA, in-range) latitude and longitude
 #
 # Outputs (figures/):
-#   Figure-S1_gf_sampling_density_world.png   — global density map (Figure S1)
+#   Figure-S2_gf_sampling_density_world.png   — global density map (Figure S2)
 #
 # Checkpoints (data_derived/checkpoints/):
 #   gf_global_ecm_sample_ids.csv     — sample IDs + lat/lon passing all filters
@@ -161,27 +161,32 @@ if (file.exists(out_sample_ids)) {
     )
   }
 
-  # 2b. Read only sample_ID + EcM SH columns
-  ts(sprintf("  Reading %d EcM SH columns (+ sample_ID) from the abundance matrix...",
+  # 2b/2c. Identify samples with >= 1 EcM SH detection WITHOUT loading the matrix
+  #        into R. Reading ~13,000 columns as a wide matrix overruns R's 2^31-byte
+  #        string limit (and would be a ~2 GB object). We only need a per-row
+  #        presence test, so we stream the matrix once through awk: for each
+  #        sample row, print sample_ID if ANY EcM column has a read count > 0.
+  #        The result is just a short list of sample IDs.
+  ts(sprintf("  Scanning %d EcM SH columns across the matrix with awk (streaming)...",
              length(ecm_cols_present)))
-
-  gf_ecm_mat <- data.table::fread(
-    paths$gf_sh_abundance,
-    sep    = "\t",
-    quote  = "",
-    select = c("sample_ID", ecm_cols_present)
+  scol    <- match("sample_ID", gf_header_cols)          # sample_ID column position
+  ecm_idx <- match(ecm_cols_present, gf_header_cols)      # EcM column positions
+  ids_tmp <- tempfile(fileext = ".txt")
+  on.exit(unlink(ids_tmp), add = TRUE)
+  awk_prog <- paste0(
+    'BEGIN{FS="\\t"; n=split(cols,a,",")} ',
+    'NR==1{next} ',                                       # skip header row
+    '{for(i=1;i<=n;i++){ if($(a[i])+0>0){ print $scol; break } }}'
   )
-  ts(sprintf("  Matrix read: %d samples × %d EcM SH columns",
-             nrow(gf_ecm_mat), length(ecm_cols_present)))
-
-  # 2c. Flag samples with at least one EcM SH present (any read count > 0)
-  ecm_mat_vals <- gf_ecm_mat[, -"sample_ID", with = FALSE]
-  has_ecm      <- rowSums(ecm_mat_vals) > 0L
-  ecm_sample_ids <- gf_ecm_mat$sample_ID[has_ecm]
-  ts(sprintf("  Samples with >= 1 EcM SH present: %d / %d (%.1f%%)",
-             length(ecm_sample_ids), nrow(gf_ecm_mat),
-             100 * length(ecm_sample_ids) / nrow(gf_ecm_mat)))
-  rm(gf_ecm_mat, ecm_mat_vals)
+  awk_cmd <- sprintf("awk -v scol=%d -v cols=%s %s %s > %s",
+                     scol, shQuote(paste(ecm_idx, collapse = ",")),
+                     shQuote(awk_prog), shQuote(paths$gf_sh_abundance),
+                     shQuote(ids_tmp))
+  if (system(awk_cmd) != 0L || !file.exists(ids_tmp))
+    stop("awk EcM-detection scan of the GF SH abundance matrix failed.")
+  ecm_sample_ids <- readLines(ids_tmp)
+  unlink(ids_tmp)
+  ts(sprintf("  Samples with >= 1 EcM SH present: %d", length(ecm_sample_ids)))
 
   # 2d. Load sample metadata; apply quality filters; retain only EcM samples
   ts("  Reading GlobalFungi sample metadata for coordinate extraction...")
@@ -324,6 +329,6 @@ if (!file.exists(out_fig_world)) {
 
 # The Canada-only sampling density map is not used in the manuscript, so it is
 # not produced here. This script's sole figure output is the global density map
-# (Figure S1) built in Step 3 above.
+# (Figure S2) built in Step 3 above.
 
 ts("12_wallacean_density_map.R complete.")

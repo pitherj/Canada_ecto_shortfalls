@@ -1,5 +1,5 @@
 # =============================================================================
-# Hutchinsonian Shortfall (Updated): Environmental and Ecoregion Coverage
+# Hutchinsonian Shortfall (Updated): Environmental and Ecozone Coverage
 # =============================================================================
 # What proportion of Canadian ecological space with EcM host habitat has
 # been sampled for EcM fungi?
@@ -7,16 +7,20 @@
 # Updates from original 04_hutchinsonian.R:
 #   - BIEN-based host raster (0.5°, from 08_host_rasters.R) replaces
 #     USTreeAtlas 1° raster
-#   - BIEN ecoregion habitat layer (from 08_host_rasters.R) used instead
-#     of USTreeAtlas-based layer
 #   - Both GenBank and GlobalFungi coordinates used for sampling points
 #     (GenBank lat/lon parsed from lat_lon_gb where available)
 #   - ecozone climate space analysis added using WorldClim data
 #
+# Design history: this script previously also computed an ecoregion-level
+# habitat-coverage metric (hutchinsonian_ecoregion_summary.csv, using the
+# ecoregion habitat layer from 08_host_rasters.R). It was never reported in
+# the manuscript or supplemental materials -- all reported Hutchinsonian
+# coverage is ecozone-level -- so it was removed 2026-07-05 (pruned by
+# Jason's request) along with its upstream input in 08_host_rasters.R.
+#
 # Prerequisite files:
 #   data_derived/bien_host_richness_0.5deg.tif       (08_host_rasters.R)
 #   data_derived/bien_host_species_stack.tif         (08_host_rasters.R)
-#   data_derived/bien_ecoregions_with_host_habitat.gpkg (08_host_rasters.R)
 #   data_derived/ecm_native_canada_host_species.csv  (06_host_species.R)
 #   data_derived/eltonian_host_matching.csv          (19_eltonian.R)
 #   data_raw/climate/wc2.1_country/CAN_wc2.1_30s_bio.tif
@@ -24,13 +28,14 @@
 # Outputs:
 #   data_derived/bien_host_data_richness_0.5deg.tif    — host spp. with EcM data
 #   data_derived/bien_host_data_proportion_0.5deg.tif  — proportion with EcM data
-#   data_derived/hutchinsonian_ecoregion_summary.csv
 #   data_derived/hutchinsonian_raster_summary.csv
 #   data_derived/hutchinsonian_ecozone_summary.csv     — ecozone sampling-threshold
 #                                                    counts (Table S16b)
-#   figures/hutchinsonian_sampling_map.png
-#   figures/hutchinsonian_bivariate_map.png
-#   figures/hutchinsonian_climate_space.png
+#   figures/Figure-04_host_bivariate_map.png        (paths$fig_host_bivariate)      -- white bg, used in manuscript
+#   figures/Figure-04_host_bivariate_map_grey.png   (paths$fig_host_bivariate_grey) -- #F2F2F2 bg, Figure 5 panel source
+#   figures/Figure-S4_ecozone_sampling_map.png      (paths$fig_ecozone_sampling)      -- white bg, used in SI
+#   figures/Figure-S4_ecozone_sampling_map_grey.png (paths$fig_ecozone_sampling_grey) -- #F2F2F2 bg, Figure 5 panel source
+#   figures/hutchinsonian_climate_space.png (currently commented out — see Step 8)
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -230,52 +235,7 @@ ts(sprintf("  Cells with host habitat: %d  |  cells with any data: %d (%.1f%%)",
            sum(prop_vals > 0),
            100 * sum(prop_vals > 0) / length(prop_vals)))
 
-# ---- Step 6: Ecoregion coverage analysis ------------------------------------
-
-ts("Step 6: Ecoregion coverage analysis...")
-
-if (!file.exists(paths$bien_ecoregions)) {
-  ts("  Ecoregion habitat file not found — run 08_host_rasters.R.")
-  n_habitat_ecor  <- NA_integer_
-  n_sampled_ecor  <- NA_integer_
-  pct_unsampled   <- NA_real_
-} else {
-  habitat_ecoregions <- sf::st_read(paths$bien_ecoregions, quiet = TRUE) |>
-    dplyr::filter(has_ecm_host_habitat) |>
-    sf::st_make_valid()
-
-  # Match CRS
-  locs_for_ecor <- sf::st_transform(locs_sf, sf::st_crs(habitat_ecoregions))
-
-  pts_in_ecor <- sf::st_join(locs_for_ecor, habitat_ecoregions,
-                               join = sf::st_within)
-
-  sampled_ecor_names <- unique(pts_in_ecor$REGION_NAM[!is.na(pts_in_ecor$REGION_NAM)])
-  n_habitat_ecor     <- dplyr::n_distinct(habitat_ecoregions$REGION_NAM)
-  n_sampled_ecor     <- length(sampled_ecor_names)
-  n_unsampled_ecor   <- n_habitat_ecor - n_sampled_ecor
-  pct_unsampled      <- round(100 * n_unsampled_ecor / n_habitat_ecor, 1)
-
-  ts(sprintf("  Habitat ecoregions: %d  |  sampled: %d  |  unsampled: %d (%.1f%%)",
-             n_habitat_ecor, n_sampled_ecor, n_unsampled_ecor, pct_unsampled))
-
-  ecoregion_summary <- tibble::tibble(
-    metric = c(
-      "Ecoregions with EcM host habitat",
-      "Ecoregions sampled for EcM (our dataset)",
-      "Ecoregions unsampled",
-      "% habitat ecoregions unsampled",
-      "Total EMF locations used"
-    ),
-    value = c(n_habitat_ecor, n_sampled_ecor, n_unsampled_ecor,
-              pct_unsampled, nrow(locs_sf))
-  )
-  readr::write_csv(ecoregion_summary,
-                   file.path(paths$out_hutchinsonian, "hutchinsonian_ecoregion_summary.csv"))
-  ts("  Saved hutchinsonian_ecoregion_summary.csv")
-}
-
-# ---- Step 7: Raster summary --------------------------------------------------
+# ---- Step 6: Raster summary --------------------------------------------------
 
 raster_summary <- tibble::tibble(
   metric = c(
@@ -299,9 +259,9 @@ readr::write_csv(raster_summary,
                  file.path(paths$out_hutchinsonian, "hutchinsonian_raster_summary.csv"))
 ts("Saved hutchinsonian_raster_summary.csv")
 
-# ---- Step 8: Maps ------------------------------------------------------------
+# ---- Step 7: Maps ------------------------------------------------------------
 
-ts("Step 8: Setting up spatial layers for map production...")
+ts("Step 7: Setting up spatial layers for map production...")
 
 canada_albers <- sf::st_transform(canada_bound, crs_albers)
 
@@ -383,62 +343,87 @@ locs_src_sf <- dplyr::bind_rows(
 # -- Sampling locations map (ecozone style) ------------------------------------
 ts("  Creating sampling locations map...")
 
-p_sampling <- ggplot2::ggplot() +
-  # Ecoregions: rainbow fill by ecozone, grey outlines show ecoregion boundaries
-  ggplot2::geom_sf(data = ecoregions_clipped,
-                   ggplot2::aes(fill = NAME_EN), 
-                  colour = "grey30", linewidth = 0, alpha = 0.8) +
-  # Major lakes
-  (if (!is.null(lakes_sf))
-    ggplot2::geom_sf(data = lakes_sf,
-                     fill = "dodgerblue", colour = "darkblue",
-                     linewidth = 0.2, alpha = 0.9)
-  else NULL) +
-  # Canada outer boundary
-  ggplot2::geom_sf(data = canada_albers,
-                   fill = NA, colour = "black", linewidth = 0.2) +
-  # Sampling locations: circle (GlobalFungi) or triangle (GenBank),
-  # white fill, colour-blind-safe outline (matching sampling_map_group0 style)
-  ggplot2::geom_sf(data = locs_src_sf,
-                   ggplot2::aes(colour = source, shape = source),
-                   fill = "white", size = 2.2, stroke = 1.1, alpha = 0.8) +
-  ggplot2::scale_fill_manual(values = ecozone_colors, name = "Ecozones") +
-  ggplot2::scale_colour_manual(
-    breaks = c("GlobalFungi", "GenBank"),
-    values = c("GlobalFungi" = "#648FFF", "GenBank" = "#E69F00"),
-    name   = "Sample source"
-  ) +
-  ggplot2::scale_shape_manual(
-    breaks = c("GlobalFungi", "GenBank"),
-    values = c("GlobalFungi" = 21, "GenBank" = 24),
-    name   = "Sample source"
-  ) +
-  ggplot2::guides(
-    fill   = ggplot2::guide_legend(order = 1,
-                                   override.aes = list(alpha = 0.8, colour = NA)),
-    colour = ggplot2::guide_legend(order = 2,
-                                   override.aes = list(shape = c(21L, 24L),
-                                                       fill  = "white",
-                                                       size  = 4)),
-    shape  = "none"
-  ) +
-  ggplot2::coord_sf(
-    xlim   = c(sf::st_bbox(canada_albers)[1], sf::st_bbox(canada_albers)[3]),
-    ylim   = c(sf::st_bbox(canada_albers)[2], sf::st_bbox(canada_albers)[4]),
-    expand = FALSE
-  ) +
-  ggplot2::theme_void() +
-  ggplot2::theme(
-    legend.position  = "right",
-    legend.text      = ggplot2::element_text(size = 7),
-    legend.title     = ggplot2::element_text(size = 9, face = "bold"),
-    panel.background = ggplot2::element_rect(fill = "white", colour = NA),
-    plot.background  = ggplot2::element_rect(fill = "white",     colour = NA)
-  )
+# Pad the plotted extent beyond the Canada boundary bbox so the outer map
+# border doesn't sit flush against the figure edge. Buffer is a fraction of
+# each dimension's range (5%), applied symmetrically on both sides.
+sampling_map_bbox   <- sf::st_bbox(canada_albers)
+sampling_map_buffer <- 0.05
+sampling_map_xrange  <- sampling_map_bbox[3] - sampling_map_bbox[1]
+sampling_map_yrange  <- sampling_map_bbox[4] - sampling_map_bbox[2]
+sampling_map_xlim <- c(sampling_map_bbox[1] - sampling_map_buffer * sampling_map_xrange,
+                       sampling_map_bbox[3] + sampling_map_buffer * sampling_map_xrange)
+sampling_map_ylim <- c(sampling_map_bbox[2] - sampling_map_buffer * sampling_map_yrange,
+                       sampling_map_bbox[4] + sampling_map_buffer * sampling_map_yrange)
 
-ggplot2::ggsave(paths$fig_ecozone_sampling,
-                p_sampling, width = 12, height = 9, dpi = 300)
-ts("  Saved hutchinsonian_sampling_map.png")
+# build_sampling_map(bg) returns the map with panel/plot background colour
+# `bg`; called once for the white (SI) version and once for the grey
+# (#F2F2F2, Figure 5 schematic panel) version. The sampling-point marker fill
+# ("white", inside geom_sf/guides below) is a data-encoding colour, not the
+# plot background, and is intentionally left unchanged in both versions.
+build_sampling_map <- function(bg) {
+  ggplot2::ggplot() +
+    # Ecoregions: rainbow fill by ecozone, grey outlines show ecoregion boundaries
+    ggplot2::geom_sf(data = ecoregions_clipped,
+                     ggplot2::aes(fill = NAME_EN),
+                    colour = "grey30", linewidth = 0, alpha = 0.8) +
+    # Major lakes
+    (if (!is.null(lakes_sf))
+      ggplot2::geom_sf(data = lakes_sf,
+                       fill = "dodgerblue", colour = "darkblue",
+                       linewidth = 0.2, alpha = 0.9)
+    else NULL) +
+    # Canada outer boundary
+    ggplot2::geom_sf(data = canada_albers,
+                     fill = NA, colour = "black", linewidth = 0.2) +
+    # Sampling locations: circle (GlobalFungi) or triangle (GenBank),
+    # white fill, colour-blind-safe outline (matching sampling_map_group0 style)
+    ggplot2::geom_sf(data = locs_src_sf,
+                     ggplot2::aes(colour = source, shape = source),
+                     fill = "white", size = 2.2, stroke = 1.1, alpha = 0.8) +
+    ggplot2::scale_fill_manual(values = ecozone_colors, name = "Ecozones") +
+    ggplot2::scale_colour_manual(
+      breaks = c("GlobalFungi", "GenBank"),
+      values = c("GlobalFungi" = "#648FFF", "GenBank" = "#E69F00"),
+      name   = "Sample source"
+    ) +
+    ggplot2::scale_shape_manual(
+      breaks = c("GlobalFungi", "GenBank"),
+      values = c("GlobalFungi" = 21, "GenBank" = 24),
+      name   = "Sample source"
+    ) +
+    ggplot2::guides(
+      fill   = ggplot2::guide_legend(order = 1,
+                                     override.aes = list(alpha = 0.8, colour = NA)),
+      colour = ggplot2::guide_legend(order = 2,
+                                     override.aes = list(shape = c(21L, 24L),
+                                                         fill  = "white",
+                                                         size  = 4)),
+      shape  = "none"
+    ) +
+    ggplot2::coord_sf(
+      xlim   = sampling_map_xlim,
+      ylim   = sampling_map_ylim,
+      expand = FALSE
+    ) +
+    ggplot2::theme_void() +
+    ggplot2::theme(
+      legend.position  = "right",
+      legend.text      = ggplot2::element_text(size = 7),
+      legend.title     = ggplot2::element_text(size = 9, face = "bold"),
+      panel.background = ggplot2::element_rect(fill = bg, colour = NA),
+      plot.background  = ggplot2::element_rect(fill = bg, colour = NA)
+    )
+}
+
+ggplot2::ggsave(paths$fig_ecozone_sampling, build_sampling_map("white"),
+                width = 12, height = 9, dpi = 300, bg = "white")
+ts(sprintf("  Saved %s", basename(paths$fig_ecozone_sampling)))
+
+# Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
+# schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
+ggplot2::ggsave(paths$fig_ecozone_sampling_grey, build_sampling_map(fig5_grey_bg),
+                width = 12, height = 9, dpi = 300, bg = fig5_grey_bg)
+ts(sprintf("  Saved %s", basename(paths$fig_ecozone_sampling_grey)))
 
 # -- Bivariate map (host richness x proportion with data) ---------------------
 # Two panels: (1) all EcM host species, (2) tree host species only.
@@ -452,8 +437,10 @@ bivar_colors <- c(
 )
 
 # Helper: build one bivariate map panel + inset legend
-# richness_r, data_r are WGS84 SpatRasters; title_label is a string.
-make_bivar_panel <- function(richness_r, data_r, title_label) {
+# richness_r, data_r are WGS84 SpatRasters; title_label is a string; bg sets
+# the panel/plot background colour (white for the manuscript version, grey
+# for the Figure 5 schematic source version -- see build_bivariate_figure()).
+make_bivar_panel <- function(richness_r, data_r, title_label, bg = "white") {
 
   prop_r <- terra::clamp(data_r / richness_r, lower = 0, upper = 1)
   names(prop_r) <- "proportion"
@@ -521,26 +508,39 @@ make_bivar_panel <- function(richness_r, data_r, title_label) {
     ggplot2::theme_void() +
     ggplot2::theme(
       plot.title      = ggplot2::element_text(size = 10, face = "bold", hjust = 0.5),
-      plot.background = ggplot2::element_rect(fill = "white", colour = NA)
+      plot.background = ggplot2::element_rect(fill = bg, colour = NA)
     ) +
     patchwork::inset_element(p_leg,
                              left = 0.72, bottom = 0.62, right = 0.99, top = 0.87)
   p_map
 }
 
-p_biv_all  <- make_bivar_panel(richness_nontree_wgs84,      data_richness_nontree_wgs84,
-                                "Non-tree EcM host species")
-p_biv_tree <- make_bivar_panel(richness_tree_wgs84, data_richness_tree_wgs84,
-                                "Tree EcM host species")
+# build_bivariate_figure(bg) assembles the two-panel (non-tree / tree)
+# composite at the given background colour.
+build_bivariate_figure <- function(bg) {
+  p_all  <- make_bivar_panel(richness_nontree_wgs84, data_richness_nontree_wgs84,
+                             "Non-tree EcM host species", bg = bg)
+  p_tree <- make_bivar_panel(richness_tree_wgs84, data_richness_tree_wgs84,
+                             "Tree EcM host species", bg = bg)
 
-p_biv_combined <- p_biv_all / p_biv_tree +
-  patchwork::plot_layout(ncol = 1)
+  (p_all / p_tree) +
+    patchwork::plot_layout(ncol = 1) +
+    patchwork::plot_annotation(
+      theme = ggplot2::theme(plot.background = ggplot2::element_rect(fill = bg, colour = NA))
+    )
+}
 
-ggplot2::ggsave(paths$fig_host_bivariate,
-                p_biv_combined, width = 10, height = 14, dpi = 300)
-ts("  Saved hutchinsonian_bivariate_map.png")
+ggplot2::ggsave(paths$fig_host_bivariate, build_bivariate_figure("white"),
+                width = 10, height = 14, dpi = 300, bg = "white")
+ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate)))
 
-# ---- Step 9: ecozone climate space analysis -------------------------
+# Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
+# schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
+ggplot2::ggsave(paths$fig_host_bivariate_grey, build_bivariate_figure(fig5_grey_bg),
+                width = 10, height = 14, dpi = 300, bg = fig5_grey_bg)
+ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate_grey)))
+
+# ---- Step 8: ecozone climate space analysis -------------------------
 # Superseded by the new MAT/MAP sampling maps. Retained for reference.
 # if (FALSE) {  # ----- BEGIN COMMENTED-OUT BLOCK -----
 
@@ -704,7 +704,7 @@ ts("  Saved hutchinsonian_bivariate_map.png")
 # }  # ----- END COMMENTED-OUT BLOCK -----
 # }  # end if (FALSE)
 
-# ---- Step 10: Ecozone-level sampling summary (Table S16b) -------------------
+# ---- Step 9: Ecozone-level sampling summary (Table S16b) -------------------
 # Companion to the ecoregion-level summary in Step 6 (Table S16): of Canada's
 # n_ecozones named ecozones (from ecoregions_clipped, Step 8), how many have
 # *any* EcM fungal sampling, and how many meet the minimum-sample thresholds
@@ -723,19 +723,43 @@ ts("  Saved hutchinsonian_bivariate_map.png")
 #      combined scope as (1), but using the project's canonical site unit
 #      instead of raw coordinates.
 
-ts("Step 10: Ecozone-level sampling summary...")
+ts("Step 9: Ecozone-level sampling summary...")
 
-# Helper: assign a set of points (sf, any CRS) to an ecozone via spatial join
-# against the clipped ecoregion polygons (NAME_EN = ecozone), then count
-# points per ecozone. Mirrors the site -> ecozone join in 09_linnean.R
-# Step 5b. Polygons are not dissolved to ecozone first because NAME_EN is
-# already repeated across the ecoregions making up each ecozone -- joining
-# against ecoregions_clipped directly gives the same per-point ecozone label.
-count_points_per_ecozone <- function(pts_sf) {
-  pts_sf <- sf::st_transform(pts_sf, sf::st_crs(ecoregions_clipped))
-  joined <- sf::st_join(pts_sf, dplyr::select(ecoregions_clipped, NAME_EN),
-                        join = sf::st_within) |>
-    sf::st_drop_geometry()
+# Helper: assign a set of points (sf, any CRS) to an ecozone and count points
+# per ecozone.
+#
+# IMPORTANT: the join is against the detailed, UNCLIPPED ecoregion layer
+# (`ecoregions_named`), NOT `ecoregions_clipped`. `ecoregions_clipped` is the
+# ecoregions re-intersected with `canada_simple`, which is built with
+# simplifyGeom(tolerance = 0.1 deg). That leaves the 49th-parallel border as a
+# few sparse vertices with very long straight edges; a segment straight in
+# lon/lat bows up to ~46 km northward when reprojected to Albers, so the clip
+# trims a wide border strip and silently drops genuine near-border points (all
+# GenBank) from the join. Joining against the unclipped ecoregions removes that
+# discrepancy and matches how 09_linnean.R assigns ecozones; `ecoregions_clipped`
+# is retained only for drawing the map fills.
+#
+# `snap_tol_m`: a point falling just offshore of the ecoregion coastline (inside
+# Canada only because the coarse boundary bulges over water) matches no polygon
+# under st_within. Such points are snapped to the nearest ecozone, but only
+# within snap_tol_m, so this fallback can never silently absorb a genuinely
+# mislocated coordinate. Distances are in metres because ecoregions_named is in
+# the (metre-based) Albers projection.
+count_points_per_ecozone <- function(pts_sf, snap_tol_m = 5000) {
+  pts_sf <- sf::st_transform(pts_sf, sf::st_crs(ecoregions_named))
+  joined <- sf::st_join(pts_sf, dplyr::select(ecoregions_named, NAME_EN),
+                        join = sf::st_within)
+  # Bounded nearest-ecozone fallback for points inside no polygon.
+  miss <- which(is.na(joined$NAME_EN))
+  if (length(miss) > 0L) {
+    near_idx  <- sf::st_nearest_feature(pts_sf[miss, ], ecoregions_named)
+    near_dist <- as.numeric(sf::st_distance(pts_sf[miss, ],
+                                            ecoregions_named[near_idx, ],
+                                            by_element = TRUE))
+    ok <- near_dist <= snap_tol_m
+    joined$NAME_EN[miss[ok]] <- ecoregions_named$NAME_EN[near_idx[ok]]
+  }
+  joined <- sf::st_drop_geometry(joined)
   dplyr::count(dplyr::filter(joined, !is.na(NAME_EN)), NAME_EN, name = "n")
 }
 
@@ -785,5 +809,59 @@ for (i in seq_len(nrow(ecozone_threshold_summary))) {
 readr::write_csv(ecozone_threshold_summary,
                  file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_summary.csv"))
 ts("  Saved hutchinsonian_ecozone_summary.csv")
+
+# ---- Step 10: Per-ecozone sample counts by source (Table S1) ----------------
+# One row per named ecozone with raw unique locations and 3-decimal-binned sites,
+# split by source. "Total" columns sum the two source columns (a location/site
+# shared by both sources counts once per source). Same within-polygon +
+# nearest-snap join as Step 10.
+ts("Step 10: Per-ecozone sample counts by source...")
+
+counts_gf_locs_ez <- count_points_per_ecozone(dplyr::filter(locs_src_sf, source == "GlobalFungi"))
+counts_gb_locs_ez <- count_points_per_ecozone(dplyr::filter(locs_src_sf, source == "GenBank"))
+counts_gf_sites_ez <- count_points_per_ecozone(pts_sites_gf_only)
+
+sites_gb_only <- emf |>
+  dplyr::filter(source == "GenBank", coord_in_canada == TRUE) |>
+  add_site_id() |>
+  dplyr::distinct(site, site_lat, site_lon)
+pts_sites_gb_only <- sf::st_as_sf(sites_gb_only,
+                                  coords = c("site_lon", "site_lat"), crs = 4326)
+counts_gb_sites_ez <- count_points_per_ecozone(pts_sites_gb_only)
+
+ecozone_sample_counts <- tibble::tibble(ecozone = unique_ecozones) |>
+  dplyr::left_join(dplyr::rename(counts_gf_locs_ez,  gf_locations = n), by = c("ecozone" = "NAME_EN")) |>
+  dplyr::left_join(dplyr::rename(counts_gb_locs_ez,  gb_locations = n), by = c("ecozone" = "NAME_EN")) |>
+  dplyr::left_join(dplyr::rename(counts_gf_sites_ez, gf_sites = n),     by = c("ecozone" = "NAME_EN")) |>
+  dplyr::left_join(dplyr::rename(counts_gb_sites_ez, gb_sites = n),     by = c("ecozone" = "NAME_EN")) |>
+  dplyr::mutate(dplyr::across(c(gf_locations, gb_locations, gf_sites, gb_sites),
+                              ~ tidyr::replace_na(as.integer(.), 0L))) |>
+  dplyr::mutate(total_locations = gf_locations + gb_locations,
+                total_sites     = gf_sites + gb_sites) |>
+  dplyr::arrange(ecozone)
+
+# ---- Step 11: Ecozone areas -> sampling density (Table S1) -------------------
+# Area of each named ecozone within Canada, from the SAME unclipped, Albers
+# ecoregion polygons used to assign the sample counts (so counts and areas share
+# one polygon basis). Ecozone area = sum of its constituent ecoregion areas.
+ts("Step 11: Computing ecozone areas for sampling density...")
+
+ecozone_areas <- ecoregions_named |>
+  sf::st_drop_geometry() |>
+  dplyr::mutate(area_km2 = as.numeric(sf::st_area(ecoregions_named)) / 1e6) |>
+  dplyr::group_by(ecozone = NAME_EN) |>
+  dplyr::summarise(area_km2 = sum(area_km2), .groups = "drop")
+
+ecozone_sample_counts <- ecozone_sample_counts |>
+  dplyr::left_join(ecozone_areas, by = "ecozone") |>
+  dplyr::mutate(
+    density_total = total_locations / area_km2 * 10000,   # locations per 10,000 km^2
+    density_gf    = gf_locations   / area_km2 * 10000
+  )
+
+readr::write_csv(ecozone_sample_counts,
+                 file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_sample_counts.csv"))
+ts(sprintf("  Saved hutchinsonian_ecozone_sample_counts.csv (%d ecozones; total locations = %d)",
+           nrow(ecozone_sample_counts), sum(ecozone_sample_counts$total_locations)))
 
 ts("17_hutchinsonian.R complete.")

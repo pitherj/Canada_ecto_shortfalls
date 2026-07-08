@@ -9,18 +9,74 @@ Files are organized by subdirectory. Each entry names the script that produces
 it. Many steps are checkpoint-guarded — a script skips work whose output already
 exists — so to force regeneration, delete the relevant file.
 
+**On the field tables below.** Each non-checkpoint file gets a table of its
+fields (name, type, description), following the recommended content in UBC's
+data dictionary guidance
+(https://ubc-library-rc.github.io/rdm/content/07_data_dictionary.html#recommended-content).
+Per project convention, `checkpoints/` files are exempted — they are
+intermediate/cache artifacts, not analysis outputs, and are described only in
+aggregate (see that section). Several EMF-dataset files
+(`emf_canada_em_only.csv`, `emf_canada_combined.csv`,
+`genbank_emf_canada_long.csv`, `globalfungi_canada_long.csv`) share most of
+their columns; those shared columns are documented once in a common table to
+avoid four near-identical copies. Wide co-occurrence matrices (one column per
+taxon) are documented by structure rather than by enumerating every taxon
+column. `metric,value` long-format summary tables are documented by structure,
+with the metric names listed for reference rather than tabled as if they were
+fields.
+
 ---
 
 ## Root-level files
 
 | File | Produced by | Description |
 |---|---|---|
-| `emf_canada_em_only.csv` | `04_combine_ecm_dataset.R` | **Primary analysis dataset.** EcM fungal records from Canada (GlobalFungi + GenBank), filtered to ectomycorrhizal genera via FungalTraits, with UNITE v10 taxonomy and trait columns. One row per (sample × SH code). Auto-loaded as `emf` by `00_setup.R`. Key column `coord_in_canada` (logical): TRUE = coordinates validated inside the GADM Canada boundary; FALSE = coordinates present but outside; NA = no coordinates. |
+| `emf_canada_em_only.csv` | `04_combine_ecm_dataset.R` | **Primary analysis dataset.** EcM fungal records from Canada (GlobalFungi + GenBank), filtered to ectomycorrhizal genera via FungalTraits, with UNITE v10 taxonomy and trait columns. One row per (sample × SH code). Auto-loaded as `emf` by `00_setup.R`. |
 | `emf_canada_combined.csv` | `04_combine_ecm_dataset.R` | Pre-EcM-filter combined dataset (all fungal guilds, both sources); carries `coord_in_canada`. Large (>200 MB). |
 | `globalfungi_canada_long.csv` | `02_globalfungi.R` | Long-format Canadian GlobalFungi records with UNITE taxonomy. One row per (sample × SH code). Large (>150 MB). |
-| `genbank_emf_canada_long.csv` | `03_genbank.R` | Long-format Canadian GenBank EcM records with UNITE taxonomy, metadata, and provenance. Carries `host_taxon_raw` (raw extracted host string) and `host_taxon` (canonicalized via `canonicalize_host()`). |
-| `clean_fungalroot_species.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant species from FungalRoot (GBIF-backbone-matched). Columns: `UpdatedPlantBinomial`, `UpdatedGenus`, `ecm_demonstrated` (always TRUE), `evidence` (qualifying raw mycorrhizal-type label(s)), `PlantBinomial` (raw name(s)). |
-| `ecm_native_canada_host_species.csv` | `06_host_species.R` | Native Canadian EcM host species (species-level FungalRoot evidence ∩ BIEN native flora). Columns: `species`, `host_demonstrated` (always TRUE), `growth_form`. This list is the denominator of potential host interactions in the Eltonian and Hutchinsonian analyses. |
+| `genbank_emf_canada_long.csv` | `03_genbank.R` | Long-format Canadian GenBank EcM records with UNITE taxonomy, metadata, and provenance. |
+| `clean_fungalroot_species.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant species from FungalRoot (GBIF-backbone-matched, species rule). |
+| `clean_fungalroot_genera_table_s2.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant genera from FungalRoot's published Table S2 (genus rule) — a second, independent selection route consumed by `06_host_species.R` alongside the species-rule output above. |
+| `ecm_native_canada_host_species.csv` | `06_host_species.R` | Native Canadian EcM host species (species-level FungalRoot evidence ∩ BIEN native flora). This list is the denominator of potential host interactions in the Eltonian and Hutchinsonian analyses. |
+
+### Shared EMF-record fields
+
+`emf_canada_em_only.csv`, `emf_canada_combined.csv`, `genbank_emf_canada_long.csv`,
+and `globalfungi_canada_long.csv` are all one-row-per-(sample × SH code) tables
+built around the same core columns. Columns unique to one file are marked.
+
+| Field | Type | Description | In which file(s) |
+|---|---|---|---|
+| `sample_ID` | character | GlobalFungi sample identifier | GF-derived files (not GenBank-only) |
+| `sh_code` | character | UNITE v10 Species Hypothesis code; `NA` for genus-resolved GenBank records (see `taxonomic_resolution`) | all |
+| `abundance` | integer | GlobalFungi read count for this (sample × SH) pair | GF-derived files |
+| `kingdom`, `phylum`, `class`, `order`, `family`, `genus`, `species` | character | UNITE v10 taxonomy for the SH code | all |
+| `lat` / `latitude`, `lon` / `longitude` | numeric | Sample coordinates (WGS84); column named `lat`/`lon` in combined/em_only, `latitude`/`longitude` in `globalfungi_canada_long.csv` | GF-derived files |
+| `country` | character | Reported sample country | GF-derived files |
+| `barcoding_region` | character | `ITS1`/`ITS2`/`ITSboth` (GlobalFungi metadata field) | GF-derived files |
+| `sample_type`, `environment_type`, `ecosystem_classification` | character | GlobalFungi sample-metadata fields (see `data_raw/DATA-DICTIONARY.md`) | GF-derived files |
+| `year_of_sampling_from` | integer | Sampling year (from GlobalFungi metadata) | GF-derived files |
+| `dominant_plant_species`, `other_plant_species` | character | Vegetation context (GlobalFungi metadata fields) | GF-derived files |
+| `paper_ID`, `paper_title`, `paper_authors`, `paper_doi` | character | Source-publication metadata (GlobalFungi metadata fields) | GF-derived files |
+| `source` | character | `"GlobalFungi"` or `"GenBank"` — which source contributed the row | combined/em_only, GenBank long |
+| `query_id`, `target_id` | character | vsearch query (GenBank sequence) / target (UNITE reference) identifiers from the SH-assignment search | GenBank-derived files |
+| `identity` | numeric | % sequence identity of the best UNITE hit | GenBank-derived files |
+| `aln_length` | integer | Alignment length (bp) | GenBank-derived files |
+| `mismatches`, `gap_opens` | integer | Alignment mismatches / gap openings | GenBank-derived files |
+| `q_start`, `q_end`, `s_start`, `s_end` | integer | Alignment start/end positions on query and subject (UNITE reference) sequences | GenBank-derived files |
+| `evalue`, `bitscore` | numeric | vsearch/BLAST-style alignment statistics | GenBank-derived files |
+| `accession` | character | GenBank accession number | GenBank-derived files |
+| `taxonomic_resolution` | character | `"sh"` = tied top hits agreed and the record carries a resolved `sh_code`/`species`; `"genus"` = tied hits disagreed at species/SH but agreed at genus, so `sh_code`/`species` are `NA` and only `genus` is retained | GenBank-derived files |
+| `uid`, `title`, `organism`, `taxid` | character/integer | NCBI Entrez record identifiers/metadata for the accession | GenBank-derived files |
+| `seq_length` | integer | Length of the source GenBank sequence (bp) | GenBank-derived files |
+| `country_gb`, `lat_lon_gb`, `collection_date`, `isolation_src`, `host_gb` | character | Raw GenBank record metadata fields | GenBank-derived files |
+| `its_region` | character | `"ITS2"` or `"ITSboth"`: whether the source sequence had a genuine standalone ITS1 detection in addition to ITS2 — provenance only, does **not** affect SH assignment, which uses the ITS2 fragment alone | GenBank-derived files |
+| `canada_basis` | character | Provenance of the Canada assignment for a GenBank record: `"both"` (country + coordinates both indicate Canada), `"country_only"`, `"coordinates_only"`, `"search_only"` (found only via Canada-targeted search terms), or `"coordinates_outside_canada"` (assigned in `04_combine_ecm_dataset.R` when coordinates validate outside the GADM Canada boundary) | GenBank-derived files |
+| `host_taxon_raw` | character | Raw host string extracted from GenBank record text, before cleaning | GenBank-derived files |
+| `host_taxon` | character | Canonicalized host taxon (via `canonicalize_host()` in `00_setup.R`); used by `17_hutchinsonian.R`, `19_eltonian.R`, `20_sampling_maps.R` | GenBank-derived files |
+| `coord_in_canada` | logical | `TRUE` = coordinates validated inside the GADM Canada boundary; `FALSE` = coordinates present but outside; `NA` = no coordinates | combined, em_only |
+| `primary_lifestyle`, `secondary_lifestyle` | character | FungalTraits guild fields for the record's genus | em_only only |
+| `ectomycorrhiza_lineage`, `ectomycorrhiza_exploration_type` | character | FungalTraits EcM-specific fields for the record's genus | em_only only |
 
 ---
 
@@ -28,35 +84,49 @@ exists — so to force regeneration, delete the relevant file.
 
 | File | Produced by | Description |
 |---|---|---|
-| `canada_simple.gpkg` | `01_spatial_data.R` | Dissolved, simplified Canada national boundary (WGS84). |
+| `canada_simple.gpkg` | `01_spatial_data.R` | Dissolved, simplified Canada national boundary (WGS84). Single-feature polygon. |
 | `north_america_simple.gpkg` | `01_spatial_data.R` | Canada + contiguous USA + Mexico (WGS84), for basemaps. |
 | `canada_ne_albers.gpkg` | `01_spatial_data.R` | Natural Earth Canada boundary, Canada Albers projection. |
 | `lakes_canada_albers.gpkg` | `01_spatial_data.R` | Major Canadian lakes, Canada Albers projection. |
-| `ecoregions_processed.gpkg` | `01_spatial_data.R` | Canadian ecoregion polygons (WGS84) with ecozone names joined. |
-| `ecozone_names.csv` | `01_spatial_data.R` | Ecozone code → English/French name lookup. |
-| `bien_host_richness_0.5deg.tif` | `08_host_rasters.R` | Raster: number of native EcM host species with a BIEN2 range per 0.5° cell. |
-| `bien_host_species_stack.tif` | `08_host_rasters.R` | Multi-layer raster: one binary presence layer per host species. |
-| `bien_host_data_richness_0.5deg.tif` | `08_host_rasters.R` | Raster: number of host species with ≥1 Canadian EcM sequence record per cell. |
-| `bien_host_data_proportion_0.5deg.tif` | `08_host_rasters.R` | Raster: proportion of locally present host species with EcM data (data richness / host richness). |
-| `bien_ecoregions_with_host_habitat.gpkg` | `08_host_rasters.R` | Ecoregion polygons flagged for predicted EcM host habitat. |
+| `ecoregions_processed.gpkg` | `01_spatial_data.R` | Canadian ecoregion polygons (WGS84) with ecozone names joined; carries the fields listed under `data_raw/ecoregions/ecoregions.dbf` in `data_raw/DATA-DICTIONARY.md`, plus `NAME_EN`/`NAME_FR` joined in. |
+| `ecozone_names.csv` | `01_spatial_data.R` | Ecozone code → English/French name lookup (copy of `data_raw/ecoregions/Ecoregions/ecozone_names.dbf`; see that file's field table). |
+| `bien_host_richness_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: number of native EcM host species with a BIEN2 range per 0.5° cell. |
+| `bien_host_species_stack.tif` | `08_host_rasters.R` | Multi-layer raster: one binary (0/1) presence layer per host species (layer names = species). |
+| `bien_host_data_richness_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: number of host species with ≥1 Canadian EcM sequence record per cell. |
+| `bien_host_data_proportion_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: proportion of locally present host species with EcM data (data richness / host richness), range 0–1. |
 
 ---
 
 ## `checkpoints/` — Intermediate pipeline files
 
-Retained to make re-runs cheap; delete a file to force its step to re-execute.
+Exempted from field-level tables (see note above). Retained to make re-runs
+cheap; delete a file to force its step to re-execute.
 Includes: `globalfungi_canada_ids.txt`, `globalfungi_canada_SH_abundance.txt`,
 `globalfungi_canada_metadata.csv`, `unite_sh_taxonomy.csv` (SH → taxonomy lookup
 parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`);
 `genbank_emf_canada.fasta`, `genbank_emf_canada_metadata.csv`,
-`genbank_vsearch_hits.txt`, `genbank_fetch_log.txt` (`03_genbank.R`);
-`bien2_ecm_host_ranges.gpkg`, `bien_ecm_canada_species.csv`,
-`bien_ecm_growthforms.csv`, `gift_growthforms.csv` (`06_host_species.R`);
-`gbif_ecm_canada_raw.csv` (`09_linnean.R`); `linnean_inext_per_sample.rds`
-(`10_linnean_inext.R`, caches the slow iNEXT loop);
-`gf_global_ecm_sample_ids.csv` (`12_wallacean_density_map.R`);
-`gf_global_comparator_cheap.csv`, `gf_global_comparator_volume.csv`
-(`13_wallacean_global_comparator.R`).
+`genbank_emf_canada_ids.txt`, `genbank_itsx_input.fasta`,
+`genbank_itsx.{ITS1,ITS2,full,chimeric}.fasta`,
+`genbank_itsx.{positions,problematic,summary,no_detections}.txt`,
+`genbank_itsx_no_detections.fasta` (ITSx sub-region extraction),
+`genbank_vsearch_query.fasta` (sanitized ITS2 queries ≥ 100 bp),
+`genbank_vsearch_hits.txt`, `genbank_global_ecm_meta.csv`,
+`genbank_ambiguous_species_excluded.csv` (records dropped because tied top hits
+disagreed even at genus level), `genbank_its1_resolution_crosstab.csv`
+(reporting-only diagnostic: `taxonomic_resolution` outcome × standalone-ITS1
+presence), `genbank_fetch_log.txt` (`03_genbank.R`);
+`fungalroot_dwca_extracted/` (fresh per-run extraction of the FungalRoot DwC-A
+zip: `occurrences.csv`, `measurements.csv`, `media.csv`, `eml.xml`, `meta.xml`,
+`dna_data.csv`), `fungalroot_species_raw.csv`, `fungalroot_species_backbone.csv`,
+`fungalroot_table_s2.csv` (`05_prepare_fungalroot.R`);
+`bien2_ecm_host_ranges.gpkg`, `bien_ecm_growthforms.csv`,
+`bien_nsr_native_species.csv`, `gift_growthforms.csv` (`06_host_species.R`);
+`gbif_ecm_canada_raw.csv` (`09_linnean.R`);
+`gf_global_ecm_sample_ids.csv`, `gf_global_root_metadata.csv`
+(`12_wallacean_density_map.R`);
+`gf_global_comparator_cheap.csv`, `gf_global_comparator_volume.csv`,
+`gf_global_ecm_sh_subset.rds` (`13_wallacean_global_comparator.R`);
+`linnean_inext_per_sample.rds` (`11_wallacean.R`).
 
 ---
 
@@ -64,15 +134,44 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 
 | File | Description |
 |---|---|
-| `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; site-based completeness Ĉ; Chao2 SH richness with bootstrap SE and 95% CI; GBIF specimen counts. Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
+| `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; GBIF specimen counts. Long-format `metric,value` table (36 metrics). Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
 | `linnean_genus_coverage.csv` | All FungalTraits EcM genera flagged for whether observed in Canada. |
-| `linnean_extrapolation_coverage.csv` | Per-stratum (Canada-wide and per-ecozone) site-based completeness diagnostics: `stratum`, `n_sites`, `n_sh_obs`, `Q1`, `Q2`, `coverage_hat`. **Feeds Table S1.** |
-| `linnean_extrapolation_estimators.csv` | Per-stratum asymptotic SH richness estimators (Chao2 etc.) with SE and CI; `singletons` column ("included"). **Feeds Table S1.** |
-| `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S3. |
-| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for EcM genera **without** sequence data in Canada. Feeds Figure S3. |
-| `linnean_inext_per_sample.csv` | Per-sample abundance-based rarefaction/extrapolation (iNEXT, q = 0). One row per Canadian GlobalFungi sample: `sample_ID`, `ecm_reads`, `sh_obs`, `lat`, `lon`, `s_est_chao1` (+ 95% CI), `coverage_obs`, `s_ext_2x` (+ CI), `coverage_2x`, `s_est_over_obs`, `inext_status`. |
-| `linnean_inext_summary.csv` | Distribution-level summary of the per-sample iNEXT results (median observed and Chao1 richness, median Ĉ, etc.). Backs the in-text per-sample completeness numbers. |
-| `linnean_accumulation.rds` | `vegan::specaccum` objects (diagnostic; used for the internal accumulation panel figure, not a manuscript figure). |
+| `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S5. |
+| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for EcM genera **without** sequence data in Canada. Feeds Figure S5 and Table S4. |
+| `linnean_gbif_plotted_counts.csv` | Produced by `20_sampling_maps.R`. Counts of GBIF points actually drawn on Figure S5 (distinct georeferenced coordinates within the Canada boundary), one row per category. Used to caption Figure S5 dynamically in the Supplemental Information. |
+
+#### `linnean_summary.csv` — structure
+
+| Field | Type | Description |
+|---|---|---|
+| `metric` | character | Name of the reported statistic (36 rows — e.g. "Unique UNITE v10 SH codes (combined dataset)", "GlobalFungi: singleton SH codes (% of GF Canadian SHs)", "GBIF: physical EcM specimen records — genera WITH sequence data (Canada)"; see `09_linnean.R` for the full list) |
+| `value` | character | Reported value (count or percentage; stored as text to allow mixed numeric/formatted entries) |
+
+#### `linnean_genus_coverage.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `genus` | character | FungalTraits EcM genus name |
+| `genus_lower` | character | Lower-cased genus (join key) |
+| `observed_in_canada` | logical | Whether the genus appears in the Canadian EcM dataset |
+| `ectomycorrhiza_lineage_template` | character | FungalTraits EcM lineage for the genus |
+| `ectomycorrhiza_exploration_type_template` | character | FungalTraits EcM exploration type for the genus |
+
+#### `linnean_gbif_ecm_canada.csv` / `linnean_gbif_ecm_nosequence_canada.csv` — fields
+
+Standard GBIF Simple-CSV Darwin Core fields (see `data_raw/DATA-DICTIONARY.md` >
+GBIF section for the full field list — identical schema), plus:
+
+| Field | Type | Description |
+|---|---|---|
+| `genus_lower` | character | Lower-cased genus, added for matching against the EcM genus list |
+
+#### `linnean_gbif_plotted_counts.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `category` | character | Point category plotted on Figure S5 (e.g. genera with/without sequence data) |
+| `n_plotted` | integer | Number of distinct georeferenced points drawn for that category |
 
 ---
 
@@ -86,16 +185,63 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 | `wallacean_global_gf_locs_per_species.csv` | Per named species: unique 30 arc-second cells globally (mapped via our UNITE SH lookup against the global GlobalFungi SH matrix). |
 | `wallacean_global_gf_locs_per_sh.csv` | Per SH code: unique 30 arc-second cells globally. |
 
+#### Fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `wallacean_location_summary.csv` | `dataset` | character | `"GlobalFungi"` or `"GenBank"` |
+| | `n_records_with_coords` | integer | Records with usable coordinates |
+| | `n_unique_locations` | integer | Distinct sampling locations (site = lat/lon rounded to 3 decimals) |
+| `wallacean_sampling_intensity.csv` | `dataset` | character | `"GlobalFungi"` or `"GenBank"` |
+| | `taxonomic_level` | character | `"SH"`, `"genus"`, or `"species"` |
+| | `n_taxa` | integer | Number of taxa at that level |
+| | `mean_locs`, `median_locs`, `max_locs`, `min_locs` | numeric | Locations-per-taxon summary statistics |
+| | `n_single_location` | integer | Taxa recorded at exactly one location |
+| | `pct_single_location` | numeric | % of taxa recorded at exactly one location |
+| `wallacean_locs_per_sh.csv` | `sh_code` | character | UNITE SH code |
+| | `n_locations` | integer | Distinct sampling locations for that SH |
+| | `dataset` | character | `"GlobalFungi"` or `"GenBank"` |
+| `wallacean_locs_per_genus.csv` | `genus` | character | Genus name |
+| | `n_locations`, `dataset` | — | as above |
+| `wallacean_locs_per_species.csv` | `species` | character | Species name |
+| | `n_locations`, `dataset` | — | as above |
+| `wallacean_global_gf_locs_per_species.csv` | `species` | character | Named species |
+| | `n_locs_global` | integer | Distinct 30 arc-second cells globally (all countries, GlobalFungi) |
+| `wallacean_global_gf_locs_per_sh.csv` | `sh_code` | character | UNITE SH code |
+| | `n_locs_global` | integer | Distinct 30 arc-second cells globally |
+
 ---
 
 ## `raunkiaeran/` — Raunkiæran shortfall
 
 | File | Description |
 |---|---|
-| `raunkiaeran_trait_coverage.csv` | Per-trait coverage across the six EcM-relevant FungalTraits columns: `trait`, `trait_label`, `trait_class`, `n_documented`, `n_total`, `pct_documented`. **Backs Table 4.** |
+| `raunkiaeran_trait_coverage.csv` | Per-trait coverage across the six EcM-relevant FungalTraits columns. **Backs Table 4.** |
 | `raunkiaeran_genus_summary.csv` | Per-genus count of documented traits (of six). |
 | `raunkiaeran_trait_distributions.csv` | Value tallies per trait, including an explicit `(undocumented)` bucket. |
 | `raunkiaeran_specific_hosts.csv` | Genera with a documented `specific_hosts` entry and the recorded host taxon. |
+| `raunkiaeran_absent_genera.csv` | Canadian EcM genera with zero of the six traits documented in FungalTraits. |
+
+#### Fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `raunkiaeran_trait_coverage.csv` | `trait` | character | FungalTraits column name |
+| | `trait_label` | character | Human-readable trait label |
+| | `trait_class` | character | Trait category (e.g. Guild, Body, Habitat) |
+| | `n_documented` | integer | Genera with a non-missing value for this trait |
+| | `n_total` | integer | Total Canadian EcM genera |
+| | `pct_documented` | numeric | `n_documented / n_total × 100` |
+| `raunkiaeran_genus_summary.csv` | `genus` | character | Genus name |
+| | `genus_lower` | character | Lower-cased genus (join key) |
+| | `n_traits_documented` | integer | Count of the six traits with a non-missing value (0–6) |
+| `raunkiaeran_trait_distributions.csv` | `trait` | character | FungalTraits column name |
+| | `value` | character | Observed value (or `"(undocumented)"`) |
+| | `n_genera` | integer | Genera with this value |
+| | `pct_genera` | numeric | % of genera with this value |
+| `raunkiaeran_specific_hosts.csv` | `genus` | character | Genus name |
+| | `specific_hosts` | character | FungalTraits `Specific_hosts` free-text entry |
+| `raunkiaeran_absent_genera.csv` | `genus` | character | Canadian EcM genus with 0 of 6 traits documented |
 
 ---
 
@@ -103,12 +249,57 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 
 | File | Description |
 |---|---|
-| `eltonian_summary.csv` | Interaction-coverage statistics: host × named-species matrix fill rate, % of observed pairs supported by a single record, plus genus-level analogues. Backs the in-text Eltonian numbers. |
-| `eltonian_host_matching.csv` | Host-name matching results: raw input, cleaned name (`host_clean`), match status against the native host list, and host-field provenance. **Feeds Table S2.** |
+| `eltonian_summary.csv` | Interaction-coverage statistics: host × named-species matrix fill rate, % of observed pairs supported by a single record, plus genus-level analogues and mycobiont-focal counts (Canada + global scope). Long-format `metric,value` table (41 metrics). Backs the in-text Eltonian numbers, including the mycobiont paragraph. |
+| `eltonian_host_list.csv` | Copy of `ecm_native_canada_host_species.csv` as loaded for this analysis (see that file's field table). |
+| `eltonian_host_matching.csv` | Host-name matching results: raw input, cleaned name, match status against the native host list. **Feeds Tables S2 and S3.** |
 | `eltonian_matrix_sh.csv` / `eltonian_matrix_species.csv` / `eltonian_matrix_genus.csv` / `eltonian_matrix_genus_genus.csv` | Binary host × fungus co-occurrence matrices at SH, named-species, host-species × fungal-genus, and host-genus × fungal-genus resolution (trimmed to observed rows/columns). |
 | `eltonian_species_occurrence_counts.csv` / `eltonian_genus_occurrence_counts.csv` | Supporting-record counts per observed host–fungus pair (species and genus level); back the singleton-association statistics. |
-| `eltonian_global_host_associations.csv` and `eltonian_global_*` | Global-scope host–fungus associations and per-host / per-fungus coverage used to establish which Canadian hosts/fungi have any documented partner anywhere. |
-| `eltonian_sample_type_tally_*.csv`, `eltonian_genbank_tissue_tally_canada.csv` | Diagnostic tallies of the sample/tissue types underlying the host information. |
+| `eltonian_global_fungi_to_hosts.csv` | Per named EcM fungal species (global GlobalFungi root samples): documented host species. |
+| `eltonian_global_gb_fungi_to_hosts.csv` | Per EcM fungal genus (global GenBank): documented host species. |
+| `eltonian_global_host_coverage.csv` | Per Canadian host species: whether it has any global GlobalFungi root-sample record. |
+| `eltonian_global_host_to_fungi.csv` | Per Canadian host species: documented global EcM fungal-species associates. |
+| `eltonian_sample_type_tally_canada.csv`, `eltonian_sample_type_tally_global.csv`, `eltonian_genbank_tissue_tally_canada.csv` | Diagnostic tallies of the sample/tissue types underlying the host information. |
+
+#### `eltonian_summary.csv` — structure
+
+| Field | Type | Description |
+|---|---|---|
+| `metric` | character | Name of the reported statistic (41 rows spanning host/genus coverage, matrix fill rates, and Canada/global mycobiont counts — see `19_eltonian.R` for the full list) |
+| `value` | character | Reported value |
+
+#### Other `eltonian/` fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `eltonian_host_matching.csv` | `sh_code` | character | UNITE SH code of the fungal record |
+| | `genus`, `species` | character | Fungal taxonomy |
+| | `host_raw` | character | Raw host string as recorded |
+| | `host_field` | character | Source metadata field the host string came from |
+| | `host_clean` | character | Cleaned host string |
+| | `host_genus` | character | Genus parsed from `host_clean` |
+| | `matched` | logical | Whether `host_clean` matched an entry in the native host list |
+| | `match_genus` | logical | Whether at least the genus matched |
+| `eltonian_matrix_{sh,species,genus,genus_genus}.csv` | `host_species` / `host_genus` | character | Row identifier (host taxon) |
+| | *(remaining columns)* | integer (0/1) | One column per fungal taxon (SH code / species / genus, as applicable); 1 = co-occurrence observed |
+| `eltonian_species_occurrence_counts.csv` | `host_species`, `fungal_species` | character | Host/fungus pair |
+| | `n_occurrences` | integer | Supporting record count |
+| `eltonian_genus_occurrence_counts.csv` | `host_genus`, `fungal_genus` | character | Host/fungus genus pair |
+| | `n_occurrences` | integer | Supporting record count |
+| `eltonian_global_fungi_to_hosts.csv` | `fungal_species` | character | Named EcM fungal species |
+| | `n_host_species` | integer | Count of documented global host species |
+| | `host_species` | character | Semicolon/comma-separated list of host species |
+| `eltonian_global_gb_fungi_to_hosts.csv` | `fungal_genus` | character | EcM fungal genus |
+| | `n_host_species_gb` | integer | Count of documented global GenBank host species |
+| | `host_species_gb` | character | List of host species |
+| `eltonian_global_host_coverage.csv` | `species` | character | Canadian host species |
+| | `has_global_gf` | logical | Whether it has ≥1 global GlobalFungi root-sample record |
+| `eltonian_global_host_to_fungi.csv` | `host_species` | character | Canadian host species |
+| | `n_ecm_species` | integer | Count of documented global EcM fungal associates |
+| | `ecm_species` | character | List of associated EcM fungal species |
+| `eltonian_sample_type_tally_{canada,global}.csv` | `sample_type` | character | GlobalFungi `sample_type` value |
+| | `n_samples` | integer | Sample count |
+| `eltonian_genbank_tissue_tally_canada.csv` | `category` | character | Tissue/isolation-source category |
+| | `n` | integer | Record count |
 
 ---
 
@@ -116,9 +307,25 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 
 | File | Description |
 |---|---|
-| `hutchinsonian_ecoregion_summary.csv` | EcM sampling coverage by Canadian ecozone (area, host-habitat proportion, sampling status). |
-| `hutchinsonian_raster_summary.csv` | Summary statistics of 0.5° grid-cell coverage (proportion of host species with EcM data). |
+| `hutchinsonian_raster_summary.csv` | Summary statistics of 0.5° grid-cell coverage (proportion of host species with EcM data). Long-format `metric,value` table (6 metrics). |
 | `hutchinsonian_ecozone_summary.csv` | Ecozone-level sample-threshold counts under three sample definitions. |
+| `hutchinsonian_ecozone_sample_counts.csv` | Per-ecozone unique sampling locations and 3-decimal sites by source (GlobalFungi/GenBank), plus ecozone area and sampling density. Points assigned via within-polygon join against the detailed (unclipped) ecoregion layer with a 5 km nearest-ecozone snap; areas share that polygon basis. **Feeds Table S1.** |
+
+#### Fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `hutchinsonian_raster_summary.csv` | `metric` | character | e.g. "Grid cells (0.5°) with EcM host habitat", "Mean proportion of host spp. with sequence data (per cell)" |
+| | `value` | character | Reported value |
+| `hutchinsonian_ecozone_summary.csv` | `definition` | character | Sample-threshold definition used |
+| | `n_ecozones` | integer | Total ecozones assessed |
+| | `ecozones_ge1`, `ecozones_ge10`, `ecozones_ge30` | integer | Ecozones meeting ≥1 / ≥10 / ≥30 samples under that definition |
+| `hutchinsonian_ecozone_sample_counts.csv` | `ecozone` | character | Ecozone name |
+| | `gf_locations`, `gb_locations` | integer | Distinct sampling locations by source (GlobalFungi/GenBank) |
+| | `gf_sites`, `gb_sites` | integer | Distinct 3-decimal-degree sites by source |
+| | `total_locations`, `total_sites` | integer | Combined totals |
+| | `area_km2` | numeric | Ecozone area |
+| | `density_total`, `density_gf` | numeric | Sampling density (sites per km²) — total and GlobalFungi-only |
 
 ---
 
@@ -126,9 +333,57 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 
 | File | Description |
 |---|---|
-| `prestonian_summary.csv` | Temporal-coverage summary (backs the in-text 99.9% figure). |
-| `prestonian_biotime_matches.csv` | BioTIME studies matched to Canadian EcM sampling. |
-| `prestonian_study_metadata.csv` / `prestonian_taxon_summary.csv` / `prestonian_location_timeseries.csv` | Matched-study metadata, per-taxon coverage, and time-series records. |
+| `prestonian_summary.csv` | Temporal-coverage summary (backs the in-text 99.9% figure). Long-format `metric,value` table (13 metrics). |
+| `prestonian_biotime_matches.csv` | BioTIME raw records matched to Canadian EcM taxa (carries BioTIME's native record-level fields — see below). |
+| `prestonian_study_metadata.csv` | Matched BioTIME study metadata. |
+| `prestonian_taxon_summary.csv` | Per-taxon coverage across matched BioTIME studies. |
+| `prestonian_location_timeseries.csv` | Matched-taxon × location × year detail. |
+
+#### `prestonian_summary.csv` — structure
+
+| Field | Type | Description |
+|---|---|---|
+| `metric` | character | e.g. "BioTIME fungi studies (taxa + organisms filter)", "% of our EcM genera absent from BioTIME" (13 rows total — see `14_prestonian.R`) |
+| `value` | character | Reported value |
+
+#### Other `prestonian/` fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `prestonian_biotime_matches.csv` | `id_all_raw_data`, `id_species` | character | BioTIME internal record/species identifiers |
+| | `abundance`, `biomass` | numeric | BioTIME abundance/biomass values, if recorded |
+| | `sample_desc` | character | BioTIME sample description |
+| | `latitude`, `longitude` | numeric | Observation coordinates |
+| | `depth`, `day`, `month`, `year` | numeric/integer | Sampling depth and date |
+| | `study_id` | character | BioTIME study identifier |
+| | `newid` | character | BioTIME record identifier |
+| | `valid_name` | character | Taxon name (from BioTIME, or constructed from genus+species) |
+| | `resolution` | character | BioTIME's own taxonomic resolution flag |
+| | `taxon` | character | Taxon field as recorded by BioTIME |
+| | `match_level` | character | `"species"` or `"genus"` — level at which this record matched our EcM taxa |
+| `prestonian_study_metadata.csv` | `study_id` | character | BioTIME study identifier (join key) |
+| | `taxa`, `organisms` | character | BioTIME taxonomic-scope fields |
+| | `realm` | character | Terrestrial/Freshwater/Marine |
+| | `biome_map` | character | Biome classification |
+| | `cent_lat`, `cent_long` | numeric | Study centroid coordinates |
+| | `start_year`, `end_year` | integer | Temporal coverage |
+| | `number_of_species` | integer | BioTIME-reported species count |
+| | `contact_1` | character | Data contributor contact |
+| `prestonian_taxon_summary.csv` | `valid_name` | character | Matched taxon name |
+| | `match_level` | character | `"species"` or `"genus"` |
+| | `study_ids` | character | Semicolon-separated list of matching BioTIME study IDs |
+| | `n_studies`, `n_records` | integer | Count of studies / records for this taxon |
+| | `year_min`, `year_max` | integer | Temporal range across matched records |
+| | `n_locations` | integer | Distinct locations |
+| | `max_years_at_location` | integer | Longest single-location time span (years) |
+| | `has_repeat_sampling` | logical | Whether any location has >1 sampling year |
+| `prestonian_location_timeseries.csv` | `valid_name`, `match_level` | character | Matched taxon and match level |
+| | `study_id` | character | BioTIME study identifier |
+| | `latitude`, `longitude` | numeric | Location coordinates |
+| | `n_years` | integer | Distinct sampling years at this location |
+| | `years` | character | Semicolon-separated list of sampling years |
+| | `n_records` | integer | Record count at this location |
+| | `total_abundance`, `total_biomass` | numeric | Summed abundance/biomass, where recorded |
 
 ---
 
@@ -136,8 +391,32 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 
 | File | Description |
 |---|---|
-| `darwinian_summary.csv` | Genomic-resource coverage summary (backs the in-text 95.4% figure). |
-| `darwinian_mycocosm_matches.csv` / `darwinian_species_matches.csv` / `darwinian_genus_summary.csv` | Canadian EcM genera/species matched to MycoCosm genome records, and per-genus genome counts. |
+| `darwinian_summary.csv` | Genomic-resource coverage summary (backs the in-text 95.4% figure). Long-format `metric,value` table (12 metrics). |
+| `darwinian_mycocosm_matches.csv` | All MycoCosm records whose genus matches a Canadian EcM genus. |
+| `darwinian_species_matches.csv` | Canadian EcM species matched to a MycoCosm genome record. |
+| `darwinian_genus_summary.csv` | Per-genus MycoCosm genome-record counts. |
+
+#### `darwinian_summary.csv` — structure
+
+| Field | Type | Description |
+|---|---|---|
+| `metric` | character | e.g. "EcM genera with genome data in MycoCosm", "% of our EcM species absent from MycoCosm" (12 rows — see `15_darwinian.R`) |
+| `value` | character | Reported value |
+
+#### Other `darwinian/` fields
+
+| File | Field | Type | Description |
+|---|---|---|---|
+| `darwinian_mycocosm_matches.csv` | `id`, `taxon_name`, `assembly_length`, `num_genes`, `publication` | — | MycoCosm fields, as in `data_raw/mycocosm/mycocosm_organism_list.csv` |
+| | `genus`, `genus_lower` | character | Genus parsed from `taxon_name` |
+| | `species_lower` | character | Species epithet parsed from `taxon_name` |
+| | `species_match` | logical | Whether the full species name matches a Canadian EcM species |
+| `darwinian_species_matches.csv` | `emf_species` | character | Canadian EcM species name (UNITE) |
+| | `taxon_name` | character | Matched MycoCosm organism name |
+| | `id`, `assembly_length`, `num_genes`, `publication` | — | MycoCosm fields for the matched genome |
+| `darwinian_genus_summary.csv` | `genus` | character | Canadian EcM genus |
+| | `n_genomes` | integer | Count of MycoCosm genome records for the genus |
+| | `record_ids` | character | Semicolon-separated MycoCosm record IDs |
 
 ---
 
@@ -150,10 +429,11 @@ data_derived/                     # starts EMPTY; regenerated by scripts/
 ├── emf_canada_combined.csv       # pre-filter combined (04)
 ├── globalfungi_canada_long.csv   # (02)
 ├── genbank_emf_canada_long.csv   # (03)
-├── clean_fungalroot_species.csv  # (05)
+├── clean_fungalroot_species.csv  # (05, species rule)
+├── clean_fungalroot_genera_table_s2.csv  # (05, genus rule)
 ├── ecm_native_canada_host_species.csv  # (06)
 ├── spatial/                      # processed layers + host rasters (01, 08)
-├── checkpoints/                  # intermediate/cached files
+├── checkpoints/                  # intermediate/cached files (exempt from field tables)
 ├── linnean/  wallacean/  raunkiaeran/
 ├── eltonian/  hutchinsonian/  prestonian/  darwinian/
 ```

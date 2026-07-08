@@ -45,6 +45,15 @@ ts <- function(...) cat(format(Sys.time(), "[%H:%M:%S]"), ..., "\n")
 crs_wgs84  <- "EPSG:4326"
 crs_albers <- "+proj=aea +lat_0=40 +lon_0=-96 +lat_1=50 +lat_2=70 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs"
 
+# ---- Figure 5 grey-background colour -----------------------------------------
+# Figure 5 (manuscript.qmd) is a hand-assembled schematic composite that reuses
+# panels from Figures 1, 3, 4, S1, S4, and S5 on a light-grey backdrop. The
+# scripts producing those figures (10, 17, 18, and 20) each save TWO versions:
+# the normal white-background copy used in the manuscript/SI (paths$fig_*),
+# and an additional copy on this grey background (paths$fig_*_grey) for use
+# only when manually assembling Figure 5.
+fig5_grey_bg <- "#F2F2F2"
+
 # =============================================================================
 # Helper functions
 # =============================================================================
@@ -177,6 +186,36 @@ load_bien2_range <- function(species, canada_wgs84) {
     sf::st_intersection(suppressWarnings(sf::st_buffer(sf::st_make_valid(canada_wgs84), 0)))
 }
 
+# ---- read_big_tsv_subset(): read selected columns from a very large TSV -------
+# data.table::fread(..., select = ) still has to stream and tokenize the whole
+# file, which overruns R's 2^31-1-byte single-string limit on multi-GB inputs
+# such as the ~13 GB GlobalFungi SH abundance matrix. This helper instead streams
+# the file once through `awk`, writing ONLY the requested columns to a temporary
+# TSV, then fread()s that much smaller file.
+#   path : path to the large tab-separated file (with a header row)
+#   cols : column NAMES to keep (first is typically the id column, e.g. sample_ID);
+#          names not present in the file's header are dropped
+# Returns a data.table with the kept columns, in the order given.
+read_big_tsv_subset <- function(path, cols) {
+  header <- names(data.table::fread(path, sep = "\t", quote = "", nrows = 0L))
+  keep   <- cols[cols %in% header]
+  if (length(keep) == 0L)
+    stop("None of the requested columns are present in ", basename(path))
+  idx <- match(keep, header)                          # 1-based column positions
+  tmp <- tempfile(fileext = ".tsv")
+  on.exit(unlink(tmp), add = TRUE)
+  awk_prog <- paste0(
+    'BEGIN{FS=OFS="\\t"; n=split(cols,a,",")} ',
+    '{out=$(a[1]); for(i=2;i<=n;i++) out=out OFS $(a[i]); print out}'
+  )
+  cmd <- sprintf("awk -v cols=%s %s %s > %s",
+                 shQuote(paste(idx, collapse = ",")),
+                 shQuote(awk_prog), shQuote(path), shQuote(tmp))
+  if (system(cmd) != 0L || !file.exists(tmp))
+    stop("awk column subset failed for ", basename(path))
+  data.table::fread(tmp, sep = "\t", quote = "")
+}
+
 # =============================================================================
 # Canonical paths
 # =============================================================================
@@ -223,17 +262,25 @@ paths <- list(
   unite_fasta = here::here("data_raw", "UNITE", "sh_general_release_dynamic_04.04.2024_dev.fasta"),
 
   # ---- raw: trait / genome / climate reference -------------------------------
+  # FungalTraits v1.2 (Põlme et al. 2020): pinned reference, as with UNITE above.
+  # primary_lifestyle == "ectomycorrhizal" defines EcM dataset membership, so the
+  # reference is held fixed rather than tracked to a live source. To re-pin,
+  # replace the file, update data_raw/fungaltraits/fungaltraits_version.txt, and
+  # re-validate the EcM genus count.
   fungaltraits   = here::here("data_raw", "fungaltraits", "FungalTraits_1-2.csv"),
   mycocosm_list  = here::here("data_raw", "mycocosm", "mycocosm_organism_list.csv"),
   climate_raster = here::here("data_raw", "climate", "wc2.1_country", "CAN_wc2.1_30s_bio.tif"),
   biotime_db     = here::here("data_raw", "biotime"),
-  gsmc_metadata  = here::here("data_raw", "GSMc_02-09-2021",
-                              "Tedersoo L, Mikryukov V, Anslan S et al. Fungi_GSMc_sample_metadata.txt"),
   # van Galen et al. (2025) per-sample proportion of unassigned EcM OTUs.
   # Only this small CSV is needed (for the Linnean per-sample dark-fraction
   # comparison); the large dark-taxa GeoTIFFs are NOT part of this project.
   van_galen_per_sample = here::here("data_raw", "van_Galen_per_sample",
                                     "GFv5_EcM_unassigned_per_sample.csv"),
+  # van Galen et al. (2025) dark-taxa richness GeoTIFF (band percentage_dark_taxa
+  # is used for the dark-diversity map, Figure S1).
+  van_galen_tif = here::here("data_raw", "van_Galen_et_al_dark_taxa_code_and_data",
+                             "4.Dark_EcM_taxa_richness_maps",
+                             "Dark_taxa_geospatial_layers.tif"),
 
   # ---- raw: BIEN2 modelled range shapefiles (from 06_bien2_ranges.R) ---------
   bien2_ranges_dir = here::here("data_raw", "bien2_ranges"),
@@ -258,8 +305,9 @@ paths <- list(
   emf_data         = here::here("data_derived", "emf_canada_em_only.csv"),
 
   # ---- derived: host reference (from 05_fungalroot_hosts.R) ------------------
-  fungalroot_sp = here::here("data_derived", "clean_fungalroot_species.csv"),
-  host_species  = here::here("data_derived", "ecm_native_canada_host_species.csv"),
+  fungalroot_sp     = here::here("data_derived", "clean_fungalroot_species.csv"),
+  fungalroot_genera = here::here("data_derived", "clean_fungalroot_genera_table_s2.csv"),
+  host_species      = here::here("data_derived", "ecm_native_canada_host_species.csv"),
 
   # ---- derived: BIEN2 host rasters (from 07_host_rasters.R) -------------------
   bien_ranges        = here::here("data_derived", "checkpoints", "bien2_ecm_host_ranges.gpkg"),
@@ -267,14 +315,11 @@ paths <- list(
   bien_species_stack = here::here("data_derived", "spatial", "bien_host_species_stack.tif"),
   bien_data_rich     = here::here("data_derived", "spatial", "bien_host_data_richness_0.5deg.tif"),
   bien_proportion    = here::here("data_derived", "spatial", "bien_host_data_proportion_0.5deg.tif"),
-  bien_ecoregions    = here::here("data_derived", "spatial", "bien_ecoregions_with_host_habitat.gpkg"),
 
   # ---- derived: cross-referenced shortfall outputs ---------------------------
   gbif_ecm            = here::here("data_derived", "linnean", "linnean_gbif_ecm_canada.csv"),
   gbif_ecm_nosequence = here::here("data_derived", "linnean", "linnean_gbif_ecm_nosequence_canada.csv"),
-  linnean_inext_rds        = here::here("data_derived", "checkpoints", "linnean_inext_per_sample.rds"),
-  linnean_inext_per_sample = here::here("data_derived", "linnean", "linnean_inext_per_sample.csv"),
-  linnean_inext_summary    = here::here("data_derived", "linnean", "linnean_inext_summary.csv"),
+  gbif_plotted_counts = here::here("data_derived", "linnean", "linnean_gbif_plotted_counts.csv"),
   eltonian_global        = here::here("data_derived", "eltonian", "eltonian_global_host_associations.csv"),
   eltonian_host_matching = here::here("data_derived", "eltonian", "eltonian_host_matching.csv"),
   prestonian_out      = here::here("data_derived", "prestonian", "prestonian_biotime_matches.csv"),
@@ -282,14 +327,23 @@ paths <- list(
 
   # ---- figures (manuscript file names) ---------------------------------------
   # Main text
-  fig_sampling_map     = here::here("figures", "Figure-01_sampling_map.png"),
+  fig_sampling_map      = here::here("figures", "Figure-01_sampling_map.png"),
+  fig_sampling_map_grey = here::here("figures", "Figure-01_sampling_map_grey.png"),
   fig_wallacean_occ    = here::here("figures", "Figure-02_wallacean_occupancy.png"),
   fig_climate_gap      = here::here("figures", "Figure-03_climate_gap.png"),
-  fig_host_bivariate   = here::here("figures", "Figure-04_host_bivariate_map.png"),
+  fig_climate_gap_grey = here::here("figures", "Figure-03_climate_gap_grey.png"),
+  fig_host_bivariate      = here::here("figures", "Figure-04_host_bivariate_map.png"),
+  fig_host_bivariate_grey = here::here("figures", "Figure-04_host_bivariate_map_grey.png"),
+  fig_shortfalls_summary  = here::here("figures", "Figure-05_shortfalls_summary.png"),
   # Supplemental
-  fig_density_world    = here::here("figures", "Figure-S1_gf_sampling_density_world.png"),
-  fig_ecozone_sampling = here::here("figures", "Figure-S2_ecozone_sampling_map.png"),
-  fig_gbif_specimens   = here::here("figures", "Figure-S3_gbif_specimens.png")
+  fig_dark_diversity      = here::here("figures", "Figure-S1_dark_diversity.png"),
+  fig_dark_diversity_grey = here::here("figures", "Figure-S1_dark_diversity_grey.png"),
+  fig_density_world    = here::here("figures", "Figure-S2_gf_sampling_density_world.png"),
+  fig_depth_discard    = here::here("figures", "Figure-S3_depth_discard.png"),
+  fig_ecozone_sampling      = here::here("figures", "Figure-S4_ecozone_sampling_map.png"),
+  fig_ecozone_sampling_grey = here::here("figures", "Figure-S4_ecozone_sampling_map_grey.png"),
+  fig_gbif_specimens      = here::here("figures", "Figure-S5_gbif_specimens.png"),
+  fig_gbif_specimens_grey = here::here("figures", "Figure-S5_gbif_specimens_grey.png")
 )
 
 # ---- Create empty data_derived/ output sub-directories the first time --------

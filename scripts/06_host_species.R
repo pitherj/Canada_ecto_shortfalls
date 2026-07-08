@@ -1,8 +1,8 @@
 # =============================================================================
 # EcM Native Host Species for Canada (BIEN-based)
 # =============================================================================
-# Assemble a list of EcM host plant species that are (a) directly demonstrated
-# as EcM hosts by the FungalRoot species-level table (see NOTE below),
+# Assemble a list of EcM host plant species that are (a) demonstrated as EcM
+# hosts by FungalRoot via EITHER of two independent routes (see NOTE below),
 # (b) native to Canada according to the Native Status Resolver (NSR), and
 # (c) present in the BIEN range database. No growth-form restriction is
 # applied at this stage — herbaceous species are included on the same
@@ -14,73 +14,106 @@
 # frequently reported value is retained.
 #
 # Workflow:
-#   1.  Load FungalRoot species-level table and derive the demonstrated-
-#       species name set (see NOTE)
+#   1.  Load the FungalRoot species-level table (occurrence route) AND the
+#       Table S2 genus-level table (genus route) — see NOTE
 #   2.  Query BIEN for all plant species with distributions in Canada
 #   3.  Filter to native Canadian species using NSR (batched, 500 spp/request)
-#   4.  Intersect with the demonstrated-species set (species-level, not genus)
+#   4.  Select hosts: native species satisfying the species rule directly,
+#       OR whose genus qualifies under the Table S2 genus rule (always
+#       recomputed fresh — see NOTE)
 #   5.  Retrieve growth forms from BIEN trait database
 #   6.  Join growth forms to host species table
 #   7a. Impute missing growth_form from GIFT trait 1.2.1
 #   7b. Congener-modal fallback for any growth_form still missing
 #   7c. Curated manual overrides for any growth_form still missing after 7a/7b
-#   8.  Save (with host_demonstrated flag — see NOTE)
+#   8.  Save (with host_demonstrated flag and evidence_source — see NOTE)
 #
-# NOTE on EcM-host determination (redesigned 2026-06-27; refined again same
-# day — see "Design history" below):
-# Host status is derived exclusively from the species-level FungalRoot table
-# (data_derived/clean_fungalroot_species.csv, produced by 05_prepare_fungalroot.R
-# directly from GBIF DwC-A occurrence-level "Mycorrhiza type" records). A
-# species is "ecm_demonstrated" if FungalRoot carries >=1 unambiguous
-# EcM-positive occurrence record for it (see EM_POSITIVE_LABELS in
-# 05_prepare_fungalroot.R). Selection into this table requires the SPECIES
-# ITSELF to satisfy that rule — there is no genus-level fallback. Every row
-# therefore has host_demonstrated == TRUE by construction; the column is kept
-# (rather than omitted) purely for self-documentation, mirroring the
-# `ecm_demonstrated` convention in clean_fungalroot_species.csv.
+# NOTE on EcM-host determination (redesigned 2026-06-27; refined same day;
+# genus route reinstated via Table S2 on 2026-07-05 — see "Design history"):
+# Host status is now derived from TWO independent routes, combined with OR:
+#   (a) SPECIES ROUTE: data_derived/clean_fungalroot_species.csv (produced by
+#       05_prepare_fungalroot.R from GBIF DwC-A occurrence-level "Mycorrhiza
+#       type" records). A species qualifies directly if FungalRoot carries
+#       >=1 unambiguous EcM-positive occurrence record for it (see
+#       EM_POSITIVE_LABELS in 05_prepare_fungalroot.R).
+#   (b) GENUS ROUTE: data_derived/clean_fungalroot_genera_table_s2.csv
+#       (produced by 05_prepare_fungalroot.R from FungalRoot's own published
+#       Supplementary Table S2 genus-level recommendation). A species
+#       qualifies if its genus is in this table (called "EcM" or "EcM-AM"),
+#       even if that species has no occurrence-level record of its own.
+# A native Canadian species is selected into this script's output if EITHER
+# route applies. `evidence_source` records which route(s) actually applied
+# ("occurrence", "table_s2", or "both"); `host_demonstrated` is TRUE for
+# every row by construction (kept, rather than omitted, purely for
+# self-documentation, mirroring the `ecm_demonstrated` convention in
+# clean_fungalroot_species.csv).
 #
 # Design history (for the audit trail):
-#   05_prepare_fungalroot.R also defines a GENUS RULE (a genus qualifies as
-#   an EcM host genus, "host_broad", if >=1 of its species ANYWHERE in
-#   FungalRoot satisfies the species rule, with no proportion/majority
-#   threshold). This script originally (2026-06-27, first pass) selected
-#   Canadian host species by genus membership in that broader set, on the
-#   reasoning that a species-only rule would wrongly exclude a genuine host
-#   like Bistorta vivipara if its congeners diluted a proportion-based score.
-#   That version returned 698 species (initially), or 580 after a same-day
-#   refinement excluding the ambiguous "EcM,AM" label (see 1-0's header) —
-#   versus 148 species under the prior Table-S2-derived approach, a ~4x jump.
-#   Inspection showed the increase was structurally dominated by a small
-#   number of mega-diverse genera (e.g. Potentilla, Saxifraga, Polygonum,
-#   Pedicularis) qualifying via a single unambiguous record in 1-3 species
-#   globally, then propagating via the genus rule to dozens of Canadian
-#   congeners with no other EcM signal (155 species from 7 raw records,
-#   combined). Jason judged the direct species-level count (145 species,
-#   intersected against the full BIEN Canada-native flora) the more credible
-#   figure and asked that the pipeline select on it directly. The genus rule
-#   itself is unaffected and still computed in 05_prepare_fungalroot.R
-#   (`UpdatedGenus` column of clean_fungalroot_species.csv) for transparency
-#   and possible future use, but as of this revision it is NOT used to select
-#   species into this script's output. Bistorta vivipara remains correctly
-#   included because it has its own direct, unambiguous FungalRoot record —
-#   the genus-level fallback was never actually load-bearing for that case.
+#   05_prepare_fungalroot.R originally (2026-06-27) also defined an ad hoc
+#   occurrence-based GENUS RULE (a genus qualified if >=1 of its species
+#   ANYWHERE in FungalRoot satisfied the species rule). This script initially
+#   (2026-06-27, first pass) selected Canadian host species by genus
+#   membership in that broader set, on the reasoning that a species-only rule
+#   would wrongly exclude a genuine host like Bistorta vivipara if its
+#   congeners diluted a proportion-based score. That version returned 698
+#   species (initially), or 580 after a same-day refinement excluding the
+#   ambiguous "EcM,AM" label — versus 148 species under the prior
+#   Table-S2-derived approach, a ~4x jump. Inspection showed the increase was
+#   structurally dominated by a small number of mega-diverse genera (e.g.
+#   Potentilla, Saxifraga, Polygonum, Pedicularis) qualifying via a single
+#   unambiguous record in 1-3 species globally, then propagating via the
+#   genus rule to dozens of Canadian congeners with no other EcM signal (155
+#   species from 7 raw records, combined). Jason judged the direct
+#   species-level count (145 species, intersected against the full BIEN
+#   Canada-native flora) the more credible figure and asked that the
+#   pipeline select on it directly. The ad hoc occurrence-based genus rule
+#   was retained in 05_prepare_fungalroot.R only for transparency
+#   (`UpdatedGenus` column) but was NOT used to select species here between
+#   2026-06-27 and 2026-07-05.
+#
+#   Genus route reinstated via Table S2 (2026-07-05): 05_prepare_fungalroot.R
+#   replaced the ad hoc occurrence-based genus rule with FungalRoot's own
+#   published Table S2 genus-level recommendation (see that script's header
+#   for full rationale and verification, including why Acer/Fraxinus/Juglans
+#   are unaffected and why Bistorta vivipara still requires the species
+#   route). This script now consults that Table S2 output
+#   (clean_fungalroot_genera_table_s2.csv) as a second, independent selection
+#   route, combined with the species route via OR — completing the follow-up
+#   that 05_prepare_fungalroot.R flagged as required when the genus table was
+#   added. The checkpoint boundary was also moved: previously this script
+#   checkpointed the FINAL selected species list directly (with a manual
+#   "stale checkpoint" validation step to catch cases where FungalRoot had
+#   changed); now only the expensive BIEN+NSR native-flora query is
+#   checkpointed, and the FungalRoot selection (Step 4) is always
+#   recomputed fresh from whatever clean_fungalroot_species.csv and
+#   clean_fungalroot_genera_table_s2.csv currently contain — this is cheap
+#   (no external API calls) and removes the need for manual staleness
+#   validation entirely.
 #
 # Checkpoint files (data_derived/checkpoints/):
-#   bien_ecm_canada_species.csv     — species list after NSR native filter
-#                                      and demonstrated-species intersection
+#   bien_nsr_native_species.csv     — all BIEN Canada species with NSR
+#                                      native_status == "N" (expensive;
+#                                      independent of FungalRoot). Renamed
+#                                      2026-07-05 from bien_ecm_canada_species.csv,
+#                                      which cached the final FungalRoot
+#                                      selection rather than the native-flora
+#                                      universe — delete the old file, it is
+#                                      no longer read.
 #   bien_ecm_growthforms.csv        — growth form trait data from BIEN
 #   gift_growthforms.csv            — growth form trait data from GIFT
 #                                     (used only for species lacking BIEN data)
 #
 # Output:
 #   data_derived/ecm_native_canada_host_species.csv
-#     Columns: species, host_demonstrated (always TRUE), growth_form
+#     Columns: species, host_demonstrated (always TRUE), evidence_source
+#     ("occurrence" | "table_s2" | "both"), growth_form
 #
 # Runtime notes:
 #   - Step 2 (BIEN_list_country) ~5 min
 #   - Step 3 (NSR batched)       ~5–15 min (depends on server)
+#   - Step 4 (FungalRoot select) seconds — always recomputed, not checkpointed
 #   - Step 5 (BIEN traits)       ~10–30 min
-#   All slow steps are checkpointed; delete checkpoint files to force re-run.
+#   Steps 2-3 and 5 are checkpointed; delete checkpoint files to force re-run.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -94,38 +127,34 @@ sf::sf_use_s2(FALSE)
 # Note: an earlier copy of clean_host_name() lived here but was never called;
 # host-name cleaning is now centralized in canonicalize_host() (00_setup.R).
 
-species_ckpt    <- file.path(paths$temp_dir, "bien_ecm_canada_species.csv")
+native_ckpt     <- file.path(paths$temp_dir, "bien_nsr_native_species.csv")
 growthform_ckpt <- file.path(paths$temp_dir, "bien_ecm_growthforms.csv")
 gift_gf_ckpt    <- file.path(paths$temp_dir, "gift_growthforms.csv")
 
-# ---- Step 1: FungalRoot-derived demonstrated species ------------------------
+# ---- Step 1: FungalRoot species table (occurrence route) + Table S2 genus
+#              table (genus route) ---------------------------------------
 
-ts("Step 1: Loading FungalRoot species table; deriving demonstrated species...")
+ts("Step 1: Loading FungalRoot species table and Table S2 genus table...")
 ft_species <- readr::read_csv(paths$fungalroot_sp, show_col_types = FALSE)
 demonstrated_species <- sort(unique(ft_species$UpdatedPlantBinomial))
-ts(sprintf("  EcM-demonstrated species (host_demonstrated): %d",
+ts(sprintf("  EcM-demonstrated species (occurrence route): %d",
            length(demonstrated_species)))
 
-# ---- Steps 2–4: BIEN query + NSR native filter + FungalRoot intersection ----
+ft_genera <- readr::read_csv(paths$fungalroot_genera, show_col_types = FALSE)
+genus_qualifying_s2 <- sort(unique(ft_genera$Genus))
+ts(sprintf("  EcM-qualifying genera (Table S2 route): %d",
+           length(genus_qualifying_s2)))
 
-if (file.exists(species_ckpt)) {
-  ts("Steps 2-4: Loading checkpointed native EcM host species list...")
-  em_canada_species <- readr::read_csv(species_ckpt, show_col_types = FALSE)$species
-  ts(sprintf("  EcM host species native to Canada (from checkpoint): %d",
-             length(em_canada_species)))
+# ---- Steps 2-3: BIEN query + NSR native filter (expensive; checkpointed) ----
+# Only the BIEN/NSR native-flora universe is checkpointed here. It is
+# independent of FungalRoot, so it does not need to be recomputed just
+# because 05_prepare_fungalroot.R's outputs change.
 
-  # Validate against the current FungalRoot demonstrated-species list.
-  # Stale checkpoints can contain species that were demonstrated in an older
-  # FungalRoot version (or selected under the now-superseded genus rule) but
-  # no longer qualify directly; remove them now.
-  invalid_spp <- em_canada_species[!em_canada_species %in% demonstrated_species]
-  if (length(invalid_spp) > 0L) {
-    ts(sprintf("  Warning: %d checkpoint species no longer in current FungalRoot demonstrated-species list — removing:",
-               length(invalid_spp)))
-    for (sp in invalid_spp) ts(sprintf("    - %s", sp))
-    em_canada_species <- em_canada_species[em_canada_species %in% demonstrated_species]
-    ts(sprintf("  Validated species count: %d", length(em_canada_species)))
-  }
+if (file.exists(native_ckpt)) {
+  ts("Steps 2-3: Loading checkpointed BIEN/NSR native species list...")
+  native_species <- readr::read_csv(native_ckpt, show_col_types = FALSE)$species
+  ts(sprintf("  Species native to Canada (from checkpoint): %d",
+             length(native_species)))
 } else {
 
   ts("Step 2: Querying BIEN for all plant species in Canada...")
@@ -166,14 +195,43 @@ if (file.exists(species_ckpt)) {
   ts(sprintf("  Species native to Canada (NSR status == 'N'): %d",
              length(native_species)))
 
-  ts("Step 4: Intersecting with FungalRoot demonstrated species...")
-  em_canada_species <- sort(intersect(native_species, demonstrated_species))
-  ts(sprintf("  EcM host species native to Canada (species-level FungalRoot match): %d",
-             length(em_canada_species)))
-
-  readr::write_csv(data.frame(species = em_canada_species), species_ckpt)
-  ts(sprintf("  Saved species checkpoint -> %s", basename(species_ckpt)))
+  readr::write_csv(data.frame(species = native_species), native_ckpt)
+  ts(sprintf("  Saved native species checkpoint -> %s", basename(native_ckpt)))
 }
+
+# ---- Step 4: Select EcM hosts — species rule OR Table S2 genus rule --------
+# Always recomputed fresh (cheap; no API calls) so the selection reflects
+# whatever clean_fungalroot_species.csv and clean_fungalroot_genera_table_s2.csv
+# currently contain, even when native_ckpt above is loaded from an old cache.
+
+ts("Step 4: Selecting EcM hosts (species rule OR Table S2 genus rule)...")
+
+native_genus <- sub(" .*", "", native_species)
+
+species_via_occurrence <- intersect(native_species, demonstrated_species)
+species_via_genus      <- native_species[native_genus %in% genus_qualifying_s2]
+
+em_canada_species <- sort(union(species_via_occurrence, species_via_genus))
+
+evidence_lookup <- data.frame(species = em_canada_species) |>
+  dplyr::mutate(
+    via_occurrence = species %in% species_via_occurrence,
+    via_genus      = species %in% species_via_genus,
+    evidence_source = dplyr::case_when(
+      via_occurrence & via_genus ~ "both",
+      via_occurrence             ~ "occurrence",
+      TRUE                       ~ "table_s2"
+    )
+  ) |>
+  dplyr::select(species, evidence_source)
+
+ts(sprintf(
+  "  EcM host species native to Canada: %d  (occurrence-only: %d | table_s2-only: %d | both: %d)",
+  length(em_canada_species),
+  sum(evidence_lookup$evidence_source == "occurrence"),
+  sum(evidence_lookup$evidence_source == "table_s2"),
+  sum(evidence_lookup$evidence_source == "both")
+))
 
 # ---- Step 5: BIEN growth form trait data ------------------------------------
 # BIEN_trait_traitbyspecies() returns one row per trait record; multiple
@@ -232,18 +290,24 @@ ts(sprintf("  Species with growth form data: %d / %d",
 
 # ---- Step 7: Join to host species table -------------------------------------
 # host_demonstrated is TRUE for every row by construction (selection in
-# Step 4 already required direct membership in demonstrated_species); it is
-# computed explicitly here rather than just hard-coded, as a self-documenting
-# sanity check (mirrors the `ecm_demonstrated` convention in
-# clean_fungalroot_species.csv).
+# Step 4 already required the species rule OR the Table S2 genus rule to
+# apply); it is computed explicitly here rather than just hard-coded, as a
+# self-documenting sanity check (mirrors the `ecm_demonstrated` convention in
+# clean_fungalroot_species.csv). evidence_source (from Step 4) records which
+# route(s) actually applied for each species.
 
 host_species_table <- data.frame(species = em_canada_species) |>
-  dplyr::mutate(host_demonstrated = species %in% demonstrated_species) |>
+  dplyr::mutate(host_demonstrated = species %in% em_canada_species) |>
+  dplyr::left_join(evidence_lookup, by = "species") |>
   dplyr::left_join(ecm_species_with_growthform, by = "species")
 
 ts(sprintf("  host_demonstrated FALSE (should be 0): %d  |  growth_form NA: %d",
            sum(!host_species_table$host_demonstrated),
            sum(is.na(host_species_table$growth_form))))
+ts(sprintf("  evidence_source breakdown: %s",
+           paste(names(table(host_species_table$evidence_source)),
+                 as.integer(table(host_species_table$evidence_source)),
+                 sep = " = ", collapse = ", ")))
 
 # ---- Step 7a: Impute missing growth_form from GIFT trait 1.2.1 --------------
 # BIEN traits did not cover all species. GIFT (trait_ID 1.2.1 = plant growth
@@ -364,5 +428,9 @@ ts(sprintf("  Growth form breakdown: %s",
 
 readr::write_csv(host_species_table, paths$host_species)
 ts(sprintf("Saved -> %s", basename(paths$host_species)))
-ts(sprintf("Final host species count: %d", nrow(host_species_table)))
+ts(sprintf("Final host species count: %d  (occurrence: %d | table_s2: %d | both: %d)",
+           nrow(host_species_table),
+           sum(host_species_table$evidence_source == "occurrence"),
+           sum(host_species_table$evidence_source == "table_s2"),
+           sum(host_species_table$evidence_source == "both")))
 ts("06_host_species.R complete.")

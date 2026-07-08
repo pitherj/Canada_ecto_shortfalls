@@ -33,6 +33,10 @@
 #      Canadian cells per zone, i.e. how common each climate is); this is the
 #      denominator of coverage and is analogous to the colleagues' Fig S5 a/c.
 #      The GlobalFungi and GF + GenBank columns show sampling coverage.
+#      In panel d, zones never sampled by GlobalFungi + GenBank combined (the
+#      grey, coverage == 0 zones in panel f) are additionally outlined in
+#      white, so the unsampled climates are visible directly in panel d
+#      without needing to cross-reference panel f.
 #
 # SCOPES
 #   - "GlobalFungi": GF samples with >= 1 EcM SH code (named or not). Because the
@@ -47,12 +51,13 @@
 #   data_derived/spatial/canada_simple.gpkg                   (paths$canada_bound)
 #
 # OUTPUT
-#   figures/hutchinsonian_climate_gap.png      (replaces Figure S11 in the SI)
+#   figures/Figure-03_climate_gap.png        (paths$fig_climate_gap)      -- white bg, used in manuscript
+#   figures/Figure-03_climate_gap_grey.png   (paths$fig_climate_gap_grey) -- #F2F2F2 bg, Figure 5 panel source
 #
 # NOTES
 #   - Deterministic: no random sampling, so no seed is required.
-#   - Sentinel-file guard: the figure is rebuilt only if it does not yet exist.
-#     Delete it to force regeneration.
+#   - Sentinel-file guard: the figure is rebuilt only if BOTH versions do not
+#     yet exist. Delete one or both to force regeneration.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -74,11 +79,12 @@ FREQ_PALETTE         <- "Batlow"
 COVERAGE_PALETTE     <- "Temps"
 NEVER_SAMPLED_COLOUR <- "grey85"   # climate present in Canada but never sampled
 
-fig_out <- paths$fig_climate_gap
+fig_out      <- paths$fig_climate_gap
+fig_out_grey <- paths$fig_climate_gap_grey
 
-# Sentinel guard: skip the whole script if the figure already exists.
-if (file.exists(fig_out)) {
-  ts(sprintf("Figure already exists, skipping: %s", basename(fig_out)))
+# Sentinel guard: skip the whole script only if BOTH versions already exist.
+if (file.exists(fig_out) && file.exists(fig_out_grey)) {
+  ts(sprintf("Figure already exists (both versions), skipping: %s", basename(fig_out)))
 } else {
 
   sf::sf_use_s2(FALSE)  # GADM-derived Canada polygon has minor topology issues
@@ -244,7 +250,11 @@ if (file.exists(fig_out)) {
       ybin = as.integer(sub("^.*_", "", bin)),
       mat_centre = mat_breaks[xbin] + mat_width / 2,
       map_centre = map_breaks[ybin] + map_width / 2
-    )
+    ) |>
+    # Flag zones never sampled by GlobalFungi + GenBank combined (i.e. the
+    # zones shown grey in panel f) so panel d can outline them in white.
+    dplyr::left_join(dplyr::select(cov_comb$zones, bin, coverage), by = "bin") |>
+    dplyr::mutate(never_sampled_comb = coverage == 0)
 
   # Climate-frequency raster: each Canadian cell takes its zone's count_canada.
   freq_lookup <- stats::setNames(zone_freq$count_canada, zone_freq$bin)
@@ -324,14 +334,25 @@ if (file.exists(fig_out)) {
   )
 
   # Shared theming helpers (keep the six panels visually consistent).
-  clim_theme <- ggplot2::theme_bw(base_size = 11) +
-    ggplot2::theme(panel.grid = ggplot2::element_blank())
-  map_theme <- ggplot2::theme_void(base_size = 11) +
-    ggplot2::theme(
-      plot.margin      = ggplot2::margin(2, 2, 2, 2),
-      panel.background = ggplot2::element_rect(fill = "white", colour = NA),
-      plot.background  = ggplot2::element_rect(fill = "white", colour = NA)
-    )
+  # Both take a `bg` argument (panel/plot background colour) so the whole
+  # composite can be rendered twice -- once white (manuscript), once
+  # #F2F2F2 (Figure 5 schematic source panel) -- from the same panel code.
+  clim_theme_fn <- function(bg) {
+    ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme(
+        panel.grid       = ggplot2::element_blank(),
+        panel.background = ggplot2::element_rect(fill = bg, colour = NA),
+        plot.background  = ggplot2::element_rect(fill = bg, colour = NA)
+      )
+  }
+  map_theme_fn <- function(bg) {
+    ggplot2::theme_void(base_size = 11) +
+      ggplot2::theme(
+        plot.margin      = ggplot2::margin(2, 2, 2, 2),
+        panel.background = ggplot2::element_rect(fill = bg, colour = NA),
+        plot.background  = ggplot2::element_rect(fill = bg, colour = NA)
+      )
+  }
   clim_labs <- ggplot2::labs(x = "Mean annual temperature (\u00b0C)",
                              y = "Mean annual precipitation (mm)")
 
@@ -355,7 +376,7 @@ if (file.exists(fig_out)) {
   }
 
   # -- Coverage climate-space panel (tiles in MAT x MAP space) ----------------
-  build_cov_clim_panel <- function(zones, show_legend = FALSE) {
+  build_cov_clim_panel <- function(zones, show_legend = FALSE, bg = "white") {
     p <- ggplot2::ggplot() +
       # Climate zones present in Canada but never sampled: solid grey.
       ggplot2::geom_tile(
@@ -369,74 +390,101 @@ if (file.exists(fig_out)) {
         ggplot2::aes(x = mat_centre, y = map_centre, fill = coverage),
         width = mat_width, height = map_width
       ) +
-      cov_fill_scale + clim_labs + clim_theme
+      cov_fill_scale + clim_labs + clim_theme_fn(bg)
     if (show_legend) p + legend_inside else p + ggplot2::guides(fill = "none")
   }
 
   # -- Coverage geographic-map panel (no legend; no title) --------------------
-  build_cov_map_panel <- function(cov_rast) {
+  build_cov_map_panel <- function(cov_rast, bg = "white") {
     df <- rast_to_df(cov_rast, "coverage")
     ggplot2::ggplot() +
       # Grey Canada landmass shows through where coverage is 0 / NA.
       ggplot2::geom_sf(data = canada_albers, fill = NEVER_SAMPLED_COLOUR, colour = NA) +
       ggplot2::geom_raster(data = df, ggplot2::aes(x = x, y = y, fill = coverage)) +
       # Neatline mask: hide raster cell fringes that straddle the border.
-      ggplot2::geom_sf(data = canada_exterior, fill = "white", colour = NA) +
+      # Filled with `bg` (not a fixed "white") so it blends into the panel
+      # background in both the white and grey versions of this figure.
+      ggplot2::geom_sf(data = canada_exterior, fill = bg, colour = NA) +
       ggplot2::geom_sf(data = canada_albers, fill = NA, colour = "grey40",
                        linewidth = 0.2) +
       cov_fill_scale +
       ggplot2::coord_sf(crs = crs_albers, xlim = xlim_can, ylim = ylim_can,
                         expand = FALSE) +
-      map_theme + ggplot2::guides(fill = "none")
+      map_theme_fn(bg) + ggplot2::guides(fill = "none")
   }
 
   # -- Available-climate climate-space panel (every zone coloured) ------------
-  build_freq_clim_panel <- function(show_legend = FALSE) {
+  # Zones never sampled by GlobalFungi + GenBank combined (coverage == 0 in
+  # panel f, shown there as solid grey) are additionally outlined in white
+  # here, so the reader can see directly -- without cross-referencing panel f
+  # -- which climates remain completely unsampled.
+  build_freq_clim_panel <- function(show_legend = FALSE, bg = "white") {
     p <- ggplot2::ggplot(zone_freq) +
       ggplot2::geom_tile(
         ggplot2::aes(x = mat_centre, y = map_centre, fill = count_canada),
         width = mat_width, height = map_width
       ) +
-      freq_fill_scale + clim_labs + clim_theme
+      ggplot2::geom_tile(
+        data = dplyr::filter(zone_freq, never_sampled_comb),
+        ggplot2::aes(x = mat_centre, y = map_centre),
+        width = mat_width, height = map_width,
+        fill = NA, colour = "white", linewidth = 0.15
+      ) +
+      freq_fill_scale + clim_labs + clim_theme_fn(bg)
     if (show_legend) p + legend_inside else p + ggplot2::guides(fill = "none")
   }
 
   # -- Available-climate geographic-map panel (no legend; no title) -----------
-  build_freq_map_panel <- function() {
+  build_freq_map_panel <- function(bg = "white") {
     df <- rast_to_df(freq_rast, "frequency")
     ggplot2::ggplot() +
-      ggplot2::geom_sf(data = canada_albers, fill = "white", colour = NA) +
+      # Canvas layer under the raster; filled with `bg` for the same reason
+      # as the neatline mask below.
+      ggplot2::geom_sf(data = canada_albers, fill = bg, colour = NA) +
       ggplot2::geom_raster(data = df, ggplot2::aes(x = x, y = y, fill = frequency)) +
       # Neatline mask: hide raster cell fringes that straddle the border.
-      ggplot2::geom_sf(data = canada_exterior, fill = "white", colour = NA) +
+      ggplot2::geom_sf(data = canada_exterior, fill = bg, colour = NA) +
       ggplot2::geom_sf(data = canada_albers, fill = NA, colour = "grey40",
                        linewidth = 0.2) +
       freq_fill_scale +
       ggplot2::coord_sf(crs = crs_albers, xlim = xlim_can, ylim = ylim_can,
                         expand = FALSE) +
-      map_theme + ggplot2::guides(fill = "none")
+      map_theme_fn(bg) + ggplot2::guides(fill = "none")
   }
 
-  # Build the six panels. Legends are drawn only inside panels d (frequency)
-  # and e (coverage); titles are omitted (described in the figure caption).
-  p_freq_map  <- build_freq_map_panel()
-  p_gf_map    <- build_cov_map_panel(cov_gf$cov_rast)
-  p_cmb_map   <- build_cov_map_panel(cov_comb$cov_rast)
-  p_freq_clim <- build_freq_clim_panel(show_legend = TRUE)            # panel d
-  p_gf_clim   <- build_cov_clim_panel(cov_gf$zones, show_legend = TRUE)   # panel e
-  p_cmb_clim  <- build_cov_clim_panel(cov_comb$zones, show_legend = FALSE) # panel f
+  # Build the six panels and assemble the composite for a given background
+  # colour. Legends are drawn only inside panels d (frequency) and e
+  # (coverage); titles are omitted (described in the figure caption). Row 1 =
+  # maps, row 2 = climate space; top row given slightly less height so the
+  # maps fill their panels; tags a-f read row-major.
+  build_combined <- function(bg) {
+    p_freq_map  <- build_freq_map_panel(bg)
+    p_gf_map    <- build_cov_map_panel(cov_gf$cov_rast, bg)
+    p_cmb_map   <- build_cov_map_panel(cov_comb$cov_rast, bg)
+    p_freq_clim <- build_freq_clim_panel(show_legend = TRUE, bg = bg)            # panel d
+    p_gf_clim   <- build_cov_clim_panel(cov_gf$zones, show_legend = TRUE, bg = bg)   # panel e
+    p_cmb_clim  <- build_cov_clim_panel(cov_comb$zones, show_legend = FALSE, bg = bg) # panel f
 
-  # Assemble 2 x 3 (row 1 = maps, row 2 = climate space). Top row given slightly
-  # less height (heights) so the maps fill their panels; tags a-f read row-major.
-  combined <- patchwork::wrap_plots(
-    p_freq_map,  p_gf_map,  p_cmb_map,
-    p_freq_clim, p_gf_clim, p_cmb_clim,
-    ncol = 3, nrow = 2, heights = c(0.85, 1)
-  ) +
-    patchwork::plot_annotation(tag_levels = "a")
+    patchwork::wrap_plots(
+      p_freq_map,  p_gf_map,  p_cmb_map,
+      p_freq_clim, p_gf_clim, p_cmb_clim,
+      ncol = 3, nrow = 2, heights = c(0.85, 1)
+    ) +
+      patchwork::plot_annotation(
+        tag_levels = "a",
+        theme = ggplot2::theme(plot.background = ggplot2::element_rect(fill = bg, colour = NA))
+      )
+  }
 
-  ggplot2::ggsave(fig_out, combined, width = 15, height = 10, dpi = 300)
+  ggplot2::ggsave(fig_out, build_combined("white"),
+                  width = 15, height = 10, dpi = 300, bg = "white")
   ts(sprintf("Saved -> %s", basename(fig_out)))
+
+  # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
+  # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
+  ggplot2::ggsave(fig_out_grey, build_combined(fig5_grey_bg),
+                  width = 15, height = 10, dpi = 300, bg = fig5_grey_bg)
+  ts(sprintf("Saved -> %s", basename(fig_out_grey)))
 
   ts("18_climate_gap.R complete.")
 }

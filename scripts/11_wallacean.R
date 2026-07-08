@@ -293,13 +293,10 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
     stop("No SH codes matched GF SH matrix column names — check sh_code formatting.")
   }
 
-  # Read only the relevant columns from the ~13 GB SH abundance matrix.
-  ts("  Reading matched columns from GF SH abundance matrix (long-running)...")
-  sh_mat <- data.table::fread(
-    paths$gf_sh_abundance,
-    sep    = "\t",
-    select = c("sample_ID", matched_sh)
-  )
+  # Read only the relevant columns from the ~13 GB SH abundance matrix, via the
+  # awk-streaming helper in 00_setup.R (avoids fread()'s 2^31-byte string limit).
+  ts("  Extracting matched columns from GF SH abundance matrix (long-running)...")
+  sh_mat <- read_big_tsv_subset(paths$gf_sh_abundance, c("sample_ID", matched_sh))
   ts(sprintf("  Read %d samples x %d SH codes", nrow(sh_mat), length(matched_sh)))
 
   # Pivot to long; keep only presence rows.

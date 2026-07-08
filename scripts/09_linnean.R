@@ -4,16 +4,9 @@
 # How many EcM fungal taxa are recorded in Canada, at each taxonomic level?
 # How does this compare to the global inventory of known EcM species and genera?
 #
-# Updates from original 01_linnean.R:
-#   - iNEXT accumulation curves removed
-#   - GBIF physical specimen records added (rgbif, checkpointed)
-#   - Species-level assignment rates added:
-#       GlobalFungi: proportion of SH codes with a species-level UNITE name
-#       GenBank:     proportion of sequences with BLAST identity >= 97%
-#   - Pooled-abundance Chao1 (Canada-wide GF) removed: read counts are a poor
-#     proxy for abundance in metabarcoding data, and the estimator is already
-#     complemented by the site-based Chao2 (Step 5) and the per-sample Chao1
-#     (10_linnean_inext.R).
+# Species-level assignment rates are reported per source:
+#   GlobalFungi: proportion of SH codes with a species-level UNITE name
+#   GenBank:     proportion of SH codes with a species-level UNITE name
 #
 # Workflow:
 #   1.  Taxonomic richness counts (SH codes, genera, species, lineages)
@@ -44,7 +37,7 @@ gbif_ckpt <- file.path(paths$temp_dir, "gbif_ecm_canada_raw.csv")
 
 ts("Step 1: Counting unique taxa...")
 
-n_sh      <- dplyr::n_distinct(emf$sh_code)
+n_sh      <- dplyr::n_distinct(emf$sh_code, na.rm = TRUE)  # na.rm: genus-resolved GenBank rows carry sh_code = NA
 n_genus   <- dplyr::n_distinct(emf$genus)
 
 # Named species only (UNITE species field; entries ending _sp are unresolved)
@@ -63,7 +56,7 @@ ts(sprintf("  Unique EcM lineages: %d", n_lineage))
 # Coordinate-filtered equivalents (records validated within the Canada boundary)
 emf_coords <- dplyr::filter(emf, coord_in_canada == TRUE)
 
-n_sh_coords          <- dplyr::n_distinct(emf_coords$sh_code)
+n_sh_coords          <- dplyr::n_distinct(emf_coords$sh_code, na.rm = TRUE)
 n_named_sh_coords    <- emf_coords |>
   dplyr::filter(!is.na(species), !grepl("_sp$", species)) |>
   dplyr::pull(sh_code) |>
@@ -91,7 +84,7 @@ sh_abundance <- gf_all |>
 
 singleton_sh     <- dplyr::filter(sh_abundance, total_abundance == 1L)$sh_code
 n_sh_singletons  <- length(singleton_sh)
-n_sh_gf_total    <- dplyr::n_distinct(gf_all$sh_code)
+n_sh_gf_total    <- dplyr::n_distinct(gf_all$sh_code, na.rm = TRUE)
 n_sh_nonsing     <- n_sh_gf_total - n_sh_singletons
 pct_singletons   <- round(100 * n_sh_singletons / n_sh_gf_total, 1)
 
@@ -162,19 +155,18 @@ pct_gf_sp        <- round(100 * n_gf_sh_with_sp / n_gf_sh_total, 1)
 ts(sprintf("  GlobalFungi SH codes with species-level name: %d / %d (%.1f%%)",
            n_gf_sh_with_sp, n_gf_sh_total, pct_gf_sp))
 
-# --- 4b. GenBank: proportion of sequences with BLAST identity >= 97% ----------
-# The 'identity' column is the pairwise % identity from the BLAST search
-# against UNITE. A threshold of 97% is a commonly used species-level cutoff.
-
-IDENTITY_THRESHOLD <- 97
+# --- 4b. GenBank: total EcM sequence records ---------------------------------
+# Every retained GenBank record cleared the 98.5% vsearch identity threshold by
+# construction (see 03_genbank.R), so no additional identity filter is applied
+# here — we simply report the total record count. (A former >= 97% "species-level
+# cutoff" filter was removed: it was a no-op given the 98.5% assignment rule, and
+# 97% is not a threshold used anywhere in this pipeline.) The `identity` column
+# (vsearch alignment identity) is summarised below for reference only.
 
 gb_all <- dplyr::filter(emf, source == "GenBank")
-n_gb_total     <- nrow(gb_all)
-n_gb_above_97  <- sum(!is.na(gb_all$identity) & gb_all$identity >= IDENTITY_THRESHOLD)
-pct_gb_above_97 <- round(100 * n_gb_above_97 / n_gb_total, 1)
+n_gb_total <- nrow(gb_all)
 
-ts(sprintf("  GenBank sequences with identity >= %d%%: %d / %d (%.1f%%)",
-           IDENTITY_THRESHOLD, n_gb_above_97, n_gb_total, pct_gb_above_97))
+ts(sprintf("  GenBank EcM sequence records: %d", n_gb_total))
 
 # Distribution of identity values (summary)
 if (any(!is.na(gb_all$identity))) {
@@ -184,7 +176,7 @@ if (any(!is.na(gb_all$identity))) {
 }
 
 # GenBank SH codes with species-level UNITE name (analogous to GlobalFungi metric)
-gb_sh_total      <- dplyr::n_distinct(gb_all$sh_code)
+gb_sh_total      <- dplyr::n_distinct(gb_all$sh_code, na.rm = TRUE)
 gb_sh_with_sp    <- gb_all |>
   dplyr::distinct(sh_code, species) |>
   dplyr::filter(!is.na(species), !grepl("_sp$", species, ignore.case = TRUE)) |>
@@ -198,8 +190,10 @@ ts(sprintf("  GenBank SH codes with species-level UNITE name: %d / %d (%.1f%%)",
 # --- 4b.5 Overlap of ALL SH codes (named + unnamed) between GF and GenBank ----
 # Used to compute the dark fraction for source-exclusive and shared subsets
 # (Table S4 in the SI). gf_all and gb_all are already defined above.
-gf_all_sh <- unique(gf_all$sh_code)
-gb_all_sh <- unique(gb_all$sh_code)
+# Exclude NA sh_code (genus-resolved GenBank rows) so it is not counted as a
+# spurious "GenBank-only" SH in the set operations below.
+gf_all_sh <- unique(gf_all$sh_code[!is.na(gf_all$sh_code)])
+gb_all_sh <- unique(gb_all$sh_code[!is.na(gb_all$sh_code)])
 n_sh_all_shared  <- length(intersect(gf_all_sh, gb_all_sh))
 n_sh_all_gf_only <- length(setdiff(gf_all_sh, gb_all_sh))
 n_sh_all_gb_only <- length(setdiff(gb_all_sh, gf_all_sh))
@@ -251,331 +245,6 @@ n_sp_total    <- n_sp_shared + n_sp_gf_only + n_sp_gb_only
 ts(sprintf("  Unique named species: %d total | shared: %d | GF only: %d | GB only: %d",
            n_sp_total, n_sp_shared, n_sp_gf_only, n_sp_gb_only))
 
-# =============================================================================
-# Step 5: Coverage diagnostics, asymptotic richness estimators, and triangulation
-# =============================================================================
-# This section addresses the bottom-up dimension of the Linnean shortfall:
-# given the SH codes detected in the Canadian sequence dataset, how close is
-# the sample to saturation, and what is a defensible lower bound on the
-# unobserved richness?
-#
-# Design choices (see project notes):
-#   1. SH codes are the primary unit (consistent with the rest of the pipeline)
-#   2. GlobalFungi is the primary source for Chao-style estimators because GF
-#      has a more uniform sampling design than GenBank; GenBank is opportunistic
-#      and host-targeted, which violates the iid assumption Chao requires.
-#      The combined GF + GenBank dataset is run as a sensitivity comparison.
-#   3. Stratification is by Canadian ecozone where ≥30 GF samples are available
-#      (the n threshold below which Chao becomes unreliable). Ecozones below
-#      threshold are reported with Sobs and n only.
-#   4. Coverage diagnostics (sample completeness Ĉ, Q1/Q2, accumulation curves)
-#      are the main outcomes. Asymptotic point estimates are reported
-#      alongside as supporting context, framed explicitly as lower bounds.
-#   5. Singletons are retained (not excluded as a sensitivity check): the
-#      dataset's singletons are very likely real detections rather than
-#      sequencing artefacts.
-#   6. Top-down anchors triangulate the bottom-up estimate against (a) a
-#      genus-multiplier extrapolation from FungalTraits, and (b) the van Galen
-#      et al. (2025) continental dark-taxa estimate for North America (80%).
-#
-# References:
-#   Chao, A. & Jost, L. (2012) Coverage-based rarefaction and extrapolation:
-#     standardizing samples by completeness rather than size. Ecology 93:
-#     2533–2547.
-#   Colwell, R. K. et al. (2012) Models and estimators linking individual-
-#     based and sample-based rarefaction, extrapolation and comparison of
-#     assemblages. Journal of Plant Ecology 5: 3–21.
-# =============================================================================
-
-ts("Step 5: Coverage diagnostics, asymptotic estimators, and triangulation...")
-
-library(sf)
-library(terra)
-library(iNEXT)
-library(patchwork)
-
-ECOZONE_N_THRESHOLD   <- 30L  # Minimum unique sites per ecozone for rarefaction/extrapolation curves
-ECOZONE_COV_THRESHOLD <- 10L  # Minimum unique sites per ecozone for coverage (Ĉ) diagnostics only
-sf::sf_use_s2(FALSE)
-
-# ---- 5a. Build site × SH incidence matrices ---------------------------------
-# Sampling units throughout this section are "sites" as defined by the shared
-# add_site_id() helper in 00_setup.R: lat/lon rounded to 3 decimal places
-# (~100 m at temperate latitudes) and concatenated into a stable composite
-# key. This matches the project convention used by build_site_sh_matrix() in
-# the Pinus banksiana accumulation curve (20_sampling_maps.R) and the distance-
-# decay turnover analysis. Collapsing samples to one row per site removes
-# within-site autocorrelation and GPS-precision artefacts, so coverage Ĉ and
-# Chao2 reflect spatial sampling completeness rather than within-site read
-# replication. Trade-off: discards within-site detection-frequency information
-# and reduces n, so per-ecozone estimators are noisier — accepted as the more
-# transparent framing.
-
-ts("  5a. Building site × SH incidence matrices (3-decimal site binning)...")
-
-# Filter to records with non-missing SH code and parsed coordinates
-emf_sh  <- dplyr::filter(emf, !is.na(sh_code))
-gf_for_sites <- emf_sh |>
-  dplyr::filter(source == "GlobalFungi", coord_in_canada == TRUE)
-combined_for_sites <- emf_sh |>
-  dplyr::filter(coord_in_canada == TRUE)
-
-# Build site × SH incidence matrices via the shared helper. min_records = 1L
-# preserves single-record sites (singletons are needed for Chao2).
-inc_gf       <- build_site_sh_matrix(gf_for_sites,       min_records = 1L)
-inc_combined <- build_site_sh_matrix(combined_for_sites, min_records = 1L)
-storage.mode(inc_gf)       <- "integer"
-storage.mode(inc_combined) <- "integer"
-ts(sprintf("    GF site matrix:       %d sites × %d SHs",
-           nrow(inc_gf), ncol(inc_gf)))
-ts(sprintf("    Combined site matrix: %d sites × %d SHs",
-           nrow(inc_combined), ncol(inc_combined)))
-
-# Site → coordinate lookup (used by the spatial join below). Built from the
-# combined-source data so it covers every site that appears in either matrix.
-site_coords <- combined_for_sites |>
-  add_site_id() |>
-  dplyr::distinct(site, site_lat, site_lon)
-
-# ---- 5b. Spatial join: unique sites to ecozones -----------------------------
-ts("  5b. Joining unique sites to Canadian ecozones...")
-
-ecoregions_raw     <- sf::st_read(paths$ecoregions_processed, quiet = TRUE)
-ecozone_names_tbl  <- readr::read_csv(paths$ecozone_names, show_col_types = FALSE)
-ecoregions_named   <- dplyr::left_join(ecoregions_raw, ecozone_names_tbl, by = "ECOZONE") |>
-  dplyr::mutate(NAME_EN = dplyr::if_else(is.na(NAME_EN),
-                                          paste("Ecozone", ECOZONE),
-                                          NAME_EN))
-
-# One spatial join per unique site (rounded coordinate); downstream per-ecozone
-# subsetting filters the GF site matrix by ecozone label.
-site_pts <- sf::st_as_sf(site_coords, coords = c("site_lon", "site_lat"),
-                         crs = 4326) |>
-  sf::st_transform(sf::st_crs(ecoregions_named))
-
-site_ecozone <- sf::st_join(site_pts, ecoregions_named, join = sf::st_within) |>
-  sf::st_drop_geometry() |>
-  dplyr::select(site, ecozone = NAME_EN) |>
-  dplyr::distinct()
-
-ts(sprintf("    Sites mapped to ecozone: %d / %d (unmapped: %d)",
-           sum(!is.na(site_ecozone$ecozone)),
-           nrow(site_ecozone),
-           sum(is.na(site_ecozone$ecozone))))
-
-# ---- 5c. Helper functions for richness estimation ----------------------------
-
-# Convert a site × SH binary incidence matrix to an iNEXT incidence-frequency
-# vector: first element = number of sites (T), remaining elements = per-SH
-# detection frequency across sites (Q_i values).
-# unname() is essential: c(nrow(M), colSums(M)) produces a named vector whose
-# first element has a blank name; some iNEXT versions misparse this. as.numeric()
-# ensures a plain double vector regardless of storage.mode of M.
-to_inext_freq <- function(M) unname(as.numeric(c(nrow(M), colSums(M))))
-
-# Run iNEXT on a single stratum and return a list with:
-#   $summary  — one-row tibble of diagnostics + Chao2 asymptotic estimate
-#   $curve    — tibble of the size-based rarefaction/extrapolation curve
-#               columns: sites, richness, richness_lci, richness_uci, coverage
-# When nrow(M) < n_threshold the estimator and curve fields are NULL/NA.
-# nboot = 50 is sufficient for SE/CI estimation; raise for publication figures.
-run_inext_stratum <- function(M, label, n_threshold = ECOZONE_N_THRESHOLD,
-                              nboot = 50L) {
-  n_sites  <- nrow(M)
-  n_sh_obs <- ncol(M)
-  Q1       <- sum(colSums(M) == 1L)
-  Q2       <- sum(colSums(M) == 2L)
-
-  # coverage_hat: iNEXT::DataInfo() returns SC at observed sample size via a
-  # fast deterministic call (no bootstrapping). Called for all strata so that
-  # below-threshold ecozones also get a coverage value.
-  di      <- tryCatch(
-    iNEXT::DataInfo(to_inext_freq(M), datatype = "incidence_freq"),
-    error = function(e) NULL
-  )
-  cov_hat <- if (!is.null(di) && "SC" %in% names(di)) di$SC[1L] else NA_real_
-
-  base <- tibble::tibble(
-    stratum      = label,
-    n_sites      = n_sites,
-    n_sh_obs     = n_sh_obs,
-    Q1           = Q1,
-    Q2           = Q2,
-    coverage_hat = cov_hat,
-    chao2        = NA_real_,
-    chao2_se     = NA_real_,
-    chao2_lci    = NA_real_,
-    chao2_uci    = NA_real_
-  )
-
-  if (n_sites < n_threshold || n_sh_obs == 0L) {
-    return(list(summary = base, curve = NULL))
-  }
-
-  res <- tryCatch(
-    suppressWarnings(
-      iNEXT::iNEXT(to_inext_freq(M), q = 0,
-                   datatype = "incidence_freq",
-                   nboot    = nboot,
-                   conf     = 0.95)
-    ),
-    error = function(e) {
-      warning(sprintf("run_inext_stratum: iNEXT failed for '%s': %s",
-                      label, conditionMessage(e)))
-      NULL
-    }
-  )
-  if (is.null(res)) return(list(summary = base, curve = NULL))
-
-  # ---- Asymptotic estimate (Chao2 at q = 0) ----------------------------------
-  asy <- res$AsyEst
-  if (!is.null(asy) && nrow(asy) > 0L) {
-    pick <- rep(TRUE, nrow(asy))
-    if ("Diversity" %in% names(asy)) {
-      pick <- grepl("species\\s*richness", as.character(asy$Diversity),
-                    ignore.case = TRUE)
-    } else if ("Order.q" %in% names(asy)) {
-      pick <- asy$Order.q == 0L
-    }
-    a0 <- if (any(pick)) asy[pick, , drop = FALSE] else asy[1L, , drop = FALSE]
-
-    pick_col <- function(df, cands) {
-      hit <- cands[cands %in% names(df)][1L]
-      if (is.na(hit)) NA_real_ else df[[hit]][1L]
-    }
-    base$chao2     <- pick_col(a0, c("Estimator", "S.est"))
-    base$chao2_se  <- pick_col(a0, c("Est_s.e.", "s.e.", "SE", "Std.Error"))
-    base$chao2_lci <- pick_col(a0, c("95% Lower", "LCL", "qD.LCL"))
-    base$chao2_uci <- pick_col(a0, c("95% Upper", "UCL", "qD.UCL"))
-  }
-
-  # ---- Size-based rarefaction / extrapolation curve --------------------------
-  sb <- res$iNextEst$size_based
-  if (is.null(sb) && is.data.frame(res$iNextEst)) sb <- res$iNextEst
-  if (is.null(sb) && !is.null(res$iNextEst[[1L]]))  sb <- res$iNextEst[[1L]]
-
-  curve <- NULL
-  if (!is.null(sb) && nrow(sb) > 0L) {
-    if ("Order.q" %in% names(sb)) sb <- sb[sb$Order.q == 0L, , drop = FALSE]
-    t_col   <- intersect(c("t", "m", "x"),        names(sb))[1L]
-    qd_col  <- intersect(c("qD", "Richness"),      names(sb))[1L]
-    lci_col <- intersect(c("qD.LCL", "LCL"),       names(sb))[1L]
-    uci_col <- intersect(c("qD.UCL", "UCL"),       names(sb))[1L]
-    sc_col  <- intersect(c("SC", "Coverage"),      names(sb))[1L]
-    met_col <- intersect(c("Method", "method"),    names(sb))[1L]
-    curve <- tibble::tibble(
-      sites        = if (!is.na(t_col))   sb[[t_col]]   else seq_len(nrow(sb)),
-      richness     = if (!is.na(qd_col))  sb[[qd_col]]  else NA_real_,
-      richness_lci = if (!is.na(lci_col)) sb[[lci_col]] else NA_real_,
-      richness_uci = if (!is.na(uci_col)) sb[[uci_col]] else NA_real_,
-      coverage     = if (!is.na(sc_col))  sb[[sc_col]]  else NA_real_,
-      method       = if (!is.na(met_col)) sb[[met_col]] else NA_character_
-    )
-  }
-
-  list(summary = base, curve = curve)
-}
-
-# ---- 5d. Per-ecozone and Canada-wide estimators -----------------------------
-
-ts("  5c. Computing iNEXT incidence-based coverage diagnostics and asymptotic estimators...")
-ts("       (datatype = 'incidence_freq', q = 0, nboot = 50)")
-
-# Build per-ecozone GF site-incidence sub-matrices
-ecozone_levels <- sort(unique(stats::na.omit(site_ecozone$ecozone)))
-gf_site_ids    <- rownames(inc_gf)
-ecozone_mats   <- lapply(ecozone_levels, function(ez) {
-  ids <- site_ecozone$site[
-    !is.na(site_ecozone$ecozone) & site_ecozone$ecozone == ez
-  ]
-  ids <- intersect(ids, gf_site_ids)
-  if (length(ids) == 0L) return(NULL)
-  m <- inc_gf[ids, , drop = FALSE]
-  m[, colSums(m) > 0L, drop = FALSE]
-})
-names(ecozone_mats) <- ecozone_levels
-ecozone_mats <- ecozone_mats[!vapply(ecozone_mats, is.null, logical(1L))]
-
-# Compute iNEXT results for every stratum (singletons included).
-# Accumulation curves are extracted here and stored for the RDS (5e below).
-# Seed set once, immediately before the first bootstrap call, so the Chao2
-# CIs (nboot = 50, via iNEXT::iNEXT()) are reproducible across runs. Without
-# this, S_Chao2 itself is deterministic but Chao2_95_LCI/UCI are not.
-set.seed(3492)
-ts("    Canada (GF)...")
-res_canada_gf       <- run_inext_stratum(inc_gf,       "Canada (GF)")
-ts("    Canada (GF + GenBank)...")
-res_canada_combined <- run_inext_stratum(inc_combined, "Canada (GF + GenBank)")
-ts("    Per-ecozone strata...")
-res_ecozones <- lapply(names(ecozone_mats), function(ez) {
-  ts(sprintf("      %s...", ez))
-  run_inext_stratum(ecozone_mats[[ez]], ez)
-})
-names(res_ecozones) <- names(ecozone_mats)
-
-# Bind summary rows → estimators_full
-# (singletons are retained in the data: the dataset's singletons are very
-# likely real detections rather than artefacts, so no exclusion sensitivity
-# run is performed. The `singletons` column is kept at a constant value of
-# "included" for backward compatibility with existing downstream filters.)
-estimators_full <- dplyr::bind_rows(
-  res_canada_gf$summary,
-  res_canada_combined$summary,
-  dplyr::bind_rows(lapply(res_ecozones, `[[`, "summary"))
-) |> dplyr::mutate(singletons = "included")
-
-estimators <- estimators_full
-
-readr::write_csv(estimators,
-                 file.path(paths$out_linnean, "linnean_extrapolation_estimators.csv"))
-ts(sprintf("    Saved linnean_extrapolation_estimators.csv (%d rows)", nrow(estimators)))
-
-# Coverage-only diagnostic table (per stratum, GF only)
-coverage_tbl <- estimators_full |>
-  dplyr::select(stratum, n_sites, n_sh_obs, Q1, Q2, coverage_hat) |>
-  dplyr::arrange(dplyr::desc(n_sites))
-readr::write_csv(coverage_tbl,
-                 file.path(paths$out_linnean, "linnean_extrapolation_coverage.csv"))
-ts("    Saved linnean_extrapolation_coverage.csv")
-
-# ---- 5e. Rarefaction / extrapolation curves (iNEXT size-based) ---------------
-# Curves were already computed as part of run_inext_stratum() above; here we
-# simply collect, save, and plot them. The RDS stores per-stratum tibbles with
-# columns: sites, richness, richness_lci, richness_uci, coverage, method.
-# 'method' is the iNEXT Method field: "Rarefaction", "Observed", "Extrapolation".
-
-ts("  5d. Saving iNEXT rarefaction/extrapolation curves...")
-
-# Collect viable ecozone curves (strata with ≥ ECOZONE_N_THRESHOLD sites)
-acc_ecozone_curves <- lapply(names(res_ecozones), function(ez) {
-  r <- res_ecozones[[ez]]
-  if (is.null(r$curve)) return(NULL)
-  if ((r$summary$n_sites) < ECOZONE_N_THRESHOLD) return(NULL)
-  r$curve
-})
-names(acc_ecozone_curves) <- names(res_ecozones)
-acc_ecozone_curves <- acc_ecozone_curves[!vapply(acc_ecozone_curves, is.null, logical(1L))]
-
-saveRDS(
-  list(canada_gf       = res_canada_gf$curve,
-       canada_combined = res_canada_combined$curve,
-       ecozone         = acc_ecozone_curves),
-  file.path(paths$out_linnean, "linnean_accumulation.rds")
-)
-ts("    Saved linnean_accumulation.rds (iNEXT size-based curves; tibble format)")
-
-# The accumulation curves are saved above as linnean_accumulation.rds. The
-# corresponding diagnostic panel figure is not part of the manuscript, so it is
-# not written to figures/.
-
-# Compute the viable-ecozone count here (before freeing ecozone_mats below)
-n_viable_ecozones <- sum(
-  vapply(ecozone_mats, function(m) nrow(m) >= ECOZONE_N_THRESHOLD, logical(1L))
-)
-
-# Free large objects before continuing to GBIF step
-rm(inc_gf, inc_combined, ecozone_mats, ecoregions_named,
-   site_pts, site_ecozone, site_coords)
 
 # ---- Step 6: GBIF physical specimen records ----------------------------------
 # Query GBIF for preserved/living fungal specimens in Canada, then filter to
@@ -597,6 +266,24 @@ if (file.exists(gbif_ckpt)) {
     )
   )
   ts(sprintf("  Records loaded from checkpoint: %d", nrow(gbif_raw)))
+
+} else if (length(list.files(here::here("data_raw", "gbif"), pattern = "\\.zip$")) > 0) {
+
+  # A GBIF download ZIP is already provided in data_raw/gbif/. Import it directly
+  # instead of submitting a fresh (slow, credential-gated) download.
+  # occ_download_import(key, path) reads a local "<key>.zip" from `path`, where
+  # the key is the file name without its extension.
+  gbif_zip_dir  <- here::here("data_raw", "gbif")
+  gbif_zip_file <- list.files(gbif_zip_dir, pattern = "\\.zip$", full.names = TRUE)[1]
+  gbif_key      <- sub("\\.zip$", "", basename(gbif_zip_file))
+  ts(sprintf("Step 6: Importing provided GBIF ZIP (%s) — no re-download...",
+             basename(gbif_zip_file)))
+  gbif_raw <- rgbif::occ_download_import(key = gbif_key, path = gbif_zip_dir) |>
+    as.data.frame()
+  ts(sprintf("  Raw GBIF records: %d", nrow(gbif_raw)))
+  readr::write_csv(gbif_raw, gbif_ckpt)
+  ts(sprintf("  Saved GBIF checkpoint -> %s", basename(gbif_ckpt)))
+
 } else {
 
   gbif_user  <- Sys.getenv("GBIF_USER")
@@ -721,18 +408,6 @@ if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
 
 # ---- Step 7: Save summary table ----------------------------------------------
 
-# Pull a small set of headline numbers from the new Step 5 outputs to include
-# in the summary, so the master tibble alongside `linnean_summary.csv` reflects
-# the bottom-up extrapolation results without duplicating the per-stratum
-# detail (which lives in linnean_extrapolation_*.csv).
-canada_full      <- estimators_full[estimators_full$stratum == "Canada (GF)", ]
-chao_canada      <- canada_full$chao2
-chao_canada_se   <- canada_full$chao2_se
-chao_canada_lci  <- canada_full$chao2_lci
-chao_canada_uci  <- canada_full$chao2_uci
-cov_canada_gf    <- canada_full$coverage_hat
-# n_viable_ecozones was computed in Step 5 before the rm() of ecozone_mats
-
 linnean_summary <- tibble::tibble(
   metric = c(
     "Unique UNITE v10 SH codes (combined dataset, all records)",
@@ -763,17 +438,10 @@ linnean_summary <- tibble::tibble(
     "GlobalFungi: non-singleton SH codes",
     "GlobalFungi: SH codes with species-level UNITE name",
     "GlobalFungi: SH codes with species-level name (% of GF Canadian SHs)",
-    sprintf("GenBank: sequences with BLAST identity >= %d%% (sequence count, not SH count)", IDENTITY_THRESHOLD),
-    sprintf("GenBank: sequences with BLAST identity >= %d%% (%% of GenBank Canadian sequences)", IDENTITY_THRESHOLD),
+    "GenBank: total EcM sequence records",
     "GenBank: unique SH codes (Canadian dataset)",
     "GenBank: SH codes with species-level UNITE name",
     "GenBank: SH codes with species-level name (% of GenBank Canadian SHs)",
-    "Site coverage Ĉ (GlobalFungi, Canada-wide; 3-decimal lat/lon binning)",
-    "Chao2 SH richness, Canada-wide GF site × SH matrix (lower bound)",
-    "Chao2 SH richness bootstrap SE, Canada-wide GF site × SH matrix",
-    "Chao2 SH richness bootstrap 95% LCI, Canada-wide GF site × SH matrix",
-    "Chao2 SH richness bootstrap 95% UCI, Canada-wide GF site × SH matrix",
-    sprintf("Viable ecozones for coverage diagnostics (≥ %d unique GF sites)", ECOZONE_COV_THRESHOLD),
     "GBIF: physical EcM specimen records — genera WITH sequence data (Canada)",
     "GBIF: EcM species represented (genera with sequence data)",
     "GBIF: EcM genera represented (genera with sequence data)",
@@ -791,14 +459,8 @@ linnean_summary <- tibble::tibble(
     length(our_genera_not_in_ft),
     n_sh_gf_total, n_sh_singletons, pct_singletons, n_sh_nonsing,
     n_gf_sh_with_sp, pct_gf_sp,
-    n_gb_above_97, pct_gb_above_97,
+    n_gb_total,
     gb_sh_total, gb_sh_with_sp, pct_gb_sh_sp,
-    round(cov_canada_gf, 3),
-    round(chao_canada, 0),
-    round(chao_canada_se, 1),
-    round(chao_canada_lci, 0),
-    round(chao_canada_uci, 0),
-    n_viable_ecozones,
     n_gbif_ecm, n_gbif_ecm_species, n_gbif_ecm_genera,
     n_gbif_ecm_nosequence, n_gbif_ecm_nosequence_species, n_gbif_ecm_nosequence_genera
   )
