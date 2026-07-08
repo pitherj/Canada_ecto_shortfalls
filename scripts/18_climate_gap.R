@@ -476,8 +476,8 @@ if (file.exists(fig_out) && file.exists(fig_out_grey)) {
       )
   }
 
-  ggplot2::ggsave(fig_out, build_combined("white"),
-                  width = 15, height = 10, dpi = 300, bg = "white")
+  save_fig_formats(fig_out, build_combined("white"),
+                   width = 15, height = 10, dpi = 300, bg = "white")
   ts(sprintf("Saved -> %s", basename(fig_out)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5

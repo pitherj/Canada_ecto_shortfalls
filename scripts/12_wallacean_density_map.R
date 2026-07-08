@@ -316,9 +316,9 @@ if (!file.exists(out_fig_world)) {
       legend.position = c(0.95, 0.75)
     )
 
-  ggplot2::ggsave(
-    filename = out_fig_world,
-    plot     = p_world,
+  save_fig_formats(
+    out_fig_world,
+    p_world,
     width    = 14, height = 7, dpi = 300, units = "in"
   )
   ts(sprintf("  Saved -> %s", basename(out_fig_world)))

@@ -69,7 +69,7 @@ if (file.exists(paths$fig_depth_discard)) {
     ggplot2::theme_bw(base_size = 12) +
     ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
 
-  ggplot2::ggsave(paths$fig_depth_discard, p_hist, width = 10, height = 6, dpi = 300)
+  save_fig_formats(paths$fig_depth_discard, p_hist, width = 10, height = 6, dpi = 300)
   ts(sprintf("  Saved %s", basename(paths$fig_depth_discard)))
 }
 

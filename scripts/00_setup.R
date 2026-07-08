@@ -54,6 +54,41 @@ crs_albers <- "+proj=aea +lat_0=40 +lon_0=-96 +lat_1=50 +lat_2=70 +x_0=0 +y_0=0 
 # only when manually assembling Figure 5.
 fig5_grey_bg <- "#F2F2F2"
 
+# ---- Multi-format figure export (journal submission) -------------------------
+# save_fig_formats() wraps ggplot2::ggsave() to write the SAME figure in several
+# file formats in one call. The pipeline names every figure with a .png path
+# (paths$fig_*). FACETS (Canadian Science Publishing) does not accept PNG and
+# instead asks for .tif / .jpg (among others), so each manuscript figure is
+# written as PNG (unchanged) plus JPG and TIFF alongside it.
+#
+#   path    : canonical .png target (e.g. paths$fig_sampling_map). Its extension
+#             is swapped to build the other formats in the same directory.
+#   plot    : the ggplot / patchwork object to save.
+#   formats : which formats to write. Default = PNG (keeps existing pipeline
+#             behaviour) plus JPG and TIFF for submission.
+#   ...     : forwarded verbatim to ggplot2::ggsave() (width, height, dpi, bg,
+#             units, ...), so each call keeps the sizing it already specified.
+#
+# Format-specific defaults (overridable through ...):
+#   JPG  -> quality = 100        (FACETS: max-quality JPEG, >= 300 dpi)
+#   TIFF -> compression = "none" (FACETS: uncompressed TIFF)
+save_fig_formats <- function(path, plot,
+                             formats = c("png", "jpg", "tif"), ...) {
+  stem <- tools::file_path_sans_ext(path)
+  dots <- list(...)
+  for (fmt in formats) {
+    ext <- switch(fmt, jpeg = "jpg", tiff = "tif", fmt)           # normalize
+    dev <- switch(ext, png = "png", jpg = "jpeg", tif = "tiff",
+                  stop("save_fig_formats(): unsupported format '", fmt, "'"))
+    args <- c(list(filename = paste0(stem, ".", ext),
+                   plot = plot, device = dev), dots)
+    if (ext == "jpg" && is.null(args$quality))     args$quality     <- 100
+    if (ext == "tif" && is.null(args$compression)) args$compression <- "none"
+    do.call(ggplot2::ggsave, args)
+  }
+  invisible(path)
+}
+
 # =============================================================================
 # Helper functions
 # =============================================================================

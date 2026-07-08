@@ -465,7 +465,7 @@ if (!file.exists(paths$fig_wallacean_occ) &&
           (make_occ_hist(occ_sp$n_global, xlab_glob, "Number of species",  "(c) Named species — global") |
            make_occ_hist(occ_sh$n_global, xlab_glob, "Number of SH codes", "(d) SH codes — global"))
 
-  ggplot2::ggsave(paths$fig_wallacean_occ, fig2, width = 11, height = 8, dpi = 300)
+  save_fig_formats(paths$fig_wallacean_occ, fig2, width = 11, height = 8, dpi = 300)
   ts(sprintf("  Saved %s", basename(paths$fig_wallacean_occ)))
 } else {
   ts("Figure 2: skipping (already exists, or global occupancy CSVs not yet built).")

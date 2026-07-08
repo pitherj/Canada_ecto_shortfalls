@@ -141,8 +141,8 @@ if (!need_g0) {
       map_theme_fn(bg) + ggplot2::theme(legend.position = c(0.85, 0.75))
   }
 
-  ggplot2::ggsave(paths$fig_sampling_map, build_p_g0("white"),
-                  width = 12, height = 9, dpi = MAP_DPI, bg = "white")
+  save_fig_formats(paths$fig_sampling_map, build_p_g0("white"),
+                   width = 12, height = 9, dpi = MAP_DPI, bg = "white")
   ts(sprintf("  Saved %s", basename(paths$fig_sampling_map)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
@@ -217,8 +217,8 @@ if (!need_gbif) {
       map_theme_fn(bg) + ggplot2::theme(legend.position = c(0.85, 0.85))
   }
 
-  ggplot2::ggsave(paths$fig_gbif_specimens, build_p_gbif("white"),
-                  width = 12, height = 9, dpi = MAP_DPI, bg = "white")
+  save_fig_formats(paths$fig_gbif_specimens, build_p_gbif("white"),
+                   width = 12, height = 9, dpi = MAP_DPI, bg = "white")
   ts(sprintf("  Saved %s", basename(paths$fig_gbif_specimens)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5

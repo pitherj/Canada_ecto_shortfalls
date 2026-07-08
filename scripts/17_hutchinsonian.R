@@ -415,8 +415,8 @@ build_sampling_map <- function(bg) {
     )
 }
 
-ggplot2::ggsave(paths$fig_ecozone_sampling, build_sampling_map("white"),
-                width = 12, height = 9, dpi = 300, bg = "white")
+save_fig_formats(paths$fig_ecozone_sampling, build_sampling_map("white"),
+                 width = 12, height = 9, dpi = 300, bg = "white")
 ts(sprintf("  Saved %s", basename(paths$fig_ecozone_sampling)))
 
 # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
@@ -530,8 +530,8 @@ build_bivariate_figure <- function(bg) {
     )
 }
 
-ggplot2::ggsave(paths$fig_host_bivariate, build_bivariate_figure("white"),
-                width = 10, height = 14, dpi = 300, bg = "white")
+save_fig_formats(paths$fig_host_bivariate, build_bivariate_figure("white"),
+                 width = 10, height = 14, dpi = 300, bg = "white")
 ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate)))
 
 # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5

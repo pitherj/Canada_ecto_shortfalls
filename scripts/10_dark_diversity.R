@@ -96,8 +96,8 @@ if (file.exists(paths$fig_dark_diversity) && file.exists(paths$fig_dark_diversit
         plot.background  = ggplot2::element_rect(fill = bg, colour = NA))
   }
 
-  ggplot2::ggsave(paths$fig_dark_diversity, build_plot("white"),
-                  width = 12, height = 9, dpi = MAP_DPI, bg = "white")
+  save_fig_formats(paths$fig_dark_diversity, build_plot("white"),
+                   width = 12, height = 9, dpi = MAP_DPI, bg = "white")
   ts(sprintf("  Saved %s", basename(paths$fig_dark_diversity)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
