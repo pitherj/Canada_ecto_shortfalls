@@ -15,6 +15,39 @@ FungalTraits) are re-downloaded automatically by `01_spatial_data.R` /
 > download is truncated the pipeline can fail silently, so expected sizes are
 > given for each entry below.
 
+## Directory structure summary
+
+```
+data_raw/                                   # READ-ONLY inputs
+├── DATA-DICTIONARY.md                       # this file
+├── GlobalFungi/                             # GlobalFungi v5 (~13 GB)
+│   ├── GlobalFungi_5_sample_metadata.txt
+│   ├── GlobalFungi_5_SH_abundance_ITS1_ITS2.txt
+│   └── Metadata_table_description.pdf
+├── UNITE/
+│   └── sh_general_release_dynamic_04.04.2024_dev.fasta   # pinned reference
+├── fungaltraits/
+├── fungalroot/
+├── biotime/
+├── mycocosm/
+│   └── mycocosm_organism_list.csv
+├── climate/                                 # WorldClim 2.1 (~1.3 GB)
+│   └── wc2.1_country/CAN_wc2.1_30s_bio.tif
+├── bien2_ranges/                            # BIEN2 modelled ranges (07_bien2_ranges.R)
+│   ├── download_log.csv
+│   └── <Genus_species>/<model_name>.{dbf,prj,shp,shx}
+├── van_Galen_per_sample/
+│   └── GFv5_EcM_unassigned_per_sample.csv
+├── van_Galen_et_al_dark_taxa_code_and_data/ # dark-taxa raster (10_dark_diversity.R)
+│   └── 4.Dark_EcM_taxa_richness_maps/Dark_taxa_geospatial_layers.tif
+├── admin_boundaries/                        # GADM (auto via 01_spatial_data.R)
+├── ecoregions/                              # auto via 01_spatial_data.R
+├── natural_earth/                           # auto via 01_spatial_data.R
+└── gbif/                                     # GBIF specimen ZIP (09_linnean.R)
+```
+
+---
+
 **On the field tables below.** Each tabular file gets a table of its fields
 (name, type, description, units/allowed values), following the recommended
 content in UBC's data dictionary guidance
@@ -567,37 +600,6 @@ absent.
 | `issue` | GBIF data-quality flags |
 
 ---
-
-## Directory structure summary
-
-```
-data_raw/                                   # READ-ONLY inputs
-├── DATA-DICTIONARY.md                       # this file
-├── GlobalFungi/                             # GlobalFungi v5 (~13 GB)
-│   ├── GlobalFungi_5_sample_metadata.txt
-│   ├── GlobalFungi_5_SH_abundance_ITS1_ITS2.txt
-│   └── Metadata_table_description.pdf
-├── UNITE/
-│   └── sh_general_release_dynamic_04.04.2024_dev.fasta   # pinned reference
-├── fungaltraits/
-├── fungalroot/
-├── biotime/
-├── mycocosm/
-│   └── mycocosm_organism_list.csv
-├── climate/                                 # WorldClim 2.1 (~1.3 GB)
-│   └── wc2.1_country/CAN_wc2.1_30s_bio.tif
-├── bien2_ranges/                            # BIEN2 modelled ranges (07_bien2_ranges.R)
-│   ├── download_log.csv
-│   └── <Genus_species>/<model_name>.{dbf,prj,shp,shx}
-├── van_Galen_per_sample/
-│   └── GFv5_EcM_unassigned_per_sample.csv
-├── van_Galen_et_al_dark_taxa_code_and_data/ # dark-taxa raster (10_dark_diversity.R)
-│   └── 4.Dark_EcM_taxa_richness_maps/Dark_taxa_geospatial_layers.tif
-├── admin_boundaries/                        # GADM (auto via 01_spatial_data.R)
-├── ecoregions/                              # auto via 01_spatial_data.R
-├── natural_earth/                           # auto via 01_spatial_data.R
-└── gbif/                                     # GBIF specimen ZIP (09_linnean.R)
-```
 
 ## Approximate sizes
 
