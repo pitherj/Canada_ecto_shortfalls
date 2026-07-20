@@ -93,7 +93,8 @@ derived files can be withdrawn from the deposit without disturbing the rest.
 - [ ] Run the full pipeline cold and capture a fresh reproducibility baseline
       (`scripts/99_verify_reproducibility.R baseline`)
 - [ ] Re-render the manuscript and supplements; confirm reported values are unchanged
-- [ ] Export Figure 5 in TIFF and JPG (hand-assembled; no generating script)
+- [x] Export Figure 5 in JPG (hand-assembled; no generating script). No TIFF:
+      it would exceed 40 MB, and FACETS accepts JPG at >= 300 dpi.
 
 **At deposit**
 

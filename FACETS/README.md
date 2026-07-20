@@ -63,9 +63,10 @@ The `.tif` versions (~332 MB) are git-ignored; they are included in the Borealis
    these automatically. Enable in Word (Layout ▸ Line Numbers ▸ Continuous;
    select all ▸ line spacing 2.0), or supply a `reference-doc` template. The
    PDF output already complies.
-3. **Figure 5 in TIFF/JPG** — it is a hand-assembled composite with no
-   generating script, so `save_fig_formats()` does not produce it. Export TIFF
-   and JPG versions from the source design file.
+3. ~~**Figure 5 in TIFF/JPG**~~ — done. It is a hand-assembled composite with
+   no generating script, so `save_fig_formats()` does not produce it; the JPG
+   was exported manually from the source design file. No TIFF was made: it
+   would exceed 40 MB, and FACETS accepts JPG at >= 300 dpi.
 4. **Cover letter** — FACETS asks for a significance statement.
 
 ## Sources
