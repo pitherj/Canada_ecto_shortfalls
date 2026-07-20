@@ -94,3 +94,6 @@ repro/verify_*
 
 # temporary folder for scratch files
 temp/
+
+# temporary staging area for the OSF deposit (mirrors ARCHIVING.md; not tracked)
+for_OSF/
