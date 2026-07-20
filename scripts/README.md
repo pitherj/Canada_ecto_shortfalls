@@ -87,7 +87,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
   absolute or relative paths in analysis code.
 - **Figure 5 grey-background variants**: Figure 5 (`Figure-05_shortfalls_summary.png`)
   is a hand-assembled schematic composite manually built from panels taken
-  from Figures 1, 3, 4, S1, S4, and S5, placed on a light-grey (`fig5_grey_bg`,
+  from Figures 1, 3, 4, S1, and S4, placed on a light-grey (`fig5_grey_bg`,
   `#F2F2F2` in `00_setup.R`) backdrop. Scripts `10`, `17`, `18`, and `19`
   therefore each save two versions of their figure(s): the normal
   white-background copy (`paths$fig_*`, used in the manuscript/SI) and an

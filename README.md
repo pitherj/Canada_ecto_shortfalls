@@ -203,11 +203,12 @@ stored here.
 | Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` | 09, 17, 18 |
 
 Figure 5 is a manually assembled schematic composite built from panels taken
-from Figures 1, 3, 4, S1, S4, and S5. To support that, scripts `10`, `17`,
+from Figures 1, 3, 4, S1, and S4. To support that, scripts `10`, `17`,
 `18`, and `19` each save a second, `_grey`-suffixed copy of their figure(s) on
 a `#F2F2F2` background (e.g. `Figure-03_climate_gap_grey.png`), alongside the
-normal white-background copy used in the manuscript/SI. Both land in
-`figures/`; only the white versions are referenced by the manuscript and the
+normal white-background copy used in the manuscript/SI. `19_sampling_maps.R`
+also saves a grey variant of Figure S5, but it is not used in Figure 5. Both
+land in `figures/`; only the white versions are referenced by the manuscript and the
 Supplemental Materials documents.
 
 ## Documentation

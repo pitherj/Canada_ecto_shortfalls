@@ -1,5 +1,5 @@
 ---
-subtitle: "Supplemental materials (SM1) for: An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada"
+title: "Supplemental materials (SM1) for: An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada"
 author: "Jason Pither, with assistance from Claude (Sonnet 5 and Opus 4.8)"
 bibliography: references.bib
 csl: facets.csl  
@@ -12,6 +12,14 @@ format:
     embed-resources: true
     theme: cosmo
     df-print: kable
+  pdf:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    include-in-header:
+      text: |
+        \usepackage{caption}
+        \captionsetup{labelformat=empty}
 execute:
   echo: false
   warning: false
@@ -536,7 +544,7 @@ which is the version reproduced in the manuscript and supplements, and an
 otherwise identical version on a light grey background (`#F2F2F2`).
 
 We used the grey-background versions to assemble Figure 5, which is a designed
-conceptual composite rather than a computed figure. We laid out its six source
+conceptual composite rather than a computed figure. We laid out its five source
 panels manually in Microsoft PowerPoint and added the annotations that appear in
 it — the quadrant labels and the ellipses that link sampling strategies to the
 shortfalls they would jointly address. Figure 5 is therefore the only figure that
@@ -550,16 +558,14 @@ tibble::tibble(
     "Figure-03_climate_gap_grey.png",
     "Figure-04_host_bivariate_map_grey.png",
     "Figure-S1_dark_diversity_grey.png",
-    "Figure-S4_ecozone_sampling_map_grey.png",
-    "Figure-S5_gbif_specimens_grey.png"
+    "Figure-S4_ecozone_sampling_map_grey.png"
   ),
   `Produced by` = c(
     "19_sampling_maps.R",
     "17_hutchinsonian.R",
     "18_eltonian.R",
     "10_dark_diversity.R",
-    "17_hutchinsonian.R",
-    "19_sampling_maps.R"
+    "17_hutchinsonian.R"
   )
 ) |>
   show_table(caption = paste0(
@@ -567,6 +573,10 @@ tibble::tibble(
     "produces each."
   ))
 ```
+
+`19_sampling_maps.R` also produces a grey-background version of Figure S5
+(`Figure-S5_gbif_specimens_grey.png`), following the same convention as the
+panels above, but it is not used in Figure 5.
 
 # Supplemental figures and tables
 
@@ -625,7 +635,7 @@ if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
   tibble::tibble(`Host species` = paste0("<em>", sort(host_intersection), "</em>")) |>
     show_table(caption = paste0(
       "<strong>Table S2.</strong> The ", length(host_intersection), " FungalRoot/BIEN native ",
-      "Canadian EcM host species with ≥1 recorded, species-level host taxon in ",
+      "Canadian EcM host species with at least one recorded, species-level host taxon in ",
       "Canadian GlobalFungi or GenBank EcM records (the intersection between the ",
       "native host list and the distinct species-level host taxa recorded across ",
       "both sources)."))
