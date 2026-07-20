@@ -33,11 +33,6 @@ library(tidyr)    # pivoting / reshaping
 library(readr)    # fast CSV read/write
 library(ggplot2)  # figures
 
-# ---- Timestamped console logging --------------------------------------------
-# ts("message") prints "[HH:MM:SS] message" so long-running scripts leave a
-# readable progress trail.
-ts <- function(...) cat(format(Sys.time(), "[%H:%M:%S]"), ..., "\n")
-
 # ---- Coordinate reference systems -------------------------------------------
 # crs_wgs84  : lat/lon, used for all coordinate-based operations.
 # crs_albers : Canada Albers Equal Area Conic, used for mapping (equal-area so
@@ -126,25 +121,6 @@ add_site_id <- function(df, digits = 3L) {
 # occurrences aggregate into ~1 km^2 grid cells (matching common SDM practice).
 snap_30arcsec <- function(x) round(x * 120) / 120
 
-# ---- build_site_sh_matrix(): long records -> binary site x SH matrix ----------
-# Turns a long table (columns lat, lon, sh_code) into a presence/absence
-# site x SH-code matrix for incidence-based richness estimation (iNEXT / Chao2).
-# min_records drops sites with fewer than that many distinct SH detections;
-# keep it at 1 for richness extrapolation, which needs singletons.
-build_site_sh_matrix <- function(df, min_records = 1L) {
-  df |>
-    add_site_id() |>
-    dplyr::group_by(site) |>
-    dplyr::filter(dplyr::n() >= min_records) |>
-    dplyr::ungroup() |>
-    dplyr::distinct(site, sh_code) |>
-    dplyr::mutate(present = 1L) |>
-    tidyr::pivot_wider(names_from = sh_code, values_from = present,
-                       values_fill = 0L) |>
-    tibble::column_to_rownames("site") |>
-    as.matrix()
-}
-
 # ---- canonicalize_host(): normalize a raw host-plant name --------------------
 # Raw host strings come from the GenBank `host` qualifier and `isolation_source`
 # field, and from GlobalFungi's `dominant_plant_species` / `other_plant_species`
@@ -199,26 +175,6 @@ canonicalize_host <- function(x) {
   valid <- grepl("^[A-Z][a-z]+( [a-z][a-z-]*)?$", out)
   out[!valid] <- NA_character_
   out
-}
-
-# ---- load_bien2_range(): read one BIEN2 range polygon, clipped to Canada -----
-# Reads the modelled range shapefile for `species` from data_raw/bien2_ranges/,
-# repairs geometry, dissolves to a single polygon, reprojects to WGS84, and
-# intersects with the Canada boundary. Returns an sf polygon, or NULL (with a
-# warning) if no shapefile exists for that species.
-load_bien2_range <- function(species, canada_wgs84) {
-  sp_us  <- gsub(" ", "_", species)
-  sp_dir <- file.path(paths$bien2_ranges_dir, sp_us)
-  shp    <- list.files(sp_dir, pattern = "\\.shp$", full.names = TRUE)
-  if (length(shp) == 0) {
-    warning(sprintf("No BIEN2 shapefile found for %s", species))
-    return(NULL)
-  }
-  sf::st_read(shp[[1]], quiet = TRUE) |>
-    sf::st_make_valid() |>
-    sf::st_union() |>
-    sf::st_transform("EPSG:4326") |>
-    sf::st_intersection(suppressWarnings(sf::st_buffer(sf::st_make_valid(canada_wgs84), 0)))
 }
 
 # ---- read_big_tsv_subset(): read selected columns from a very large TSV -------
@@ -280,8 +236,6 @@ paths <- list(
 
   # ---- raw: spatial ----------------------------------------------------------
   canada_bound_raw = here::here("data_raw", "admin_boundaries", "canada_bound_raw.gpkg"),
-  usa_bound_raw    = here::here("data_raw", "admin_boundaries", "usa_bound_raw.gpkg"),
-  mexico_bound_raw = here::here("data_raw", "admin_boundaries", "mexico_bound_raw.gpkg"),
   ecoregions_raw   = here::here("data_raw", "ecoregions", "Ecoregions", "ecoregions.shp"),
   ne_canada_raw    = here::here("data_raw", "natural_earth", "canada_ne.gpkg"),
   ne_lakes_raw     = here::here("data_raw", "natural_earth", "lakes_ne.gpkg"),
@@ -317,12 +271,11 @@ paths <- list(
                              "4.Dark_EcM_taxa_richness_maps",
                              "Dark_taxa_geospatial_layers.tif"),
 
-  # ---- raw: BIEN2 modelled range shapefiles (from 06_bien2_ranges.R) ---------
+  # ---- raw: BIEN2 modelled range shapefiles (from 07_bien2_ranges.R) ---------
   bien2_ranges_dir = here::here("data_raw", "bien2_ranges"),
 
   # ---- derived: processed spatial (from 01_spatial_data.R) -------------------
   canada_bound         = here::here("data_derived", "spatial", "canada_simple.gpkg"),
-  canada_albers        = here::here("data_derived", "spatial", "canada_ne_albers.gpkg"),
   lakes_albers         = here::here("data_derived", "spatial", "lakes_canada_albers.gpkg"),
   ecoregions_processed = here::here("data_derived", "spatial", "ecoregions_processed.gpkg"),
   ecozone_names        = here::here("data_derived", "spatial", "ecozone_names.csv"),
@@ -339,12 +292,12 @@ paths <- list(
   emf_combined     = here::here("data_derived", "emf_canada_combined.csv"),
   emf_data         = here::here("data_derived", "emf_canada_em_only.csv"),
 
-  # ---- derived: host reference (from 05_fungalroot_hosts.R) ------------------
+  # ---- derived: host reference (from 05_prepare_fungalroot.R) ----------------
   fungalroot_sp     = here::here("data_derived", "clean_fungalroot_species.csv"),
   fungalroot_genera = here::here("data_derived", "clean_fungalroot_genera_table_s2.csv"),
   host_species      = here::here("data_derived", "ecm_native_canada_host_species.csv"),
 
-  # ---- derived: BIEN2 host rasters (from 07_host_rasters.R) -------------------
+  # ---- derived: BIEN2 host rasters (from 08_host_rasters.R) -------------------
   bien_ranges        = here::here("data_derived", "checkpoints", "bien2_ecm_host_ranges.gpkg"),
   bien_richness      = here::here("data_derived", "spatial", "bien_host_richness_0.5deg.tif"),
   bien_species_stack = here::here("data_derived", "spatial", "bien_host_species_stack.tif"),
@@ -396,7 +349,6 @@ for (d in c(paths$checkpoints, paths$figures, paths$biotime_db,
 # suppress spurious readr parsing warnings (literal "NULL" year strings from
 # GenBank, and the rarely-populated secondary_lifestyle column).
 if (file.exists(paths$emf_data)) {
-  ts("Loading EcM dataset (GlobalFungi + GenBank)...")
   emf <- readr::read_csv(paths$emf_data, show_col_types = FALSE,
                          na = c("", "NA", "NULL"),
                          col_types = readr::cols(
@@ -404,6 +356,4 @@ if (file.exists(paths$emf_data)) {
                            .default = readr::col_guess()
                          )) |>
     dplyr::filter(source %in% c("GenBank", "GlobalFungi"))
-  ts(sprintf("  Records: %d  |  GlobalFungi: %d  |  GenBank: %d",
-             nrow(emf), sum(emf$source == "GlobalFungi"), sum(emf$source == "GenBank")))
 }

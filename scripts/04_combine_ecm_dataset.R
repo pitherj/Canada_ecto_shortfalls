@@ -21,19 +21,11 @@ library(sf)
 
 # ---- Step 1: Combine GlobalFungi and GenBank --------------------------------
 
-if (file.exists(paths$emf_combined)) {
-  ts("Step 1: emf_canada_combined.csv already exists — skipping.")
-} else {
-
-  ts("Step 1: Combining GlobalFungi and GenBank outputs...")
+if (!(file.exists(paths$emf_combined))) {
 
   gf <- readr::read_csv(paths$gf_long_out, show_col_types = FALSE)
-  ts(sprintf("  GlobalFungi: %d rows, %d unique SHs, %d unique samples",
-             nrow(gf), dplyr::n_distinct(gf$sh_code, na.rm = TRUE), dplyr::n_distinct(gf$sample_ID)))
 
   gb <- readr::read_csv(paths$gb_long_out, show_col_types = FALSE)
-  ts(sprintf("  GenBank:     %d rows, %d unique SHs, %d unique accessions",
-             nrow(gb), dplyr::n_distinct(gb$sh_code, na.rm = TRUE), dplyr::n_distinct(gb$accession)))
 
   # Harmonise lat/lon column names
   if (all(c("latitude", "longitude") %in% names(gf)))
@@ -48,14 +40,8 @@ if (file.exists(paths$emf_combined)) {
   gf <- dplyr::mutate(gf, source = "GlobalFungi")
 
   combined <- dplyr::bind_rows(gf, gb)
-  ts(sprintf("  Combined (pre-spatial filter): %d rows total", nrow(combined)))
 
   # SH overlap summary
-  ts(sprintf("  SH overlap — GF: %d, GB: %d, shared: %d, either: %d",
-             dplyr::n_distinct(gf$sh_code, na.rm = TRUE),
-             dplyr::n_distinct(gb$sh_code, na.rm = TRUE),
-             length(intersect(unique(gf$sh_code), unique(gb$sh_code))),
-             dplyr::n_distinct(combined$sh_code, na.rm = TRUE)))
 
   # Spatial containment check — applied to ALL records (GlobalFungi + GenBank)
   # with parsed coordinates. A logical column `coord_in_canada` is added:
@@ -83,14 +69,12 @@ if (file.exists(paths$emf_combined)) {
   # authoritative only for non-spatial enumeration, not spatial analyses.
   # For GenBank records, canada_basis is also updated to
   # "coordinates_outside_canada" for traceability.
-  ts("  Checking coordinate containment within Canada boundary (GADM, +2 km buffer)...")
   canada_bound_sf <- sf::st_read(paths$canada_bound, quiet = TRUE)
   canada_bound_buffered <- canada_bound_sf |>
     sf::st_transform(crs_albers) |>
     sf::st_buffer(dist = 2000) |>   # 2 km, in metres (crs_albers is equal-area, units = m)
     sf::st_transform(4326)
   coord_idx <- which(!is.na(combined$lat) & !is.na(combined$lon))
-  ts(sprintf("  Records with coordinates: %d", length(coord_idx)))
 
   # Initialise flag: NA for records with no coordinates
   combined$coord_in_canada <- NA
@@ -101,8 +85,6 @@ if (file.exists(paths$emf_combined)) {
     in_can <- lengths(sf::st_intersects(pts, canada_bound_buffered)) > 0
     sf::sf_use_s2(TRUE)
     n_outside <- sum(!in_can)
-    ts(sprintf("  In Canada: %d | outside boundary (coord_in_canada = FALSE): %d",
-               sum(in_can), n_outside))
     combined$coord_in_canada[coord_idx] <- in_can
     # Update canada_basis for GenBank records whose coordinates fall outside Canada
     if (n_outside > 0) {
@@ -114,16 +96,11 @@ if (file.exists(paths$emf_combined)) {
   }
 
   readr::write_csv(combined, paths$emf_combined)
-  ts("  Saved emf_canada_combined.csv")
 }
 
 # ---- Step 2: Filter for EcM using FungalTraits ------------------------------
 
-if (file.exists(paths$emf_data)) {
-  ts("Step 2: emf_canada_em_only.csv already exists — skipping.")
-} else {
-
-  ts("Step 2: Filtering for ectomycorrhizal taxa using FungalTraits...")
+if (!(file.exists(paths$emf_data))) {
 
   # FungalTraits v1.2 (Põlme et al. 2020): pinned reference file (see 00_setup.R
   # and data_raw/fungaltraits/fungaltraits_version.txt for provenance).
@@ -134,7 +111,6 @@ if (file.exists(paths$emf_data)) {
     dplyr::filter(primary_lifestyle == "ectomycorrhizal") |>
     dplyr::mutate(genus_lower = tolower(trimws(genus))) |>
     dplyr::distinct(genus_lower)
-  ts(sprintf("  EcM genera in FungalTraits: %d", nrow(em_genera)))
 
   ft_join <- ft |>
     dplyr::select(genus, primary_lifestyle, secondary_lifestyle,
@@ -153,13 +129,6 @@ if (file.exists(paths$emf_data)) {
     dplyr::filter(genus_lower %in% em_genera$genus_lower) |>
     dplyr::select(-genus_lower)
 
-  ts(sprintf("  EM records: %d | SHs: %d | genera: %d",
-             nrow(em_only), dplyr::n_distinct(em_only$sh_code, na.rm = TRUE),
-             dplyr::n_distinct(em_only$genus)))
-  ts("  By source:"); print(dplyr::count(em_only, source))
-
   readr::write_csv(em_only, paths$emf_data)
-  ts("  Saved emf_canada_em_only.csv")
 }
 
-ts("04_combine_ecm_dataset.R complete.")

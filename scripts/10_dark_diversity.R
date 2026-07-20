@@ -31,12 +31,9 @@ DARK_AGGREG_FACTOR <- 100   # aggregate the raster to ~100 km before reprojectio
 MAP_DPI            <- 300
 
 if (file.exists(paths$fig_dark_diversity) && file.exists(paths$fig_dark_diversity_grey)) {
-  ts("Figure S1 (dark diversity, both versions) already exists — skipping.")
 } else if (!file.exists(paths$van_galen_tif)) {
   stop("van Galen raster not found: ", paths$van_galen_tif)
 } else {
-
-  ts("Figure S1: building dark-diversity map...")
 
   # ---- Basemap layers --------------------------------------------------------
   canada_bound  <- sf::st_read(paths$canada_bound, quiet = TRUE) |> sf::st_make_valid()
@@ -48,7 +45,7 @@ if (file.exists(paths$fig_dark_diversity) && file.exists(paths$fig_dark_diversit
       sf::st_transform(crs_albers) |> sf::st_make_valid() |> sf::st_buffer(0)
     sf::st_agr(lakes_raw) <- "constant"
     sf::st_intersection(lakes_raw, sf::st_buffer(sf::st_make_valid(canada_albers), 0))
-  }, error = function(e) { ts("  Lakes not found — skipping."); NULL })
+  }, error = function(e) { warning("Lakes not found — skipping.", call. = FALSE); NULL })
 
   bbox_can <- sf::st_bbox(canada_albers)
   xlim_can <- c(bbox_can[["xmin"]] - 150000, bbox_can[["xmax"]] + 150000)
@@ -98,13 +95,10 @@ if (file.exists(paths$fig_dark_diversity) && file.exists(paths$fig_dark_diversit
 
   save_fig_formats(paths$fig_dark_diversity, build_plot("white"),
                    width = 12, height = 9, dpi = MAP_DPI, bg = "white")
-  ts(sprintf("  Saved %s", basename(paths$fig_dark_diversity)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
   # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
   ggplot2::ggsave(paths$fig_dark_diversity_grey, build_plot(fig5_grey_bg),
                   width = 12, height = 9, dpi = MAP_DPI, bg = fig5_grey_bg)
-  ts(sprintf("  Saved %s", basename(paths$fig_dark_diversity_grey)))
 }
 
-ts("10_dark_diversity.R complete.")

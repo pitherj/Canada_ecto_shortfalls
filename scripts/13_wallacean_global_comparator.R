@@ -2,11 +2,11 @@
 # Wallacean Shortfall: Global GlobalFungi Comparator Metrics
 # =============================================================================
 # Computes summary metrics describing the FULL global GlobalFungi v5 database
-# for use as a comparator against the Canada-specific dataset in Table S1 of
-# EMF_shortfalls_SI.Rmd ("EcM Fungal Records Dataset").
+# for use as a comparator against the Canada-specific dataset in Table 1 of the
+# manuscript ("EcM Fungal Records Dataset").
 #
-# Two independently-guarded stages, following the per-step sentinel pattern
-# used in 10_linnean_inext.R:
+# Two independently-guarded stages, each following the per-step sentinel
+# pattern used throughout this pipeline:
 #
 #   Stage 1 (cheap — header/taxonomy/metadata only; seconds):
 #     - Total global GlobalFungi v5 samples (raw, all taxa)
@@ -23,7 +23,8 @@
 #     Output: data_derived/checkpoints/gf_global_comparator_cheap.csv
 #
 #   Stage 2 (expensive — full 13 GB matrix scan via data.table::fread(select=...);
-#   5-15+ minutes on a modern laptop, per the runtime note in 2-6a):
+#   5-15+ minutes on a modern laptop, per the runtime note in
+#   12_wallacean_density_map.R):
 #     - Total global EcM detection records (sample x SH-code pairs with
 #       abundance > 0), restricted to quality-filtered samples
 #     - Total global EcM raw read abundance (sum of abundance values)
@@ -35,9 +36,10 @@
 #     Output: data_derived/checkpoints/gf_global_comparator_volume.csv
 #
 # Prerequisites:
-#   data_derived/checkpoints/unite_sh_taxonomy.csv         (from 0-3 / 0-4)
-#   data_derived/checkpoints/gf_global_ecm_sample_ids.csv  (from 2-6a — run that
-#                                                       script first if absent)
+#   data_derived/checkpoints/unite_sh_taxonomy.csv         (from 02_globalfungi.R)
+#   data_derived/checkpoints/gf_global_ecm_sample_ids.csv  (from
+#                                                       12_wallacean_density_map.R —
+#                                                       run that script first if absent)
 #
 # Note on Stage 2: this is a NEW, expensive pipeline stage. It is split out
 # from Stage 1 so that Table S1 can render with the cheap comparator numbers
@@ -87,7 +89,7 @@ identify_ecm_columns <- function() {
 }
 
 # A second helper: the quality-filtered global sample_ID set, using the same
-# filters as 02_globalfungi.R / 2-6a.
+# filters as 02_globalfungi.R / 12_wallacean_density_map.R.
 quality_filtered_sample_ids <- function() {
   gf_meta <- data.table::fread(
     paths$gf_metadata, sep = "\t", quote = "",
@@ -112,14 +114,9 @@ quality_filtered_sample_ids <- function() {
 # STAGE 1: cheap header / taxonomy / metadata-based metrics
 # =============================================================================
 
-if (file.exists(out_cheap)) {
-  ts("Stage 1: gf_global_comparator_cheap.csv already exists — skipping.")
-} else {
-
-  ts("Stage 1: Computing cheap global GlobalFungi comparator metrics...")
+if (!(file.exists(out_cheap))) {
 
   ecm <- identify_ecm_columns()
-  ts(sprintf("  Global EcM SH codes detected in matrix: %d", length(ecm$ecm_cols_present)))
 
   ecm_tax <- dplyr::filter(ecm$unite_tax, sh_code %in% ecm$ecm_cols_present)
   n_ecm_sh_global    <- length(ecm$ecm_cols_present)
@@ -162,19 +159,13 @@ if (file.exists(out_cheap)) {
     )
   )
   readr::write_csv(out, out_cheap)
-  ts("  Saved gf_global_comparator_cheap.csv")
 }
 
 # =============================================================================
 # STAGE 2: expensive full-matrix scan (global EcM detection volume)
 # =============================================================================
 
-if (file.exists(out_volume)) {
-  ts("Stage 2: gf_global_comparator_volume.csv already exists — skipping.")
-} else {
-
-  ts("Stage 2: Scanning full abundance matrix for global EcM detection volume...")
-  ts("  (Streams ~13,000 EcM SH columns from ~13 GB with awk; expect several minutes.)")
+if (!(file.exists(out_volume))) {
 
   ecm  <- identify_ecm_columns()
   filt <- quality_filtered_sample_ids()
@@ -213,8 +204,6 @@ if (file.exists(out_volume)) {
   n_ecm_records_global      <- agg_vals[1]
   n_ecm_reads_global        <- agg_vals[2]
   n_samples_with_ecm_global <- agg_vals[3]
-  ts(sprintf("  EcM detection records: %.0f | total reads: %.0f | samples with EcM: %.0f",
-             n_ecm_records_global, n_ecm_reads_global, n_samples_with_ecm_global))
 
   out <- tibble::tibble(
     metric = c(
@@ -225,7 +214,5 @@ if (file.exists(out_volume)) {
     value = c(n_ecm_records_global, n_ecm_reads_global, n_samples_with_ecm_global)
   )
   readr::write_csv(out, out_volume)
-  ts("  Saved gf_global_comparator_volume.csv")
 }
 
-ts("13_wallacean_global_comparator.R complete.")

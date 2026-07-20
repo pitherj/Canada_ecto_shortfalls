@@ -3,7 +3,8 @@
 # =============================================================================
 # WHAT THIS DOES
 #   Sources scripts 01–21 in numeric order (which is the dependency order),
-#   printing a banner and elapsed time for each. Every script is checkpoint-
+#   timing each one and writing the run record to data_derived/run_log.csv
+#   (script, status, seconds, started). Every script is checkpoint-
 #   guarded to varying degrees, so re-running skips work whose output already
 #   exists; delete a specific output in data_derived/ or figures/ to force that
 #   step to recompute.
@@ -40,17 +41,11 @@ script_dir <- here::here("scripts")
 scripts <- sort(list.files(script_dir, pattern = "^[0-9]{2}_.*\\.R$"))
 # 00_setup.R is not an analysis step — it is sourced by each numbered script
 # itself, so exclude it from the run list (it would otherwise appear as a
-# no-op "[1/N]" step).
-scripts <- setdiff(scripts, "00_setup.R")
+# no-op "[1/N]" step). 99_verify_reproducibility.R is a stand-alone verification
+# tool, run manually before and after a pipeline run, not a pipeline step.
+scripts <- setdiff(scripts, c("00_setup.R", "99_verify_reproducibility.R"))
 
 if (SKIP_HEAVY) scripts <- setdiff(scripts, HEAVY_SCRIPTS)
-
-banner <- function(txt) {
-  cat("\n", strrep("=", 78), "\n", txt, "\n", strrep("=", 78), "\n", sep = "")
-}
-
-banner(sprintf("ECM_manuscript pipeline — %d scripts%s", length(scripts),
-               if (SKIP_HEAVY) " (heavy global-matrix steps skipped)" else ""))
 
 # ---- Run each script, timing and logging as we go ---------------------------
 # Bookkeeping variables use a ".ra_" prefix so a sourced script can't clobber
@@ -58,33 +53,34 @@ banner(sprintf("ECM_manuscript pipeline — %d scripts%s", length(scripts),
 # so the objects a script creates (paths, emf, results, i, ...) stay isolated
 # and never overwrite this runner's state. Scripts communicate through files in
 # data_derived/, not through shared in-memory objects, so isolation is safe.
+#
+# The log is rewritten after every script, so a halted run still leaves a
+# complete record of everything that ran up to the point of failure. Errors are
+# raised as warnings (and, under STOP_ON_ERROR, a stop()) so that an unattended
+# run still surfaces them on stderr.
+.ra_logfile <- here::here("data_derived", "run_log.csv")
+dir.create(dirname(.ra_logfile), showWarnings = FALSE, recursive = TRUE)
+
 .ra_log <- data.frame(script = scripts, status = NA_character_,
-                      seconds = NA_real_, stringsAsFactors = FALSE)
+                      seconds = NA_real_, started = NA_character_,
+                      stringsAsFactors = FALSE)
 
 for (.ra_i in seq_along(scripts)) {
-  .ra_s <- scripts[.ra_i]
-  banner(sprintf("[%d/%d] %s", .ra_i, length(scripts), .ra_s))
+  .ra_s  <- scripts[.ra_i]
   .ra_t0 <- Sys.time()
+  .ra_log$started[.ra_i] <- format(.ra_t0, "%Y-%m-%d %H:%M:%S")
   .ra_ok <- tryCatch({
     source(file.path(script_dir, .ra_s), local = new.env(parent = globalenv()))
     TRUE
   }, error = function(e) {
-    message(sprintf("  !! ERROR in %s: %s", .ra_s, conditionMessage(e)))
+    warning(sprintf("ERROR in %s: %s", .ra_s, conditionMessage(e)), call. = FALSE)
     FALSE
   })
   .ra_log$seconds[.ra_i] <- round(as.numeric(difftime(Sys.time(), .ra_t0, units = "secs")), 1)
   .ra_log$status[.ra_i]  <- if (.ra_ok) "ok" else "ERROR"
-  cat(sprintf("  -> %s in %.1f s\n", .ra_log$status[.ra_i], .ra_log$seconds[.ra_i]))
-  if (!.ra_ok && STOP_ON_ERROR) {
-    banner(sprintf("Stopped: %s failed. Fix it and re-run (completed steps are skipped).", .ra_s))
-    stop(sprintf("Pipeline halted at %s", .ra_s), call. = FALSE)
-  }
+  utils::write.csv(.ra_log, .ra_logfile, row.names = FALSE)
+  if (!.ra_ok && STOP_ON_ERROR)
+    stop(sprintf("Pipeline halted at %s - see %s", .ra_s, .ra_logfile), call. = FALSE)
 }
 
-# ---- Summary ----------------------------------------------------------------
-banner("Pipeline summary")
-print(.ra_log, row.names = FALSE)
-cat(sprintf("\nTotal: %.1f s across %d scripts (%d ok, %d error).\n",
-            sum(.ra_log$seconds, na.rm = TRUE), nrow(.ra_log),
-            sum(.ra_log$status == "ok"), sum(.ra_log$status == "ERROR")))
-cat("\nAll data_derived/ outputs and figures/ regenerated.\n")
+utils::write.csv(.ra_log, .ra_logfile, row.names = FALSE)

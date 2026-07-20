@@ -60,16 +60,12 @@ dir.create(biotime_dir, showWarnings = FALSE, recursive = TRUE)
 # Scan data_raw/biotime/ for any .rds file (catches user-downloaded files with
 # names differing from the default, e.g. biotime_v2_data_raw_2025.rds).
 
-ts("Step 1: Locating BioTIME RDS in data_raw/biotime/...")
 existing_rds <- list.files(biotime_dir, pattern = "\\.rds$",
                             full.names = TRUE, ignore.case = TRUE)
 
 if (length(existing_rds) > 0L) {
-  ts(sprintf("  Reading: %s", basename(existing_rds[1L])))
   biotime_data <- readRDS(existing_rds[1L])
-  ts(sprintf("  BioTIME records: %d", nrow(biotime_data)))
 } else {
-  ts("  No RDS found — downloading from BioTIME website...")
   dl <- tryCatch(
     httr::GET(
       BIOTIME_RDS_URL,
@@ -78,7 +74,7 @@ if (length(existing_rds) > 0L) {
       httr::config(timeout = 900)
     ),
     error = function(e) {
-      message("  Download failed: ", conditionMessage(e))
+      warning("  Download failed: ", conditionMessage(e))
       NULL
     }
   )
@@ -90,7 +86,6 @@ if (length(existing_rds) > 0L) {
     )
   }
   biotime_data <- readRDS(biotime_rds_path)
-  ts(sprintf("  BioTIME records: %d", nrow(biotime_data)))
 }
 
 # ---- Load or download BioTIME metadata CSV -----------------------------------
@@ -99,11 +94,8 @@ existing_csv <- list.files(biotime_dir, pattern = "\\.csv$",
                             full.names = TRUE, ignore.case = TRUE)
 
 if (length(existing_csv) > 0L) {
-  ts(sprintf("  Reading metadata: %s", basename(existing_csv[1L])))
   biotime_meta <- readr::read_csv(existing_csv[1L], show_col_types = FALSE)
-  ts(sprintf("  Metadata studies: %d", nrow(biotime_meta)))
 } else {
-  ts("  No metadata CSV found — downloading...")
   dl_meta <- tryCatch(
     httr::GET(
       BIOTIME_META_URL,
@@ -111,15 +103,13 @@ if (length(existing_csv) > 0L) {
       httr::config(timeout = 300)
     ),
     error = function(e) {
-      message("  Metadata download failed: ", conditionMessage(e))
+      warning("  Metadata download failed: ", conditionMessage(e))
       NULL
     }
   )
   if (!is.null(dl_meta) && !httr::http_error(dl_meta)) {
     biotime_meta <- readr::read_csv(biotime_csv_path, show_col_types = FALSE)
-    ts(sprintf("  Metadata studies: %d", nrow(biotime_meta)))
   } else {
-    ts("  Metadata not available — proceeding without study metadata.")
     biotime_meta <- NULL
   }
 }
@@ -132,8 +122,6 @@ if (!is.null(biotime_meta)) names(biotime_meta) <- tolower(names(biotime_meta))
 # Filter metadata to studies where both 'taxa' and 'organisms' contain "fungi".
 # This is the primary filter — more reliable than filtering the main data by a
 # taxon column, and avoids loading all non-fungal records into the analysis.
-
-ts("Step 2: Identifying fungi studies from BioTIME metadata...")
 
 if (is.null(biotime_meta)) {
   stop(
@@ -148,9 +136,6 @@ fungi_studies <- biotime_meta |>
     grepl("fungi", organisms, ignore.case = TRUE)
   )
 
-ts(sprintf("  BioTIME fungi studies (taxa + organisms both match): %d",
-           nrow(fungi_studies)))
-
 fungi_study_ids <- unique(fungi_studies$study_id)
 
 # Retain useful metadata columns for later output
@@ -164,14 +149,10 @@ fungi_study_meta <- dplyr::select(fungi_studies, dplyr::all_of(meta_cols))
 
 # ---- Step 3: Filter main BioTIME data to fungi studies ----------------------
 
-ts("Step 3: Filtering BioTIME records to fungi study IDs...")
-
 bt_fungi <- dplyr::filter(biotime_data, study_id %in% fungi_study_ids)
-ts(sprintf("  BioTIME records in fungi studies: %d", nrow(bt_fungi)))
 
 # Build valid_name from genus + species if column is absent
 if (!"valid_name" %in% names(bt_fungi)) {
-  ts("  'valid_name' column absent; constructing from genus + species.")
   bt_fungi <- bt_fungi |>
     dplyr::mutate(valid_name = dplyr::if_else(
       !is.na(genus) & !is.na(species),
@@ -185,12 +166,7 @@ bt_fungi_species <- bt_fungi |>
   dplyr::distinct(valid_name) |>
   dplyr::mutate(bt_genus = sub("^(\\S+).*", "\\1", valid_name))
 
-ts(sprintf("  Unique species names in BioTIME fungi studies: %d",
-           nrow(bt_fungi_species)))
-
 # ---- Step 4: Match against our Canadian EcM taxa ----------------------------
-
-ts("Step 4: Matching BioTIME species against our Canadian EcM taxa...")
 
 # UNITE species uses "Genus_epithet" format; convert to "Genus epithet"
 our_species <- emf |>
@@ -201,35 +177,25 @@ our_species <- emf |>
 
 our_genera <- unique(trimws(emf$genus))
 
-ts(sprintf("  Our EcM named species (UNITE): %d", length(our_species)))
-ts(sprintf("  Our EcM genera: %d",               length(our_genera)))
-
 # Exact species-level match
 bt_ecm_sp <- dplyr::filter(bt_fungi_species, valid_name %in% our_species)
 n_species_matched <- nrow(bt_ecm_sp)
-ts(sprintf("  BioTIME species matching our EcM species (exact): %d",
-           n_species_matched))
 
 # Genus-level match (catches species not named to our exact UNITE epithets)
 bt_ecm_gn <- dplyr::filter(bt_fungi_species, bt_genus %in% our_genera)
 n_genus_matched <- nrow(bt_ecm_gn)
-ts(sprintf("  BioTIME species in our EcM genera (genus-level): %d",
-           n_genus_matched))
 
 # All matched valid_names (union of both match levels)
 matched_names <- unique(c(bt_ecm_sp$valid_name, bt_ecm_gn$valid_name))
 
 bt_ecm_records <- dplyr::filter(bt_fungi, valid_name %in% matched_names)
 n_matched_records <- nrow(bt_ecm_records)
-ts(sprintf("  BioTIME records for matched EcM taxa: %d", n_matched_records))
 
 # ---- Step 5: Spatial-temporal assessment ------------------------------------
 # For each matched taxon, determine whether there are repeat observations at
 # the same location across multiple years. Group by (valid_name, latitude,
 # longitude) and count distinct years — locations with n_years > 1 represent
 # genuine time-series sampling.
-
-ts("Step 5: Assessing spatial-temporal coverage of matched records...")
 
 if (n_matched_records > 0) {
 
@@ -256,8 +222,6 @@ if (n_matched_records > 0) {
     dplyr::arrange(valid_name, dplyr::desc(n_years))
 
   n_locations_multiyear <- sum(location_timeseries$n_years > 1L, na.rm = TRUE)
-  ts(sprintf("  Location × taxon combinations with > 1 year of data: %d",
-             n_locations_multiyear))
 
   # Per-taxon summary across all locations
   taxon_summary <- bt_ecm_records |>
@@ -279,11 +243,8 @@ if (n_matched_records > 0) {
     ) |>
     dplyr::arrange(dplyr::desc(n_records))
 
-  ts("  Matched EcM taxa summary:")
-  print(as.data.frame(taxon_summary))
   readr::write_csv(taxon_summary,
                    file.path(paths$out_prestonian, "prestonian_taxon_summary.csv"))
-  ts("  Saved prestonian_taxon_summary.csv")
 
   # Attach study metadata to the EcM-matched studies
   study_ids_with_ecm <- unique(bt_ecm_records$study_id)
@@ -295,18 +256,14 @@ if (n_matched_records > 0) {
 
   readr::write_csv(bt_ecm_records,
                    file.path(paths$out_prestonian, "prestonian_biotime_matches.csv"))
-  ts("  Saved prestonian_biotime_matches.csv")
 
   readr::write_csv(location_timeseries,
                    file.path(paths$out_prestonian, "prestonian_location_timeseries.csv"))
-  ts("  Saved prestonian_location_timeseries.csv")
 
   readr::write_csv(study_meta_ecm,
                    file.path(paths$out_prestonian, "prestonian_study_metadata.csv"))
-  ts("  Saved prestonian_study_metadata.csv")
 
 } else {
-  ts("  No matching BioTIME records found for our EcM taxa.")
   study_ids_with_ecm  <- character(0L)
   n_studies_with_ecm  <- 0L
   n_repeat_taxa       <- 0L
@@ -362,6 +319,3 @@ prestonian_summary <- tibble::tibble(
 
 readr::write_csv(prestonian_summary,
                  file.path(paths$out_prestonian, "prestonian_summary.csv"))
-ts("Saved prestonian_summary.csv")
-print(as.data.frame(prestonian_summary))
-ts("14_prestonian.R complete.")

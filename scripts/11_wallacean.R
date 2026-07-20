@@ -16,9 +16,9 @@
 #                 (sh_code, genus, species, lat, lon) so co-located records
 #                 from both sources are counted once
 #
-# The geographic sampling map is produced by 17_hutchinsonian.R
-# (hutchinsonian_sampling_map.png) and 2-7_sampling_maps.R
-# (sampling_map_gbif.png); it is not duplicated here.
+# The geographic sampling maps are produced by 17_hutchinsonian.R
+# (Figure-S4_ecozone_sampling_map.png) and 19_sampling_maps.R
+# (Figure-S5_gbif_specimens.png); they are not duplicated here.
 #
 # Outputs (data_derived/wallacean/):
 #   wallacean_location_summary.csv     — unique location counts (3 datasets)
@@ -29,11 +29,10 @@
 #   wallacean_global_gf_locs_per_species.csv — global GF grid-cell occupancy per
 #                                       named species (30 arc-second cells), for
 #                                       the GlobalFungi-only occupancy analyses
-#                                       in EMF_shortfalls_SI.Rmd §S3 (Figure M,
-#                                       Table NN, Figure YY)
+#                                       (Figure 2 and Table 3 of the manuscript)
 #   wallacean_global_gf_locs_per_sh.csv — global GF grid-cell occupancy per SH
 #                                       code (named + unnamed), for the same
-#                                       §S3 analyses.
+#                                       analyses.
 #
 #   Both global-occupancy files are produced by a single Step 5, which reads
 #   the full ~13 GB global SH abundance matrix once (not the smaller species
@@ -48,8 +47,6 @@ source(here::here("scripts", "00_setup.R"))
 
 # ---- 0. Build three analysis datasets ---------------------------------------
 
-ts("Building analysis datasets...")
-
 gf <- dplyr::filter(emf, source == "GlobalFungi", coord_in_canada == TRUE)
 
 # GenBank: same filter — coord_in_canada == TRUE ensures coordinates were
@@ -61,23 +58,12 @@ combined <- dplyr::bind_rows(
   dplyr::select(gb_geo, sh_code, genus, species, lat, lon)
 ) |> dplyr::distinct()
 
-n_gf_no_coords <- sum(emf$source == "GlobalFungi" & is.na(emf$lat))
 n_gb_total     <- sum(emf$source == "GenBank")
-n_gb_no_coords <- sum(emf$source == "GenBank" & (is.na(emf$lat) | is.na(emf$lon)))
-
-ts(sprintf("  GlobalFungi records w/ coords:  %d", nrow(gf)))
-ts(sprintf("  GlobalFungi records w/o coords: %d (excluded)", n_gf_no_coords))
-ts(sprintf("  GenBank records w/ coords: %d / %d (%.1f%%)",
-           nrow(gb_geo), n_gb_total, 100 * nrow(gb_geo) / n_gb_total))
-ts(sprintf("  GenBank records w/o coords:     %d (excluded)", n_gb_no_coords))
-ts(sprintf("  Combined (deduplicated rows):   %d", nrow(combined)))
 
 datasets      <- list(GlobalFungi = gf, GenBank = gb_geo, Combined = combined)
 dataset_names <- names(datasets)
 
 # ---- 1. Unique sampling locations -------------------------------------------
-
-ts("Counting unique sampling locations per dataset...")
 
 location_summary <- dplyr::bind_rows(lapply(dataset_names, function(nm) {
   d <- datasets[[nm]]
@@ -90,11 +76,8 @@ location_summary <- dplyr::bind_rows(lapply(dataset_names, function(nm) {
 
 readr::write_csv(location_summary,
                  file.path(paths$out_wallacean, "wallacean_location_summary.csv"))
-ts("  Saved wallacean_location_summary.csv")
 
 # ---- 2. Locations per taxon -------------------------------------------------
-
-ts("Calculating locations per taxon across three datasets...")
 
 # Helper: distinct (taxon, lat, lon) → count of unique locations per taxon
 count_locs_per_taxon <- function(df, taxon_col) {
@@ -130,8 +113,6 @@ for (nm in dataset_names) {
   sp <- count_locs_per_taxon(
     dplyr::filter(d, !is.na(species), !grepl("_sp$", species)), "species"
   )
-  ts(sprintf("  %-12s — SH: %d  Genera: %d  Species: %d",
-             nm, nrow(sh), nrow(gn), nrow(sp)))
 
   all_sh[[nm]]    <- dplyr::mutate(sh, dataset = nm)
   all_genus[[nm]] <- dplyr::mutate(gn, dataset = nm)
@@ -159,41 +140,17 @@ readr::write_csv(locs_species,
                  file.path(paths$out_wallacean, "wallacean_locs_per_species.csv"))
 readr::write_csv(sampling_intensity,
                  file.path(paths$out_wallacean, "wallacean_sampling_intensity.csv"))
-ts("  Saved wallacean_locs_per_*.csv and wallacean_sampling_intensity.csv")
-
-# NOTE: Per-taxon locations-per-taxon histograms (formerly Sections 3 and 4,
-# producing figures/wallacean_histograms.png and
-# figures/wallacean_histograms_combined.png) have been removed. The streamlined
-# Wallacean section of EMF_shortfalls_SI.Rmd (§S3) builds its own GlobalFungi-
-# only, grid-cell-based occupancy figures (Figure M, Figure YY) directly from
-# the CSVs above and from the global-occupancy files written in Step 5 below.
 
 # ---- 5. Global GF locations per Canadian SH code and named species ----------
 #
-# Former design (pre-2026-06-28): two separate steps. Step 5 matched named
-# species by STRING NAME against GlobalFungi's own bundled species-level
-# abundance matrix (`GlobalFungi_5_species_abundance_ITS1_ITS2.txt`) — i.e.
-# GlobalFungi's internal SH-to-taxonomy pipeline, not a join through our
-# pinned UNITE build. Step 6 matched SH codes EXACTLY by code against the
-# SH-level matrix, going through our own UNITE lookup as everywhere else in
-# this pipeline does.
+# The named-species -> SH-code crosswalk is derived from our own pinned UNITE
+# lookup table (`paths$unite_taxonomy`, Step 5b), not from GlobalFungi's
+# bundled species columns, so that GlobalFungi and GenBank SH codes are
+# interpreted against an identical reference — the same invariant every other
+# taxonomy join in this pipeline relies on (see the SH-build-mismatch
+# discussion in 02_globalfungi.R).
 #
-# That split was an inconsistency: every other taxonomy join in this pipeline
-# (0-3, 0-4, and Step 5's own SH-code population below) decodes through our
-# pinned UNITE build (`paths$unite_taxonomy`) specifically so that GlobalFungi
-# and GenBank SH codes are interpreted against an identical reference — see
-# the SH-build-mismatch discussion in 02_globalfungi.R. Trusting
-# GlobalFungi's bundled species names instead breaks that invariant. An
-# empirical check (2026-06-28) found 98.6% name agreement with GlobalFungi's
-# species columns and no detectable build-mismatch signature in the residual
-# — but there was no validation gate, so a future GlobalFungi release built
-# against a different UNITE version could silently degrade the species-level
-# output (more species falsely scored as zero global locations) without
-# raising an error.
-#
-# Fix: derive the named-species -> SH-code crosswalk from our own UNITE
-# lookup table (Step 5b) instead of from GlobalFungi's species columns, then
-# query the SH-level matrix ONCE (Step 5c) for the union of:
+# The SH-level matrix is then queried ONCE (Step 5c) for the union of:
 #   (a) Canadian SH codes (Step 5a) — at least one georeferenced Canadian
 #       record (combined GlobalFungi + GenBank); an SH code with none can
 #       never contribute a non-zero count to a Canada-side location tally.
@@ -201,14 +158,10 @@ ts("  Saved wallacean_locs_per_*.csv and wallacean_sampling_intensity.csv")
 #       UNITE epithet (Step 5b) — NOT restricted to SH codes actually
 #       detected in Canada, because a species' global range can include
 #       SH-code variants we never sampled here; restricting to Canada-
-#       detected codes would understate global occupancy relative to the
-#       former GlobalFungi-species-table approach, which pooled across all
-#       of a species' SH-code variants worldwide.
-# This also removes the need for a second, separate read of the ~3.8 GB
-# species matrix — both outputs now come from one pass over the ~13 GB
-# SH-level matrix.
+#       detected codes would understate global occupancy.
+# Both outputs come from a single pass over the ~13 GB SH-level matrix.
 #
-# Outputs (names/columns unchanged from the former two-step design):
+# Outputs:
 #   data_derived/wallacean/wallacean_global_gf_locs_per_species.csv
 #     species       — UNITE species epithet (underscores, matching emf$species)
 #     n_locs_global — distinct 30 arc-second grid cells (~1 km²) globally,
@@ -236,8 +189,6 @@ out_global_gf_sh <- file.path(paths$out_wallacean,
 if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
     !file.exists(out_global_gf_sh) || file.size(out_global_gf_sh) == 0L) {
 
-  ts("Step 5: Counting global GF locations per Canadian SH code and named species...")
-
   # -- 5a. Per-SH-code population: Canadian SH codes (named + unnamed) with
   # >= 1 georeferenced Canadian record. See the header comment above for why
   # this population is restricted to coord_in_canada == TRUE.
@@ -245,49 +196,32 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
     dplyr::filter(!is.na(sh_code), coord_in_canada == TRUE) |>
     dplyr::distinct(sh_code) |>
     dplyr::pull(sh_code)
-  ts(sprintf("  %d Canadian SH codes (per-SH population)", length(canada_sh)))
 
   # -- 5b. Per-species crosswalk: every named Canadian species mapped to ALL
   # globally-known SH codes carrying that UNITE species epithet, read from
-  # our own UNITE lookup (built in 0-3 Step 1) rather than from GlobalFungi's
+  # our own UNITE lookup (built in 02_globalfungi.R Step 1) rather than from GlobalFungi's
   # bundled species table. sh_code is unique per row in this lookup (one
   # representative sequence per SH), so this is a clean many-to-one join key.
   named_species <- emf |>
     dplyr::filter(!is.na(species), !grepl("_sp$", species)) |>
     dplyr::distinct(species) |>
     dplyr::pull(species)
-  ts(sprintf("  %d named Canadian species (per-species population)",
-             length(named_species)))
 
   unite_lookup <- readr::read_csv(paths$unite_taxonomy, show_col_types = FALSE)
   species_sh_xwalk <- unite_lookup |>
     dplyr::filter(species %in% named_species) |>
     dplyr::distinct(species, sh_code)
-  ts(sprintf("  %d named species resolved to %d global SH codes via UNITE lookup",
-             dplyr::n_distinct(species_sh_xwalk$species),
-             dplyr::n_distinct(species_sh_xwalk$sh_code)))
-
-  species_not_in_unite <- setdiff(named_species, species_sh_xwalk$species)
-  if (length(species_not_in_unite) > 0L) {
-    ts(sprintf("  WARNING: %d named species not found in UNITE lookup (will be zero-filled below):",
-               length(species_not_in_unite)))
-    for (sp in species_not_in_unite) ts(sprintf("    - %s", sp))
-  }
 
   # -- 5c. Single column-selective read of the global SH abundance matrix ----
   target_sh <- union(canada_sh, species_sh_xwalk$sh_code)
 
-  ts("  Reading GF SH abundance matrix header...")
   sh_header <- data.table::fread(
     paths$gf_sh_abundance, nrows = 0L, sep = "\t"
   )
   gf_sh_col_names <- names(sh_header)
-  ts(sprintf("  GF SH matrix: %d SH-code columns", length(gf_sh_col_names) - 1L))
 
   matched_sh   <- intersect(target_sh, gf_sh_col_names)
   unmatched_sh <- setdiff(target_sh, gf_sh_col_names)
-  ts(sprintf("  Matched: %d / %d target SH codes (unmatched, zero-filled below: %d)",
-             length(matched_sh), length(target_sh), length(unmatched_sh)))
 
   if (length(matched_sh) == 0L) {
     stop("No SH codes matched GF SH matrix column names — check sh_code formatting.")
@@ -295,12 +229,9 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
 
   # Read only the relevant columns from the ~13 GB SH abundance matrix, via the
   # awk-streaming helper in 00_setup.R (avoids fread()'s 2^31-byte string limit).
-  ts("  Extracting matched columns from GF SH abundance matrix (long-running)...")
   sh_mat <- read_big_tsv_subset(paths$gf_sh_abundance, c("sample_ID", matched_sh))
-  ts(sprintf("  Read %d samples x %d SH codes", nrow(sh_mat), length(matched_sh)))
 
   # Pivot to long; keep only presence rows.
-  ts("  Pivoting to long format and filtering to presence...")
   sh_long <- data.table::melt(
     sh_mat,
     id.vars         = "sample_ID",
@@ -309,10 +240,8 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
     variable.factor = FALSE
   )
   sh_long <- sh_long[abundance > 0L, .(sample_ID, sh_code)]
-  ts(sprintf("  %d sample x SH-code presence records", nrow(sh_long)))
 
   # Load GF metadata; apply the same quality filters used throughout.
-  ts("  Loading GF metadata and applying quality filters...")
   gf_meta_all <- data.table::fread(
     paths$gf_metadata,
     sep    = "\t",
@@ -325,22 +254,19 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
     !sample_type %in% c("shoot", "air", "water", "sediment") &
     !is.na(latitude) & !is.na(longitude)
   ]
-  ts(sprintf("  %d / %d global samples pass quality filters and have coordinates",
-             nrow(gf_meta_filt), nrow(gf_meta_all)))
 
   # Join presence records to filtered metadata.
   sh_geo <- merge(
     sh_long, gf_meta_filt[, .(sample_ID, latitude, longitude)],
     by = "sample_ID", all = FALSE
   )
-  ts(sprintf("  %d presence records after metadata join", nrow(sh_geo)))
 
   # 30 arc-second grid cell key (~1 km²), via the shared snap_30arcsec()
   # helper from 00_setup.R — consistent with the grid used in the SI Rmd's
   # SDM sufficiency tables.
   sh_geo[, grid_key := paste(snap_30arcsec(latitude), snap_30arcsec(longitude))]
 
-  # -- 5d. Per-SH-code output (former Step 6) ---------------------------------
+  # -- 5d. Per-SH-code output -------------------------------------------------
   global_locs_sh <- sh_geo[
     sh_code %in% canada_sh,
     .(n_locs_global = data.table::uniqueN(grid_key)),
@@ -357,16 +283,9 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
   global_locs_sh_full <- dplyr::bind_rows(as.data.frame(global_locs_sh), zero_sh) |>
     dplyr::arrange(dplyr::desc(n_locs_global))
 
-  ts(sprintf("  SH codes with >= 1 global location: %d",
-             sum(global_locs_sh_full$n_locs_global >= 1L)))
-  ts(sprintf("  SH codes with >= 30 global locations: %d",
-             sum(global_locs_sh_full$n_locs_global >= 30L)))
-
   readr::write_csv(global_locs_sh_full, out_global_gf_sh)
-  ts(sprintf("  Saved -> wallacean/wallacean_global_gf_locs_per_sh.csv (%d rows)",
-             nrow(global_locs_sh_full)))
 
-  # -- 5e. Per-species output (former Step 5) ---------------------------------
+  # -- 5e. Per-species output -------------------------------------------------
   # Attach species labels via the crosswalk BEFORE de-duplicating grid cells,
   # so that two different SH-code variants of the same species detected at
   # the same physical location count as one location, not two. sh_code is
@@ -389,25 +308,8 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
   global_locs_sp_full <- dplyr::bind_rows(as.data.frame(global_locs_sp), zero_sp) |>
     dplyr::arrange(dplyr::desc(n_locs_global))
 
-  ts(sprintf("  Species with >= 1 global location: %d",
-             sum(global_locs_sp_full$n_locs_global >= 1L)))
-  ts(sprintf("  Species with >= 30 global locations: %d",
-             sum(global_locs_sp_full$n_locs_global >= 30L)))
-
   readr::write_csv(global_locs_sp_full, out_global_gf_sp)
-  ts(sprintf("  Saved -> wallacean/wallacean_global_gf_locs_per_species.csv (%d rows)",
-             nrow(global_locs_sp_full)))
 
-} else {
-  ts("Step 5: Global GF location files already exist — skipping.")
-  n_ge30_sh <- sum(
-    readr::read_csv(out_global_gf_sh, show_col_types = FALSE)$n_locs_global >= 30L
-  )
-  n_ge30_sp <- sum(
-    readr::read_csv(out_global_gf_sp, show_col_types = FALSE)$n_locs_global >= 30L
-  )
-  ts(sprintf("  SH codes with >= 30 global GF locations: %d", n_ge30_sh))
-  ts(sprintf("  Species with >= 30 global GF locations: %d", n_ge30_sp))
 }
 
 # =============================================================================
@@ -420,7 +322,6 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
 if (!file.exists(paths$fig_wallacean_occ) &&
     file.exists(out_global_gf_sp) && file.exists(out_global_gf_sh)) {
 
-  ts("Figure 2: building occupancy histograms...")
   library(patchwork)   # provides the | and / plot-composition operators
 
   # Canada-scope occupancy: distinct 30 arc-second cells per taxon
@@ -466,9 +367,5 @@ if (!file.exists(paths$fig_wallacean_occ) &&
            make_occ_hist(occ_sh$n_global, xlab_glob, "Number of SH codes", "(d) SH codes — global"))
 
   save_fig_formats(paths$fig_wallacean_occ, fig2, width = 11, height = 8, dpi = 300)
-  ts(sprintf("  Saved %s", basename(paths$fig_wallacean_occ)))
-} else {
-  ts("Figure 2: skipping (already exists, or global occupancy CSVs not yet built).")
 }
 
-ts("11_wallacean.R complete.")

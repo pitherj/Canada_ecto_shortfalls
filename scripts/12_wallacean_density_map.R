@@ -66,12 +66,9 @@ CELL_M <- 100000L   # 100 km in metres (both projections use metres)
 # Skip the expensive Step 2 (reading 13 GB file) if the checkpoint already
 # exists. Both steps are guarded independently.
 
-ts("Step 1: Identifying EcM SH codes from UNITE taxonomy × FungalTraits...")
-
 # 1a. Load UNITE SH taxonomy
 # Columns: sh_code, kingdom, phylum, class, order, family, genus, species
 unite_tax <- readr::read_csv(paths$unite_taxonomy, show_col_types = FALSE)
-ts(sprintf("  UNITE taxonomy: %d SH codes", nrow(unite_tax)))
 
 # 1b. Load FungalTraits; keep only the genus and primary_lifestyle columns
 ft <- data.table::fread(
@@ -80,11 +77,9 @@ ft <- data.table::fread(
 )
 # Normalise genus name to lowercase for case-insensitive matching
 ft[, genus_lower := tolower(GENUS)]
-ts(sprintf("  FungalTraits: %d genera", nrow(ft)))
 
 # 1c. Flag EcM genera
 ecm_genera_lower <- ft[primary_lifestyle == "ectomycorrhizal", tolower(GENUS)]
-ts(sprintf("  EcM genera in FungalTraits: %d", length(ecm_genera_lower)))
 
 # 1d. Cross-reference: which UNITE SH codes belong to EcM genera?
 #     The genus column in unite_sh_taxonomy.csv stores the genus as extracted
@@ -100,8 +95,6 @@ ecm_sh_codes <- unite_tax |>
   dplyr::pull(sh_code) |>
   unique()
 
-ts(sprintf("  EcM SH codes in UNITE taxonomy: %d", length(ecm_sh_codes)))
-
 if (length(ecm_sh_codes) == 0L) {
   stop(
     "No EcM SH codes identified. ",
@@ -116,41 +109,28 @@ if (length(ecm_sh_codes) == 0L) {
 
 if (file.exists(out_sample_ids)) {
 
-  ts("Step 2: EcM sample ID checkpoint exists — loading...")
   ecm_samples <- readr::read_csv(out_sample_ids, show_col_types = FALSE)
-  ts(sprintf("  Loaded %d EcM samples with valid coordinates", nrow(ecm_samples)))
 
 } else {
-
-  ts("Step 2: Reading EcM SH columns from GlobalFungi abundance matrix...")
-  ts("  (This reads selected columns from ~13 GB; expect 5–15 minutes.)")
 
   # 2a. Read the file header to find which of our EcM SH codes are present
   #     as columns in the abundance matrix. This avoids requesting columns
   #     that don't exist, which would cause fread() to error.
-  ts("  Reading matrix header to confirm column names...")
   gf_header_cols <- names(
     data.table::fread(paths$gf_sh_abundance, sep = "\t", quote = "", nrows = 0L)
   )
-  ts(sprintf("  Abundance matrix columns (including sample_ID): %d",
-             length(gf_header_cols)))
 
   # The first column is sample_ID; the rest are SH codes.
   # Match our EcM SH codes against the matrix columns (exact match first).
   ecm_cols_present <- intersect(ecm_sh_codes, gf_header_cols)
-  ts(sprintf("  EcM SH codes with exact column match: %d / %d",
-             length(ecm_cols_present), length(ecm_sh_codes)))
 
   # If exact matches are few, try prefix matching (strips UNITE version suffix,
   # e.g., "SH1052460.10FU" → "SH1052460") — handles version mismatches.
   if (length(ecm_cols_present) < 0.1 * length(ecm_sh_codes)) {
-    ts("  Fewer than 10% of EcM SH codes matched exactly. Trying prefix matching...")
     ecm_prefix   <- sub("\\.[0-9]+FU$", "", ecm_sh_codes)
     col_prefix   <- sub("\\.[0-9]+FU$", "", gf_header_cols)
     matched_idx  <- match(ecm_prefix, col_prefix)
     ecm_cols_present <- gf_header_cols[matched_idx[!is.na(matched_idx)]]
-    ts(sprintf("  EcM SH codes matched after prefix stripping: %d / %d",
-               length(ecm_cols_present), length(ecm_sh_codes)))
   }
 
   if (length(ecm_cols_present) == 0L) {
@@ -167,8 +147,6 @@ if (file.exists(out_sample_ids)) {
   #        presence test, so we stream the matrix once through awk: for each
   #        sample row, print sample_ID if ANY EcM column has a read count > 0.
   #        The result is just a short list of sample IDs.
-  ts(sprintf("  Scanning %d EcM SH columns across the matrix with awk (streaming)...",
-             length(ecm_cols_present)))
   scol    <- match("sample_ID", gf_header_cols)          # sample_ID column position
   ecm_idx <- match(ecm_cols_present, gf_header_cols)      # EcM column positions
   ids_tmp <- tempfile(fileext = ".txt")
@@ -186,10 +164,8 @@ if (file.exists(out_sample_ids)) {
     stop("awk EcM-detection scan of the GF SH abundance matrix failed.")
   ecm_sample_ids <- readLines(ids_tmp)
   unlink(ids_tmp)
-  ts(sprintf("  Samples with >= 1 EcM SH present: %d", length(ecm_sample_ids)))
 
   # 2d. Load sample metadata; apply quality filters; retain only EcM samples
-  ts("  Reading GlobalFungi sample metadata for coordinate extraction...")
   gf_meta <- data.table::fread(
     paths$gf_metadata,
     sep    = "\t",
@@ -197,7 +173,6 @@ if (file.exists(out_sample_ids)) {
     select = c("sample_ID", "latitude", "longitude",
                "barcoding_region", "manipulated", "sample_type")
   )
-  ts(sprintf("  Total GF samples in metadata: %d", nrow(gf_meta)))
 
   # Apply the same quality filters as the Canadian pipeline (02_globalfungi.R)
   gf_meta_filt <- gf_meta[
@@ -208,25 +183,19 @@ if (file.exists(out_sample_ids)) {
     latitude  >= -90  & latitude  <= 90 &
     longitude >= -180 & longitude <= 180
   ]
-  ts(sprintf("  Samples passing quality filters: %d", nrow(gf_meta_filt)))
 
   # Retain only EcM-confirmed samples
   ecm_samples <- gf_meta_filt[sample_ID %in% ecm_sample_ids,
                                .(sample_ID, latitude, longitude)]
-  ts(sprintf("  EcM samples with valid coordinates after filtering: %d",
-             nrow(ecm_samples)))
 
   # Save checkpoint
   readr::write_csv(as.data.frame(ecm_samples), out_sample_ids)
-  ts(sprintf("  Checkpoint saved -> %s", basename(out_sample_ids)))
 
 }
 
 # =============================================================================
 # STEP 3: World sampling density map (Mollweide, 100 km grid)
 # =============================================================================
-
-ts("Step 3: Building world sampling density map...")
 
 if (!file.exists(out_fig_world)) {
 
@@ -251,7 +220,6 @@ if (!file.exists(out_fig_world)) {
     cellsize = CELL_M,
     what     = "polygons"
   ) |> sf::st_sf()
-  ts(sprintf("  World grid: %d cells", nrow(grid_world)))
 
   # 3c. Count samples per grid cell via spatial join.
   #     Assign a cell ID to the grid first, then join points → grid cells,
@@ -274,16 +242,12 @@ if (!file.exists(out_fig_world)) {
 
   # Keep only cells with at least 1 sample for plotting
   grid_filled_world <- dplyr::filter(grid_world, n_samples > 0L)
-  ts(sprintf("  Occupied cells: %d / %d (%.1f%%)",
-             nrow(grid_filled_world), nrow(grid_world),
-             100 * nrow(grid_filled_world) / nrow(grid_world)))
 
   # 3d. Land outline for background (low-resolution)
   land_world <- rnaturalearth::ne_countries(scale = "small", returnclass = "sf") |>
     sf::st_transform(crs_moll)
 
   # 3e. Plot
-  ts("  Plotting world density map...")
   p_world <- ggplot2::ggplot() +
     ggplot2::geom_sf(data  = land_world,
                      fill  = "grey85",
@@ -321,14 +285,10 @@ if (!file.exists(out_fig_world)) {
     p_world,
     width    = 14, height = 7, dpi = 300, units = "in"
   )
-  ts(sprintf("  Saved -> %s", basename(out_fig_world)))
 
-} else {
-  ts("Step 3: World map already exists — skipping.")
 }
 
 # The Canada-only sampling density map is not used in the manuscript, so it is
 # not produced here. This script's sole figure output is the global density map
 # (Figure S2) built in Step 3 above.
 
-ts("12_wallacean_density_map.R complete.")

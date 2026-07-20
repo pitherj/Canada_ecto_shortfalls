@@ -1,5 +1,5 @@
 # =============================================================================
-# Linnean Shortfall (Updated): Taxonomic Richness
+# Linnean Shortfall: Taxonomic Richness
 # =============================================================================
 # How many EcM fungal taxa are recorded in Canada, at each taxonomic level?
 # How does this compare to the global inventory of known EcM species and genera?
@@ -35,8 +35,6 @@ gbif_ckpt <- file.path(paths$temp_dir, "gbif_ecm_canada_raw.csv")
 
 # ---- Step 1: Taxonomic richness counts ---------------------------------------
 
-ts("Step 1: Counting unique taxa...")
-
 n_sh      <- dplyr::n_distinct(emf$sh_code, na.rm = TRUE)  # na.rm: genus-resolved GenBank rows carry sh_code = NA
 n_genus   <- dplyr::n_distinct(emf$genus)
 
@@ -47,11 +45,6 @@ n_species <- dplyr::n_distinct(
 n_lineage <- dplyr::n_distinct(
   emf$ectomycorrhiza_lineage[!is.na(emf$ectomycorrhiza_lineage)]
 )
-
-ts(sprintf("  Unique SH codes: %d", n_sh))
-ts(sprintf("  Unique genera:   %d", n_genus))
-ts(sprintf("  Unique species:  %d", n_species))
-ts(sprintf("  Unique EcM lineages: %d", n_lineage))
 
 # Coordinate-filtered equivalents (records validated within the Canada boundary)
 emf_coords <- dplyr::filter(emf, coord_in_canada == TRUE)
@@ -66,14 +59,7 @@ n_species_coords     <- dplyr::n_distinct(
   emf_coords$species[!is.na(emf_coords$species) & !grepl("_sp$", emf_coords$species)]
 )
 
-ts(sprintf("  Unique SH codes (with coords):         %d", n_sh_coords))
-ts(sprintf("  Named-species SH codes (with coords):  %d", n_named_sh_coords))
-ts(sprintf("  Unique genera (with coords):           %d", n_genus_coords))
-ts(sprintf("  Unique species (with coords):          %d", n_species_coords))
-
 # ---- Step 2: GlobalFungi singleton SH codes ----------------------------------
-
-ts("Step 2: Identifying GlobalFungi singleton SH codes (total abundance = 1)...")
 
 gf_all <- dplyr::filter(emf, source == "GlobalFungi")
 
@@ -88,12 +74,7 @@ n_sh_gf_total    <- dplyr::n_distinct(gf_all$sh_code, na.rm = TRUE)
 n_sh_nonsing     <- n_sh_gf_total - n_sh_singletons
 pct_singletons   <- round(100 * n_sh_singletons / n_sh_gf_total, 1)
 
-ts(sprintf("  GlobalFungi SH codes: %d total | %d singletons (%.1f%%) | %d non-singleton",
-           n_sh_gf_total, n_sh_singletons, pct_singletons, n_sh_nonsing))
-
 # ---- Step 3: Compare observed genera to global EcM inventory ----------------
-
-ts("Step 3: Loading FungalTraits for global EcM genus inventory...")
 
 ft <- readr::read_csv(paths$fungaltraits, show_col_types = FALSE) |>
   dplyr::rename_with(tolower)
@@ -104,7 +85,6 @@ global_ecm_genera <- ft |>
   dplyr::distinct(genus_lower, .keep_all = TRUE)
 
 n_global_ecm_genera <- nrow(global_ecm_genera)
-ts(sprintf("  Known EcM genera globally (FungalTraits): %d", n_global_ecm_genera))
 
 our_genera_lower <- tolower(trimws(unique(emf$genus)))
 
@@ -117,25 +97,14 @@ genus_coverage <- global_ecm_genera |>
 n_observed_genera   <- sum(genus_coverage$observed_in_canada)
 pct_observed_genera <- round(100 * n_observed_genera / n_global_ecm_genera, 1)
 
-ts(sprintf("  EcM genera observed in Canada: %d (%.1f%% of global EcM genera)",
-           n_observed_genera, pct_observed_genera))
-
 our_genera_not_in_ft <- our_genera_lower[
   !our_genera_lower %in% global_ecm_genera$genus_lower
 ]
-ts(sprintf("  Our genera absent from FungalTraits EcM list: %d",
-           length(our_genera_not_in_ft)))
-if (length(our_genera_not_in_ft) > 0) {
-  ts(sprintf("    Examples: %s", paste(head(our_genera_not_in_ft, 5), collapse = ", ")))
-}
 
 readr::write_csv(genus_coverage,
                  file.path(paths$out_linnean, "linnean_genus_coverage.csv"))
-ts("  Saved linnean_genus_coverage.csv")
 
 # ---- Step 4: Species-level assignment rates by source -----------------------
-
-ts("Step 4: Calculating species-level assignment rates by source...")
 
 # --- 4a. GlobalFungi: proportion of SH codes with species-level UNITE name ---
 # A SH code has a species-level name when the 'species' field does NOT end in
@@ -152,28 +121,16 @@ n_gf_sh_with_sp  <- sum(gf_species_rate$has_species)
 n_gf_sh_total    <- nrow(gf_species_rate)
 pct_gf_sp        <- round(100 * n_gf_sh_with_sp / n_gf_sh_total, 1)
 
-ts(sprintf("  GlobalFungi SH codes with species-level name: %d / %d (%.1f%%)",
-           n_gf_sh_with_sp, n_gf_sh_total, pct_gf_sp))
-
 # --- 4b. GenBank: total EcM sequence records ---------------------------------
 # Every retained GenBank record cleared the 98.5% vsearch identity threshold by
 # construction (see 03_genbank.R), so no additional identity filter is applied
-# here — we simply report the total record count. (A former >= 97% "species-level
-# cutoff" filter was removed: it was a no-op given the 98.5% assignment rule, and
-# 97% is not a threshold used anywhere in this pipeline.) The `identity` column
+# here — we simply report the total record count. The `identity` column
 # (vsearch alignment identity) is summarised below for reference only.
 
 gb_all <- dplyr::filter(emf, source == "GenBank")
 n_gb_total <- nrow(gb_all)
 
-ts(sprintf("  GenBank EcM sequence records: %d", n_gb_total))
-
 # Distribution of identity values (summary)
-if (any(!is.na(gb_all$identity))) {
-  id_summary <- summary(gb_all$identity[!is.na(gb_all$identity)])
-  ts(sprintf("  GenBank identity range: %.1f – %.1f%% (median %.1f%%)",
-             id_summary["Min."], id_summary["Max."], id_summary["Median"]))
-}
 
 # GenBank SH codes with species-level UNITE name (analogous to GlobalFungi metric)
 gb_sh_total      <- dplyr::n_distinct(gb_all$sh_code, na.rm = TRUE)
@@ -182,10 +139,6 @@ gb_sh_with_sp    <- gb_all |>
   dplyr::filter(!is.na(species), !grepl("_sp$", species, ignore.case = TRUE)) |>
   nrow()
 pct_gb_sh_sp <- round(100 * gb_sh_with_sp / gb_sh_total, 1)
-
-ts(sprintf("  GenBank SH codes (all): %d", gb_sh_total))
-ts(sprintf("  GenBank SH codes with species-level UNITE name: %d / %d (%.1f%%)",
-           gb_sh_with_sp, gb_sh_total, pct_gb_sh_sp))
 
 # --- 4b.5 Overlap of ALL SH codes (named + unnamed) between GF and GenBank ----
 # Used to compute the dark fraction for source-exclusive and shared subsets
@@ -197,9 +150,6 @@ gb_all_sh <- unique(gb_all$sh_code[!is.na(gb_all$sh_code)])
 n_sh_all_shared  <- length(intersect(gf_all_sh, gb_all_sh))
 n_sh_all_gf_only <- length(setdiff(gf_all_sh, gb_all_sh))
 n_sh_all_gb_only <- length(setdiff(gb_all_sh, gf_all_sh))
-
-ts(sprintf("  All SH codes: shared: %d | GF only: %d | GB only: %d",
-           n_sh_all_shared, n_sh_all_gf_only, n_sh_all_gb_only))
 
 # --- 4c. Overlap of named-species SH codes between GlobalFungi and GenBank ----
 gf_sp_sh <- gf_all |>
@@ -219,9 +169,6 @@ n_sp_sh_gf_only <- length(setdiff(gf_sp_sh, gb_sp_sh))
 n_sp_sh_gb_only <- length(setdiff(gb_sp_sh, gf_sp_sh))
 n_sp_sh_total   <- n_sp_sh_shared + n_sp_sh_gf_only + n_sp_sh_gb_only
 
-ts(sprintf("  Named-species SH codes: %d total | shared: %d | GF only: %d | GB only: %d",
-           n_sp_sh_total, n_sp_sh_shared, n_sp_sh_gf_only, n_sp_sh_gb_only))
-
 # --- 4d. Overlap of unique named species (epithet-level) between GF and GenBank ----
 # Unique named species are the distinct UNITE species epithets carried by the
 # named-species SH codes above. Multiple SH codes can share an epithet (see
@@ -240,11 +187,6 @@ gb_sp_names <- gb_all |>
 n_sp_shared   <- length(intersect(gf_sp_names, gb_sp_names))
 n_sp_gf_only  <- length(setdiff(gf_sp_names, gb_sp_names))
 n_sp_gb_only  <- length(setdiff(gb_sp_names, gf_sp_names))
-n_sp_total    <- n_sp_shared + n_sp_gf_only + n_sp_gb_only
-
-ts(sprintf("  Unique named species: %d total | shared: %d | GF only: %d | GB only: %d",
-           n_sp_total, n_sp_shared, n_sp_gf_only, n_sp_gb_only))
-
 
 # ---- Step 6: GBIF physical specimen records ----------------------------------
 # Query GBIF for preserved/living fungal specimens in Canada, then filter to
@@ -255,7 +197,6 @@ ts(sprintf("  Unique named species: %d total | shared: %d | GF only: %d | GB onl
 # Set these with usethis::edit_r_environ() or Sys.setenv().
 
 if (file.exists(gbif_ckpt)) {
-  ts("Step 5: Loading checkpointed GBIF specimen records...")
   gbif_raw <- readr::read_csv(
     gbif_ckpt,
     show_col_types = FALSE,
@@ -265,7 +206,6 @@ if (file.exists(gbif_ckpt)) {
       .default         = readr::col_character()
     )
   )
-  ts(sprintf("  Records loaded from checkpoint: %d", nrow(gbif_raw)))
 
 } else if (length(list.files(here::here("data_raw", "gbif"), pattern = "\\.zip$")) > 0) {
 
@@ -276,13 +216,9 @@ if (file.exists(gbif_ckpt)) {
   gbif_zip_dir  <- here::here("data_raw", "gbif")
   gbif_zip_file <- list.files(gbif_zip_dir, pattern = "\\.zip$", full.names = TRUE)[1]
   gbif_key      <- sub("\\.zip$", "", basename(gbif_zip_file))
-  ts(sprintf("Step 6: Importing provided GBIF ZIP (%s) — no re-download...",
-             basename(gbif_zip_file)))
   gbif_raw <- rgbif::occ_download_import(key = gbif_key, path = gbif_zip_dir) |>
     as.data.frame()
-  ts(sprintf("  Raw GBIF records: %d", nrow(gbif_raw)))
   readr::write_csv(gbif_raw, gbif_ckpt)
-  ts(sprintf("  Saved GBIF checkpoint -> %s", basename(gbif_ckpt)))
 
 } else {
 
@@ -300,10 +236,6 @@ if (file.exists(gbif_ckpt)) {
     gbif_raw <- NULL
   } else {
 
-    ts(sprintf(
-      "Step 5: Submitting GBIF download request (Canada, Fungi, physical specimens)..."
-    ))
-
     gbif_dl <- tryCatch(
       rgbif::occ_download(
         rgbif::pred("country",               "CA"),
@@ -317,16 +249,14 @@ if (file.exists(gbif_ckpt)) {
         email  = gbif_email
       ),
       error = function(e) {
-        message("GBIF download submission failed: ", conditionMessage(e))
+        warning("GBIF download submission failed: ", conditionMessage(e))
         NULL
       }
     )
 
     if (!is.null(gbif_dl)) {
-      ts("  Waiting for GBIF download to complete (may take several minutes)...")
       rgbif::occ_download_wait(gbif_dl)
 
-      ts("  Importing GBIF download...")
       gbif_zip_dir <- here::here("data_raw", "gbif")
       dir.create(gbif_zip_dir, showWarnings = FALSE, recursive = TRUE)
       gbif_zip <- rgbif::occ_download_get(gbif_dl,
@@ -335,12 +265,8 @@ if (file.exists(gbif_ckpt)) {
       gbif_raw <- rgbif::occ_download_import(gbif_zip) |>
         as.data.frame()
 
-      ts(sprintf("  Raw GBIF records: %d", nrow(gbif_raw)))
       readr::write_csv(gbif_raw, gbif_ckpt)
-      ts(sprintf("  Saved GBIF checkpoint -> %s", basename(gbif_ckpt)))
 
-      ts("  GBIF citation:")
-      print(rgbif::gbif_citation(gbif_zip))
     } else {
       gbif_raw <- NULL
     }
@@ -349,8 +275,6 @@ if (file.exists(gbif_ckpt)) {
 
 # Filter GBIF records to EcM genera and species-level records
 if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
-
-  ts("  Filtering GBIF records to species rank and EcM genera...")
 
   # Use our observed EcM genera as the filter list
   ecm_genera_lower <- tolower(trimws(unique(emf$genus)))
@@ -366,12 +290,7 @@ if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
   n_gbif_ecm_species <- dplyr::n_distinct(gbif_ecm$species)
   n_gbif_ecm_genera  <- dplyr::n_distinct(gbif_ecm$genus)
 
-  ts(sprintf("  GBIF EcM specimen records: %d", n_gbif_ecm))
-  ts(sprintf("  GBIF EcM species: %d  |  genera: %d",
-             n_gbif_ecm_species, n_gbif_ecm_genera))
-
   readr::write_csv(gbif_ecm, paths$gbif_ecm)
-  ts(sprintf("  Saved -> %s", basename(paths$gbif_ecm)))
 
   # Filter to EcM genera with NO sequence data in Canada
   # Uses the FungalTraits EcM genus list from Step 3 (global_ecm_genera),
@@ -388,16 +307,9 @@ if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
   n_gbif_ecm_nosequence_species <- dplyr::n_distinct(gbif_ecm_nosequence$species)
   n_gbif_ecm_nosequence_genera  <- dplyr::n_distinct(gbif_ecm_nosequence$genus)
 
-  ts(sprintf("  GBIF EcM (genera without sequence data) records: %d",
-             n_gbif_ecm_nosequence))
-  ts(sprintf("  GBIF EcM (no sequence) species: %d  |  genera: %d",
-             n_gbif_ecm_nosequence_species, n_gbif_ecm_nosequence_genera))
-
   readr::write_csv(gbif_ecm_nosequence, paths$gbif_ecm_nosequence)
-  ts(sprintf("  Saved -> %s", basename(paths$gbif_ecm_nosequence)))
 
 } else {
-  ts("  GBIF data not available — skipping EcM filter.")
   n_gbif_ecm                    <- NA_integer_
   n_gbif_ecm_species            <- NA_integer_
   n_gbif_ecm_genera             <- NA_integer_
@@ -468,5 +380,3 @@ linnean_summary <- tibble::tibble(
 
 readr::write_csv(linnean_summary,
                  file.path(paths$out_linnean, "linnean_summary.csv"))
-ts("Saved linnean_summary.csv")
-ts("09_linnean.R complete.")

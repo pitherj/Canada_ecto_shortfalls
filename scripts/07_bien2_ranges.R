@@ -62,8 +62,6 @@ hosts        <- readr::read_csv(paths$host_species, show_col_types = FALSE)
 species_list <- sort(hosts$species)
 n_total      <- length(species_list)
 
-ts(sprintf("[bien2] %d species in host list", n_total))
-
 # ---- Create output directory -------------------------------------------------
 
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
@@ -115,14 +113,7 @@ if (file.exists(log_path)) {
   }
 }
 
-n_skip_shp <- sum(already_shp)
-n_skip_log <- length(settled_results)
 n_todo     <- length(to_process)
-
-ts(sprintf("[bien2] %d species skipped (shapefile on disk).", n_skip_shp))
-if (n_skip_log > 0)
-  ts(sprintf("[bien2] %d species skipped (settled in log).", n_skip_log))
-ts(sprintf("[bien2] %d species to download.", n_todo))
 
 # ---- Download + unzip loop ---------------------------------------------------
 
@@ -148,7 +139,7 @@ if (n_todo > 0) {
           httr::GET(paste0(BASE_URL, "?species=", sp_us),
                     httr::timeout(TIMEOUT_SEC)),
           error = function(e) {
-            message(sprintf("  [%d/%d] network error: %s — %s",
+            warning(sprintf("  [%d/%d] network error: %s — %s",
                             i, n_todo, sp, conditionMessage(e)))
             NULL
           }
@@ -168,14 +159,9 @@ if (n_todo > 0) {
         # ---- Rate-limited: wait and retry ------------------------------------
         if (code == 429) {
           if (attempt < MAX_RETRIES) {
-            ts(sprintf("  [%d/%d] HTTP 429 (attempt %d/%d) — waiting %.0f min: %s",
-                       i, n_todo, attempt, MAX_RETRIES,
-                       RATE_LIMIT_WAIT_SEC / 60, sp))
             Sys.sleep(RATE_LIMIT_WAIT_SEC)
             next
           } else {
-            ts(sprintf("  [%d/%d] HTTP 429 — exhausted %d retries, logging as rate_limited: %s",
-                       i, n_todo, MAX_RETRIES, sp))
             dl_result <- data.frame(species = sp, status = "rate_limited",
                                     shp = NA_character_,
                                     note = paste0("HTTP 429 after ", MAX_RETRIES, " attempts"),
@@ -193,7 +179,6 @@ if (n_todo > 0) {
           )
           note <- if (!is.null(server_msg)) server_msg else
             paste0("HTTP ", code, " ct=", ct)
-          message(sprintf("  [%d/%d] not available: %s  (%s)", i, n_todo, sp, note))
           dl_result <- data.frame(species = sp, status = "not_available",
                                   shp = NA_character_, note = note,
                                   stringsAsFactors = FALSE)
@@ -202,8 +187,6 @@ if (n_todo > 0) {
 
         # ---- Success ---------------------------------------------------------
         writeBin(httr::content(resp, "raw"), sp_zip)
-        ts(sprintf("  [%d/%d] downloaded: %s  (%.0f KB)",
-                   i, n_todo, sp, file.size(sp_zip) / 1024))
         dl_result <- "downloaded"
         break
 
@@ -211,8 +194,6 @@ if (n_todo > 0) {
 
       if (!identical(dl_result, "downloaded")) return(dl_result)
 
-    } else {
-      message(sprintf("  [%d/%d] zip exists, unzipping: %s", i, n_todo, sp))
     }
 
     # ---- Unzip into per-species subdirectory ---------------------------------
@@ -221,7 +202,7 @@ if (n_todo > 0) {
       utils::unzip(sp_zip, exdir = sp_dir)
       TRUE
     }, error = function(e) {
-      message(sprintf("  [%d/%d] unzip error: %s — %s",
+      warning(sprintf("  [%d/%d] unzip error: %s — %s",
                       i, n_todo, sp, conditionMessage(e)))
       FALSE
     })
@@ -247,37 +228,3 @@ if (n_todo > 0) {
 download_log <- dplyr::bind_rows(skip_results, settled_results, dl_results)
 readr::write_csv(download_log, log_path)
 
-n_ok   <- sum(download_log$status %in% c("success", "skipped"))
-n_new  <- sum(download_log$status == "success")
-n_skip <- sum(download_log$status == "skipped")
-n_miss <- sum(download_log$status == "not_available")
-n_rl   <- sum(download_log$status == "rate_limited")
-n_err  <- sum(download_log$status %in% c("network_error", "unzip_error"))
-n_tot  <- nrow(download_log)
-
-ts("")
-ts(sprintf("[bien2] ── Complete ─────────────────────────────────────────"))
-ts(sprintf("  Available    : %d / %d  (%.0f%%)",
-           n_ok, n_tot, 100 * n_ok / n_tot))
-ts(sprintf("  Newly fetched: %d  |  skipped: %d", n_new, n_skip))
-ts(sprintf("  Not available: %d  |  errors: %d", n_miss, n_err))
-if (n_rl > 0)
-  ts(sprintf("  Rate-limited : %d  (re-run after cooldown to retry)", n_rl))
-ts(sprintf("  Log -> %s", basename(log_path)))
-
-if (n_miss > 0) {
-  message("")
-  message("[bien2] Species not found on biendata.org:")
-  message(paste0("  ",
-                 download_log$species[download_log$status == "not_available"],
-                 collapse = "\n"))
-}
-if (n_rl > 0) {
-  message("")
-  message("[bien2] Species to retry (rate-limited — re-run this script):")
-  message(paste0("  ",
-                 download_log$species[download_log$status == "rate_limited"],
-                 collapse = "\n"))
-}
-
-ts("07_bien2_ranges.R complete.")
