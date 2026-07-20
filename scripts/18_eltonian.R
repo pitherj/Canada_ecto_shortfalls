@@ -1,5 +1,5 @@
 # =============================================================================
-# Eltonian Shortfall (Updated): Host–Fungus Interaction Knowledge
+# Eltonian Shortfall: Host–Fungus Interaction Knowledge
 # =============================================================================
 #
 # PART A — Canadian scope
@@ -8,7 +8,7 @@
 #   Host species: BIEN-based native Canadian EcM hosts (06_host_species.R)
 #   Fungal taxa:  EcM sequences from GenBank and GlobalFungi in our dataset
 #
-# PART B — Global scope (three new questions)
+# PART B — Global scope
 #   Q1: Among EcM host species native to Canada, how many have associated EcM
 #       sequence records ANYWHERE in the world?
 #   Q2: For each Canadian EcM host species, which and how many EcM fungal
@@ -29,36 +29,49 @@
 #   The same logic applies to 'other_plant_species'. This constraint is applied
 #   throughout both Part A and Part B.
 #
+#   Part A also maps this knowledge onto geographic space (steps A5-A9): which
+#   parts of Canada hold EcM host habitat, and what proportion of the host
+#   species present in each 0.5-degree grid cell have EcM sequence data? The
+#   host species counted as "having data" are exactly those flagged `matched`
+#   in the Part A host-matching table, so the maps and the interaction
+#   analyses share one definition of a documented host.
+#
 # Prerequisite files:
 #   data_derived/ecm_native_canada_host_species.csv  (06_host_species.R)
+#   data_derived/spatial/canada_simple.gpkg          (01_spatial_data.R)
+#   data_derived/spatial/bien_host_richness_0.5deg.tif  (08_host_rasters.R)
+#   data_derived/spatial/bien_host_species_stack.tif    (08_host_rasters.R)
 #   data_raw/GlobalFungi/GlobalFungi_5_sample_metadata.txt    (full global)
 #   data_raw/GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt (full, 13 GB)
-#   data_derived/unite_sh_taxonomy.csv               (01_globalfungi_prep.R)
+#   data_derived/unite_sh_taxonomy.csv               (02_globalfungi.R)
 #
 # Outputs:
-#   data_derived/eltonian_host_list.csv
-#   data_derived/eltonian_host_matching.csv
-#   data_derived/eltonian_matrix_genus.csv
-#   data_derived/eltonian_matrix_sh.csv
-#   data_derived/eltonian_matrix_species.csv         — host x named-EcM-species
+#   data_derived/eltonian/eltonian_host_list.csv
+#   data_derived/eltonian/eltonian_host_matching.csv
+#   data_derived/eltonian/eltonian_matrix_genus.csv
+#   data_derived/eltonian/eltonian_matrix_sh.csv
+#   data_derived/eltonian/eltonian_matrix_species.csv — host x named-EcM-species
 #       binary matrix, trimmed to taxa with >= 1 observed pair (same
 #       convention as the genus/SH matrices above)
-#   data_derived/eltonian_species_occurrence_counts.csv — per host-species x
+#   data_derived/eltonian/eltonian_species_occurrence_counts.csv — per host-species x
 #       named-fungal-species pair, count of supporting samples/records
 #       (occurrences); backs the singleton-association statistic in
 #       eltonian_summary.csv
-#   data_derived/eltonian_matrix_genus_genus.csv     — host-genus x fungal-genus
+#   data_derived/eltonian/eltonian_matrix_genus_genus.csv — host-genus x fungal-genus
 #       binary matrix (both axes collapsed to genus from the species-exact
 #       `matched` interactions), trimmed to taxa with >= 1 observed pair,
 #       same convention as the SH/species/genus matrices above
-#   data_derived/eltonian_genus_occurrence_counts.csv — per host-genus x
+#   data_derived/eltonian/eltonian_genus_occurrence_counts.csv — per host-genus x
 #       fungal-genus pair, count of supporting samples/records (occurrences);
 #       backs the genus-level singleton-association statistic in
 #       eltonian_summary.csv
-#   data_derived/eltonian_summary.csv
-#   data_derived/eltonian_global_host_coverage.csv    — Q1: Canadian hosts with global data
-#   data_derived/eltonian_global_host_to_fungi.csv    — Q2: per-host EcM fungal associations
-#   data_derived/eltonian_global_fungi_to_hosts.csv   — Q3: per-fungal-species host associations
+#   data_derived/eltonian/eltonian_interactions.rds  — assembled interaction
+#       objects retained for downstream reuse
+#   data_derived/eltonian/eltonian_summary.csv
+#   data_derived/eltonian/eltonian_global_host_coverage.csv    — Q1: Canadian hosts with global data
+#   data_derived/eltonian/eltonian_global_host_to_fungi.csv    — Q2: per-host EcM fungal associations
+#   data_derived/eltonian/eltonian_global_fungi_to_hosts.csv   — Q3: per-fungal-species host associations
+#   data_derived/eltonian/eltonian_global_gb_fungi_to_hosts.csv — Q3, GenBank scope
 #   data_derived/eltonian/eltonian_sample_type_tally_canada.csv — diagnostic: sample_type
 #       composition of EcM-positive Canadian GF samples with a
 #       dominant_plant_species entry
@@ -68,11 +81,27 @@
 #   data_derived/eltonian/eltonian_genbank_tissue_tally_canada.csv — diagnostic: tissue-type
 #       composition of Canadian GenBank EcM records with host information
 #       (host_taxon), keyword-binned from the free-text isolation_src field
+#   data_derived/eltonian/eltonian_host_raster_summary.csv — 0.5-degree grid-cell
+#       summary of host-habitat coverage (Part A, step A8)
+#   data_derived/spatial/bien_host_data_richness_0.5deg.tif   — host spp. with EcM data
+#   data_derived/spatial/bien_host_data_proportion_0.5deg.tif — proportion with EcM data
+#   figures/Figure-04_host_bivariate_map.png      (paths$fig_host_bivariate)      -- white bg, used in manuscript
+#   figures/Figure-04_host_bivariate_map_grey.png (paths$fig_host_bivariate_grey) -- #F2F2F2 bg, Figure 5 panel source
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
 library(rentrez)
 library(data.table)
+library(sf)
+library(terra)
+library(ggplot2)
+library(tidyterra)
+library(patchwork)
+
+# The GADM-derived Canada polygon has minor topology issues that the S2
+# spherical geometry engine rejects; switch sf to planar geometry for the
+# spatial steps below.
+sf::sf_use_s2(FALSE)
 
 # Host-name cleaning is handled by the shared canonicalize_host() helper in
 # 00_setup.R. GlobalFungi `dominant_plant_species` and `other_plant_species`
@@ -86,7 +115,6 @@ clean_host_name <- function(x) canonicalize_host(gsub("_", " ", x))
 
 # ---- A1. Load Canadian EcM host species list ---------------------------------
 
-ts("Part A — Step 1: Loading BIEN-based Canadian EcM host species list...")
 if (!file.exists(paths$host_species)) {
   stop("Host species file not found: ", paths$host_species,
        "\nRun 06_host_species.R first.")
@@ -94,8 +122,6 @@ if (!file.exists(paths$host_species)) {
 host_tbl <- readr::read_csv(paths$host_species, show_col_types = FALSE)
 n_host_species <- nrow(host_tbl)
 n_host_genera  <- dplyr::n_distinct(sub("^(\\S+).*", "\\1", host_tbl$species))
-ts(sprintf("  Canadian EcM host species: %d  |  genera: %d",
-           n_host_species, n_host_genera))
 readr::write_csv(host_tbl, file.path(paths$out_eltonian, "eltonian_host_list.csv"))
 
 # ---- A2. Extract and clean host strings from EMF dataset (Canadian records) --
@@ -105,15 +131,10 @@ readr::write_csv(host_tbl, file.path(paths$out_eltonian, "eltonian_host_list.csv
 # imply a direct mycorrhizal association. The host_taxon field (from GenBank
 # host or isolation_source parsing) is used unconditionally.
 
-ts("Part A — Step 2: Extracting host associations from Canadian EMF dataset...")
-
 # Root samples only for GlobalFungi dominant/other plant species fields
 emf_gf_root <- dplyr::filter(emf,
                                source == "GlobalFungi",
                                sample_type == "root")
-
-ts(sprintf("  GlobalFungi root samples: %d of %d total GF records",
-           nrow(emf_gf_root), sum(emf$source == "GlobalFungi")))
 
 host_long <- dplyr::bind_rows(
 
@@ -139,8 +160,6 @@ host_long <- dplyr::bind_rows(
     dplyr::mutate(host_field = "host_taxon")
 )
 
-ts(sprintf("  Total host strings extracted: %d", nrow(host_long)))
-
 host_long <- host_long |>
   dplyr::mutate(
     host_clean  = clean_host_name(host_raw),
@@ -151,10 +170,6 @@ host_long <- host_long |>
 
 n_matched       <- sum(host_long$matched,     na.rm = TRUE)
 n_genus_matched <- sum(host_long$match_genus, na.rm = TRUE)
-ts(sprintf("  Matched at species level: %d (%.1f%%)",
-           n_matched, 100 * n_matched / nrow(host_long)))
-ts(sprintf("  Matched at genus level:   %d (%.1f%%)",
-           n_genus_matched, 100 * n_genus_matched / nrow(host_long)))
 
 readr::write_csv(host_long,
                  file.path(paths$out_eltonian, "eltonian_host_matching.csv"))
@@ -172,20 +187,14 @@ readr::write_csv(host_long,
 # `emf` carries one row per (sample x SH code): a sample with several
 # co-occurring EcM detections would otherwise be tallied once per detection.
 
-ts("Part A — Step 2b: Tallying sample_type among Canadian GF samples with a dominant_plant_species entry...")
-
 sample_type_tally_canada <- emf |>
   dplyr::filter(source == "GlobalFungi", !is.na(dominant_plant_species)) |>
   dplyr::distinct(sample_ID, sample_type) |>
   dplyr::count(sample_type, name = "n_samples") |>
   dplyr::arrange(dplyr::desc(n_samples))
 
-ts("  Canada sample_type tally (distinct samples with dominant_plant_species):")
-print(as.data.frame(sample_type_tally_canada))
-
 readr::write_csv(sample_type_tally_canada,
                  file.path(paths$out_eltonian, "eltonian_sample_type_tally_canada.csv"))
-ts("  Saved eltonian_sample_type_tally_canada.csv")
 
 # ---- A2c. Diagnostic: tissue-type tally among Canadian GenBank records with -
 #           host information (host_taxon)
@@ -218,8 +227,6 @@ ts("  Saved eltonian_sample_type_tally_canada.csv")
 # Counted at the record level (one row = one GenBank accession; confirmed
 # 1:1 in this dataset, unlike the long-format GF rows in A2b).
 
-ts("Part A — Step 2c: Tallying tissue-type composition of Canadian GenBank records with host_taxon...")
-
 genbank_canada <- dplyr::filter(emf, source == "GenBank")
 n_gb_total <- nrow(genbank_canada)
 
@@ -251,16 +258,10 @@ genbank_tissue_tally_canada <- dplyr::bind_rows(
     dplyr::arrange(dplyr::desc(n))
 )
 
-ts("  GenBank tissue-type tally (Canada):")
-print(as.data.frame(genbank_tissue_tally_canada))
-
 readr::write_csv(genbank_tissue_tally_canada,
                  file.path(paths$out_eltonian, "eltonian_genbank_tissue_tally_canada.csv"))
-ts("  Saved eltonian_genbank_tissue_tally_canada.csv")
 
 # ---- A3. Build interaction matrices ------------------------------------------
-
-ts("Part A — Step 3: Building interaction matrices...")
 
 matched_interactions <- dplyr::filter(host_long, matched)
 
@@ -286,11 +287,9 @@ sh_matrix <- sh_pairs |>
                      values_from = present, values_fill = 0L)
 readr::write_csv(sh_matrix,
                  file.path(paths$out_eltonian, "eltonian_matrix_sh.csv"))
-ts("  Saved eltonian_matrix_genus.csv and eltonian_matrix_sh.csv")
 
 # ---- A3b. Species-level Canada pairs ----------------------------------------
 # Join sh_pairs with UNITE taxonomy to resolve SH codes → named species
-ts("Part A — Step 3b: Building species-level Canada pairs (SH → named species)...")
 sh_lookup <- readr::read_csv(paths$unite_taxonomy, show_col_types = FALSE)
 species_pairs_canada <- sh_pairs |>
   dplyr::left_join(
@@ -306,18 +305,13 @@ species_pairs_canada <- sh_pairs |>
   ) |>
   dplyr::filter(!is.na(fungal_species)) |>
   dplyr::distinct(host_species, fungal_species)
-ts(sprintf("  Species-level Canada pairs: %d (host × named EcM species)",
-           nrow(species_pairs_canada)))
 
 # ---- A3c. Species-level matrix, fill statistics, and occurrence counts -------
 # Trimmed host x named-EcM-species matrix, following the same convention as
 # eltonian_matrix_genus.csv / eltonian_matrix_sh.csv above: rows and columns
 # only for taxa with >= 1 observed pair, NOT the full host x species
-# denominator. (Confirmed with Jason 2026-06-27: the full 147 x 1079 grid is
-# reported as a numeric fill statistic below rather than materialized as a
-# mostly-empty CSV.)
-
-ts("Part A — Step 3c: Building species-level matrix and occurrence/fill statistics...")
+# denominator. We report the full 147 x 1079 grid as a numeric fill statistic
+# below rather than materializing it as a mostly-empty CSV.
 
 species_matrix <- species_pairs_canada |>
   dplyr::mutate(present = 1L) |>
@@ -325,7 +319,6 @@ species_matrix <- species_pairs_canada |>
                      values_from = present, values_fill = 0L)
 readr::write_csv(species_matrix,
                  file.path(paths$out_eltonian, "eltonian_matrix_species.csv"))
-ts("  Saved eltonian_matrix_species.csv")
 
 # Full-matrix fill statistics. Unlike the matrix CSV above (trimmed to taxa
 # with data), the fill rate is calculated against the FULL potential host x
@@ -345,13 +338,6 @@ n_cells_filled   <- nrow(species_pairs_canada)
 n_cells_empty    <- n_matrix_cells - n_cells_filled
 pct_cells_filled <- round(100 * n_cells_filled / n_matrix_cells, 3)
 pct_cells_empty  <- round(100 * n_cells_empty  / n_matrix_cells, 3)
-
-ts(sprintf("  Full host x named-species matrix: %d x %d = %s cells",
-           n_host_species, n_named_fungal_species,
-           format(n_matrix_cells, big.mark = ",")))
-ts(sprintf("  Filled: %s (%.3f%%)  |  Empty: %s (%.3f%%)",
-           format(n_cells_filled, big.mark = ","), pct_cells_filled,
-           format(n_cells_empty,  big.mark = ","), pct_cells_empty))
 
 # Per-pair occurrence counts: how many supporting samples/records (rows of
 # matched_interactions, i.e. distinct GlobalFungi sample x SH-detection rows
@@ -388,14 +374,10 @@ if (nrow(species_occurrence_counts) != nrow(species_pairs_canada)) {
 
 readr::write_csv(species_occurrence_counts,
                  file.path(paths$out_eltonian, "eltonian_species_occurrence_counts.csv"))
-ts("  Saved eltonian_species_occurrence_counts.csv")
 
 n_pairs_total       <- nrow(species_occurrence_counts)
 n_pairs_singleton   <- sum(species_occurrence_counts$n_occurrences == 1L)
 pct_pairs_singleton <- round(100 * n_pairs_singleton / n_pairs_total, 1)
-
-ts(sprintf("  Host x species pairs supported by a single occurrence: %d / %d (%.1f%%)",
-           n_pairs_singleton, n_pairs_total, pct_pairs_singleton))
 
 # ---- A3d. Genus-level matrix, fill statistics, and occurrence counts --------
 # Genus x genus analogue of the host x named-species block above (A3c).
@@ -405,24 +387,20 @@ ts(sprintf("  Host x species pairs supported by a single occurrence: %d / %d (%.
 # used to build genus_pairs/sh_pairs/species_pairs_canada above) collapsed to
 # host_genus -- NOT the looser `match_genus` flag in host_long -- so the
 # matching criterion stays consistent across the SH-, species-, and
-# genus-resolution blocks. (Confirmed with Jason 2026-06-28: the looser
-# match_genus criterion gives slightly different counts -- 12 host genera x
-# 69 fungal genera, 263 filled cells -- because it admits host records whose
-# species name didn't resolve to the BIEN list but whose genus did; the
-# stricter, already-established `matched` criterion is used here instead.)
+# genus-resolution blocks. The looser match_genus criterion would give
+# slightly different counts -- 12 host genera x 69 fungal genera, 263 filled
+# cells -- because it admits host records whose species name did not resolve to
+# the BIEN list but whose genus did; we use the stricter `matched` criterion
+# here instead.
 #
 # As with the species-level matrix, the saved CSV is trimmed to taxa with
 # >= 1 observed pair; the full-grid fill rate is reported as a numeric
 # statistic in eltonian_summary.csv rather than materialized as a mostly-
 # empty CSV.
 
-ts("Part A — Step 3d: Building genus-level matrix and occurrence/fill statistics...")
-
 genus_genus_pairs_canada <- matched_interactions |>
   dplyr::distinct(host_genus, genus) |>
   dplyr::rename(fungal_genus = genus)
-ts(sprintf("  Genus-level Canada pairs: %d (host genus x fungal genus)",
-           nrow(genus_genus_pairs_canada)))
 
 genus_genus_matrix <- genus_genus_pairs_canada |>
   dplyr::mutate(present = 1L) |>
@@ -430,7 +408,6 @@ genus_genus_matrix <- genus_genus_pairs_canada |>
                      values_from = present, values_fill = 0L)
 readr::write_csv(genus_genus_matrix,
                  file.path(paths$out_eltonian, "eltonian_matrix_genus_genus.csv"))
-ts("  Saved eltonian_matrix_genus_genus.csv")
 
 # Full-matrix fill statistics, against the FULL potential host-genus x
 # fungal-genus grid: all BIEN-based Canadian EcM host genera (n_host_genera)
@@ -445,13 +422,6 @@ n_cells_empty_genus    <- n_matrix_cells_genus - n_cells_filled_genus
 pct_cells_filled_genus <- round(100 * n_cells_filled_genus / n_matrix_cells_genus, 2)
 pct_cells_empty_genus  <- round(100 * n_cells_empty_genus  / n_matrix_cells_genus, 2)
 
-ts(sprintf("  Full host-genus x fungal-genus matrix: %d x %d = %s cells",
-           n_host_genera, n_fungal_genera_total,
-           format(n_matrix_cells_genus, big.mark = ",")))
-ts(sprintf("  Filled: %s (%.2f%%)  |  Empty: %s (%.2f%%)",
-           format(n_cells_filled_genus, big.mark = ","), pct_cells_filled_genus,
-           format(n_cells_empty_genus,  big.mark = ","), pct_cells_empty_genus))
-
 # Per-pair occurrence counts: how many supporting samples/records underlie
 # each observed host-genus x fungal-genus pair. Built from matched_interactions
 # directly (preserves occurrence multiplicity), mirroring
@@ -463,29 +433,265 @@ genus_occurrence_counts <- matched_interactions |>
 
 readr::write_csv(genus_occurrence_counts,
                  file.path(paths$out_eltonian, "eltonian_genus_occurrence_counts.csv"))
-ts("  Saved eltonian_genus_occurrence_counts.csv")
 
 n_pairs_total_genus       <- nrow(genus_occurrence_counts)
 n_pairs_singleton_genus   <- sum(genus_occurrence_counts$n_occurrences == 1L)
 pct_pairs_singleton_genus <- round(100 * n_pairs_singleton_genus / n_pairs_total_genus, 1)
 
-ts(sprintf("  Host-genus x fungal-genus pairs supported by a single occurrence: %d / %d (%.1f%%)",
-           n_pairs_singleton_genus, n_pairs_total_genus, pct_pairs_singleton_genus))
-
 # ---- A4. Canadian-scope coverage statistics ----------------------------------
 
-ts("Part A — Step 4: Calculating Canadian-scope coverage statistics...")
-
 n_obs_genus_pairs       <- nrow(genus_pairs)
-n_obs_sh_pairs          <- nrow(sh_pairs)
 n_hosts_with_genus_data <- dplyr::n_distinct(genus_pairs$host_species)
 n_hosts_with_sh_data    <- dplyr::n_distinct(sh_pairs$host_species)
 n_genera_with_host      <- dplyr::n_distinct(genus_pairs$fungal_genus)
 n_sh_with_host          <- dplyr::n_distinct(sh_pairs$sh_code, na.rm = TRUE)
 n_potential_genus       <- n_host_species * dplyr::n_distinct(emf$genus)
-n_potential_sh          <- n_host_species * dplyr::n_distinct(emf$sh_code, na.rm = TRUE)
 genus_per_host          <- dplyr::count(genus_pairs, host_species, name = "n_genera")
 host_per_genus          <- dplyr::count(genus_pairs, fungal_genus, name = "n_hosts")
+
+# ---- A5. Spatial prerequisites for the host-coverage rasters -----------------
+# The 0.5-degree host-richness raster and the matching per-species binary stack
+# are produced by 08_host_rasters.R. The Canada boundary is used both to
+# convert host layers to a Canada-only extent and to draw the maps in Step A9.
+
+canada_bound <- sf::st_read(paths$canada_bound, quiet = TRUE)
+
+if (!file.exists(paths$bien_richness)) {
+  stop("Host richness raster not found: ", paths$bien_richness,
+       "\nRun 08_host_rasters.R first.")
+}
+richness_wgs84 <- terra::rast(paths$bien_richness)
+names(richness_wgs84) <- "richness"
+
+# ---- A6. Identify host species with EcM data in our dataset ------------------
+# `host_long` (Step A2) is the host-matching table: one row per host string
+# extracted from the EcM dataset, with `host_clean` canonicalized and `matched`
+# flagging strings that resolve to a species on the BIEN-based Canadian EcM
+# host list. The species that matched are exactly the host species for which we
+# hold at least one EcM sequence record.
+
+em_species_with_data <- unique(
+  host_long$host_clean[host_long$matched & !is.na(host_long$host_clean)]
+)
+
+# Tree / non-tree host species subsets (used for bivariate maps)
+em_canada_tree_species    <- host_tbl$species[host_tbl$growth_form %in% "tree"]
+em_canada_nontree_species <- host_tbl$species[!host_tbl$growth_form %in% "tree"]
+em_species_with_data_tree    <- em_species_with_data[em_species_with_data %in% em_canada_tree_species]
+em_species_with_data_nontree <- em_species_with_data[em_species_with_data %in% em_canada_nontree_species]
+
+# ---- A7. Load species stack and derive all richness rasters ------------------
+# The per-species binary stack (one layer per host species, named by species)
+# is produced by 08_host_rasters.R alongside bien_host_richness_0.5deg.tif.
+# All subset richness rasters are derived by filtering layers + summing, with
+# no range re-rasterization needed here.
+
+if (!file.exists(paths$bien_species_stack)) {
+  stop("Species stack not found: ", paths$bien_species_stack,
+       "\nRun 08_host_rasters.R first.", call. = FALSE)
+}
+
+species_stack <- terra::rast(paths$bien_species_stack)
+canada_vect   <- terra::vect(sf::st_transform(canada_bound, 4326))
+
+# Normalise layer names: BIEN stores species with underscores ("Abies_amabilis")
+# but all other species lists in this project use spaces ("Abies amabilis").
+names(species_stack) <- gsub("_", " ", names(species_stack))
+
+# Helper: sum selected layers; uses na.rm = FALSE so outside-Canada cells
+# (all NA in the masked stack) remain NA rather than becoming 0.
+# zero_to_na = TRUE matches the richness_wgs84 convention (no-habitat cells
+# are NA); FALSE preserves 0 for data richness (0 = habitat exists, no data).
+sum_species_layers <- function(stack, species_names, zero_to_na = FALSE) {
+  idx <- which(names(stack) %in% species_names)
+  if (length(idx) == 0L) {
+    warning("No matching layers found in species stack for provided species names.")
+    return(NULL)
+  }
+  r <- terra::app(stack[[idx]], fun = "sum", na.rm = FALSE)
+  if (zero_to_na) r <- terra::ifel(r == 0, NA, r)
+  r
+}
+
+# All-species data richness (hosts present in our EcM dataset)
+data_richness_wgs84 <- sum_species_layers(
+  species_stack, em_species_with_data, zero_to_na = FALSE
+)
+names(data_richness_wgs84) <- "data_richness"
+terra::writeRaster(data_richness_wgs84, paths$bien_data_rich, overwrite = TRUE)
+
+# Tree-only richness (all tree host species)
+richness_tree_wgs84 <- sum_species_layers(
+  species_stack, em_canada_tree_species, zero_to_na = TRUE
+)
+names(richness_tree_wgs84) <- "richness"
+
+# Tree-only data richness (tree host species in our EcM dataset)
+data_richness_tree_wgs84 <- sum_species_layers(
+  species_stack, em_species_with_data_tree, zero_to_na = FALSE
+)
+names(data_richness_tree_wgs84) <- "data_richness"
+
+# Non-tree richness and data richness
+richness_nontree_wgs84 <- sum_species_layers(
+  species_stack, em_canada_nontree_species, zero_to_na = TRUE
+)
+names(richness_nontree_wgs84) <- "richness"
+
+data_richness_nontree_wgs84 <- sum_species_layers(
+  species_stack, em_species_with_data_nontree, zero_to_na = FALSE
+)
+names(data_richness_nontree_wgs84) <- "data_richness"
+
+# ---- A8. Proportion raster and raster summary --------------------------------
+
+proportion_wgs84 <- terra::clamp(
+  data_richness_wgs84 / richness_wgs84,
+  lower = 0, upper = 1
+)
+# Cells where richness is NA (outside Canada) remain NA
+names(proportion_wgs84) <- "proportion"
+
+terra::writeRaster(proportion_wgs84, paths$bien_proportion, overwrite = TRUE)
+
+# Summary statistics
+prop_vals <- terra::values(proportion_wgs84)
+prop_vals <- prop_vals[!is.na(prop_vals)]
+
+raster_summary <- tibble::tibble(
+  metric = c(
+    "Grid cells (0.5°) with EcM host habitat",
+    "Cells with EcM host habitat but no sequence records",
+    "Cells with EcM host habitat and >=1 sequence record",
+    "Mean proportion of host spp. with sequence data (per cell)",
+    "Median proportion of host spp. with sequence data (per cell)",
+    "Max proportion of host spp. with sequence data (per cell)"
+  ),
+  value = c(
+    length(prop_vals),
+    sum(prop_vals == 0),
+    sum(prop_vals > 0),
+    round(mean(prop_vals), 3),
+    round(median(prop_vals), 3),
+    round(max(prop_vals), 3)
+  )
+)
+readr::write_csv(raster_summary,
+                 file.path(paths$out_eltonian, "eltonian_host_raster_summary.csv"))
+
+# ---- A9. Bivariate map (host richness x proportion with data) ----------------
+# Two panels: (1) all EcM host species, (2) tree host species only.
+# Breaks are computed independently for each panel so each uses its own tertiles.
+
+canada_albers <- sf::st_transform(canada_bound, crs_albers)
+
+bivar_colors <- c(
+  "1-1" = "#e8e8e8", "2-1" = "#ace4e4", "3-1" = "#5ac8c8",
+  "1-2" = "#dfb0d6", "2-2" = "#a5add3", "3-2" = "#5698b9",
+  "1-3" = "#d272aa", "2-3" = "#ad6aad", "3-3" = "#7759a1"
+)
+
+# Helper: build one bivariate map panel + inset legend
+# richness_r, data_r are WGS84 SpatRasters; title_label is a string; bg sets
+# the panel/plot background colour (white for the manuscript version, grey
+# for the Figure 5 schematic source version -- see build_bivariate_figure()).
+make_bivar_panel <- function(richness_r, data_r, title_label, bg = "white") {
+
+  prop_r <- terra::clamp(data_r / richness_r, lower = 0, upper = 1)
+  names(prop_r) <- "proportion"
+
+  rich_alb <- terra::project(richness_r, crs_albers, method = "near")
+  data_alb <- terra::project(data_r,     crs_albers, method = "near")
+  prop_alb <- terra::project(prop_r,     crs_albers, method = "bilinear")
+  names(rich_alb) <- "richness"
+  names(data_alb) <- "n_with_data"
+  names(prop_alb) <- "proportion"
+
+  # Clip to the Canada boundary (study-area restriction, not a projection fix).
+  # The 0.5-deg BIEN host-richness grid carries ~565 richness > 0 cells outside
+  # Canada (host ranges crossing into the contiguous US, plus half-cell straddle
+  # of the coarse cells along the border). This is a Canada-scoped figure, so
+  # those out-of-country cells are masked out.
+  canada_v_b <- terra::vect(canada_albers)
+  rich_alb   <- terra::mask(rich_alb, canada_v_b)
+  data_alb   <- terra::mask(data_alb, canada_v_b)
+  prop_alb   <- terra::mask(prop_alb, canada_v_b)
+
+  # Breaks computed from this panel's values only
+  rv <- terra::values(rich_alb)
+  rv <- rv[!is.na(rv) & rv > 0]
+  rich_breaks <- c(-Inf, stats::quantile(rv, probs = c(1/3, 2/3), names = FALSE), Inf)
+  prop_breaks <- c(-Inf, 1/3, 2/3, Inf)
+
+  bdf <- as.data.frame(c(rich_alb, data_alb, prop_alb), xy = TRUE) |>
+    stats::setNames(c("x", "y", "richness", "n_with_data", "proportion")) |>
+    dplyr::filter(!is.na(richness), richness > 0) |>
+    dplyr::mutate(
+      proportion = dplyr::if_else(is.na(proportion), 0, proportion),
+      rich_class = as.integer(cut(richness,   breaks = rich_breaks, labels = 1:3)),
+      prop_class = as.integer(cut(proportion, breaks = prop_breaks, labels = 1:3)),
+      bi_class   = paste0(rich_class, "-", prop_class)
+    )
+
+  rich_q      <- round(stats::quantile(rv, probs = c(0, 1/3, 2/3, 1), names = FALSE))
+  rich_labels <- paste0(rich_q[1:3], "\u2013", rich_q[2:4])
+  prop_labels <- c("0\u201333%", "33\u201367%", "67\u2013100%")
+
+  legend_df <- expand.grid(x = factor(1:3), y = factor(1:3)) |>
+    dplyr::mutate(bi_class = paste0(as.integer(x), "-", as.integer(y)))
+
+  p_leg <- ggplot2::ggplot(legend_df, ggplot2::aes(x = x, y = y, fill = bi_class)) +
+    ggplot2::geom_tile(colour = "white", linewidth = 1) +
+    ggplot2::scale_fill_manual(values = bivar_colors, guide = "none") +
+    ggplot2::scale_x_discrete(labels = rich_labels) +
+    ggplot2::scale_y_discrete(labels = prop_labels) +
+    ggplot2::labs(x = "Host richness", y = "Prop. with data") +
+    ggplot2::coord_fixed() +
+    ggplot2::theme_minimal(base_size = 8) +
+    ggplot2::theme(panel.grid = ggplot2::element_blank(),
+                   axis.text  = ggplot2::element_text(colour = "black"),
+                   axis.title = ggplot2::element_text(colour = "black", size = 7))
+
+  p_map <- ggplot2::ggplot() +
+    ggplot2::geom_sf(data = canada_albers, fill = "grey95", colour = NA) +
+    ggplot2::geom_raster(data = bdf, ggplot2::aes(x = x, y = y, fill = bi_class)) +
+    ggplot2::geom_sf(data = canada_albers, fill = NA, colour = "grey40",
+                     linewidth = 0.3) +
+    ggplot2::scale_fill_manual(values = bivar_colors, guide = "none") +
+    ggplot2::coord_sf(crs = crs_albers) +
+    ggplot2::labs(title = title_label) +
+    ggplot2::theme_void() +
+    ggplot2::theme(
+      plot.title      = ggplot2::element_text(size = 10, face = "bold", hjust = 0.5),
+      plot.background = ggplot2::element_rect(fill = bg, colour = NA)
+    ) +
+    patchwork::inset_element(p_leg,
+                             left = 0.72, bottom = 0.62, right = 0.99, top = 0.87)
+  p_map
+}
+
+# build_bivariate_figure(bg) assembles the two-panel (non-tree / tree)
+# composite at the given background colour.
+build_bivariate_figure <- function(bg) {
+  p_all  <- make_bivar_panel(richness_nontree_wgs84, data_richness_nontree_wgs84,
+                             "Non-tree EcM host species", bg = bg)
+  p_tree <- make_bivar_panel(richness_tree_wgs84, data_richness_tree_wgs84,
+                             "Tree EcM host species", bg = bg)
+
+  (p_all / p_tree) +
+    patchwork::plot_layout(ncol = 1) +
+    patchwork::plot_annotation(
+      theme = ggplot2::theme(plot.background = ggplot2::element_rect(fill = bg, colour = NA))
+    )
+}
+
+save_fig_formats(paths$fig_host_bivariate, build_bivariate_figure("white"),
+                 width = 10, height = 14, dpi = 300, bg = "white")
+
+# Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
+# schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
+ggplot2::ggsave(paths$fig_host_bivariate_grey, build_bivariate_figure(fig5_grey_bg),
+                width = 10, height = 14, dpi = 300, bg = fig5_grey_bg)
 
 # =============================================================================
 # PART B: Global scope
@@ -495,7 +701,6 @@ gf_meta_path <- file.path(here::here("data_raw"), "GlobalFungi",
                             "GlobalFungi_5_sample_metadata.txt")
 gf_sh_path   <- file.path(here::here("data_raw"), "GlobalFungi",
                             "GlobalFungi_5_SH_abundance_ITS1_ITS2.txt")
-unite_lookup_path <- paths$unite_taxonomy
 
 # Checkpoints for slow operations
 global_meta_ckpt <- file.path(paths$temp_dir, "gf_global_root_metadata.csv")
@@ -506,18 +711,11 @@ global_gb_ckpt   <- file.path(paths$temp_dir, "genbank_global_ecm_meta.csv")
 # Q1 (metadata-only approach): which Canadian host species appear as
 # dominant_plant_species in root samples anywhere in the full GlobalFungi DB?
 
-ts("Part B — Step 1: Reading GlobalFungi global root sample metadata...")
-
 if (!file.exists(gf_meta_path)) {
-  ts(sprintf("  GlobalFungi metadata not found at: %s", gf_meta_path))
-  ts("  Skipping GlobalFungi global analysis.")
   gf_global_root <- NULL
 } else if (file.exists(global_meta_ckpt)) {
-  ts("  Loading checkpointed GlobalFungi root sample metadata...")
   gf_global_root <- readr::read_csv(global_meta_ckpt, show_col_types = FALSE)
-  ts(sprintf("  Root samples loaded: %d", nrow(gf_global_root)))
 } else {
-  ts("  Reading GlobalFungi global metadata (~78 MB)...")
   # Use data.table::fread for speed on large file
   gf_meta_all <- data.table::fread(
     gf_meta_path,
@@ -527,24 +725,17 @@ if (!file.exists(gf_meta_path)) {
                        "dominant_plant_species", "other_plant_species"),
     showProgress   = TRUE
   )
-  ts(sprintf("  Total GlobalFungi samples: %d", nrow(gf_meta_all)))
 
   # Filter to root samples only
   gf_global_root <- dplyr::filter(gf_meta_all, sample_type == "root")
-  ts(sprintf("  Root samples globally: %d (%.1f%%)",
-             nrow(gf_global_root),
-             100 * nrow(gf_global_root) / nrow(gf_meta_all)))
   rm(gf_meta_all)
 
   readr::write_csv(gf_global_root, global_meta_ckpt)
-  ts(sprintf("  Saved root metadata checkpoint -> %s",
-             basename(global_meta_ckpt)))
 }
 
 # ---- B2. Q1: Which Canadian host species have global GF root records? --------
 
 if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
-  ts("Part B — Step 2 (Q1): Matching Canadian hosts against global GF root samples...")
 
   # Extract all host strings from global root samples (dominant + other)
   global_hosts <- c(
@@ -559,8 +750,6 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
   canada_hosts_with_global_gf <- intersect(host_tbl$species, global_hosts)
   n_canada_hosts_with_gf <- length(canada_hosts_with_global_gf)
   pct_with_gf <- round(100 * n_canada_hosts_with_gf / n_host_species, 1)
-  ts(sprintf("  Canadian hosts with GF root records globally: %d / %d (%.1f%%)",
-             n_canada_hosts_with_gf, n_host_species, pct_with_gf))
 
   # Build sample-host lookup for the next steps
   # (sample_ID → cleaned dominant_plant_species) for root samples only
@@ -580,8 +769,6 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
   # Filter to sample_IDs where host is a Canadian EcM host species
   gf_root_canadian_hosts <- dplyr::filter(gf_root_hosts,
                                            host_clean %in% host_tbl$species)
-  ts(sprintf("  Global root sample-host pairs (Canadian hosts): %d",
-             nrow(gf_root_canadian_hosts)))
 
   # Save Q1 result
   q1_host_coverage <- data.frame(
@@ -590,10 +777,8 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
   )
   readr::write_csv(q1_host_coverage,
                    file.path(paths$out_eltonian, "eltonian_global_host_coverage.csv"))
-  ts("  Saved eltonian_global_host_coverage.csv")
 
 } else {
-  ts("  GlobalFungi global metadata not available; skipping Q1.")
   gf_root_canadian_hosts <- NULL
   n_canada_hosts_with_gf <- NA_integer_
   pct_with_gf <- NA_real_
@@ -609,32 +794,22 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
 # Memory note: loading just our EcM SH codes (a few hundred columns) from a
 # very wide file is much more efficient than loading all 77k+ SH columns.
 
-ts("Part B — Step 3 (Q2 + Q3): GlobalFungi global SH abundance analysis...")
-
 if (!file.exists(gf_sh_path)) {
-  ts(sprintf("  GlobalFungi SH abundance file not found: %s", gf_sh_path))
-  ts("  Skipping Q2/Q3 GlobalFungi analysis.")
   gf_sh_ecm <- NULL
 
 } else if (file.exists(global_sh_ckpt)) {
-  ts("  Loading checkpointed GF global EcM SH subset...")
   gf_sh_ecm <- readRDS(global_sh_ckpt)
-  ts(sprintf("  Loaded: %d rows", nrow(gf_sh_ecm)))
 
 } else {
   # Identify our Canadian EcM SH codes (from emf dataset)
   our_sh_codes <- unique(emf$sh_code[!is.na(emf$sh_code)])
-  ts(sprintf("  Our Canadian EcM SH codes: %d", length(our_sh_codes)))
 
   # Always check the file header first to find the intersection of our SH codes
   # with the file's columns. Our codes use a specific UNITE version suffix
   # (e.g., .10FU) which may differ from the version used in GlobalFungi.
-  ts("  Reading GlobalFungi file header to check SH code versions...")
   header_cols <- names(data.table::fread(gf_sh_path, sep = "\t", quote = "",
                                           nrows = 0L))
   present_sh <- intersect(our_sh_codes, header_cols)
-  ts(sprintf("  SH codes matched in GlobalFungi file: %d / %d",
-             length(present_sh), length(our_sh_codes)))
 
   if (length(present_sh) == 0L) {
     # Version mismatch: strip version suffix and try prefix matching
@@ -644,26 +819,17 @@ if (!file.exists(gf_sh_path)) {
     matched_idx     <- match(our_sh_prefix, header_prefix)
     matched_header  <- header_cols[matched_idx[!is.na(matched_idx)]]
     present_sh      <- matched_header
-    ts(sprintf("  Version-stripped SH matches: %d / %d",
-               length(present_sh), length(our_sh_codes)))
   }
 
   if (length(present_sh) == 0L) {
-    ts("  No SH codes matched in GlobalFungi file — skipping Q2/Q3 (GF).")
     gf_sh_ecm_wide <- NULL
   } else {
-    ts("  Reading GlobalFungi SH abundance matrix (this may take several minutes)...")
-    ts("  Selecting only matched EcM SH columns from the full 13 GB file (awk subset)...")
     # awk-streaming subset helper (00_setup.R) avoids fread()'s 2^31-byte string
     # limit on the ~13 GB matrix.
     gf_sh_ecm_wide <- read_big_tsv_subset(gf_sh_path, c("sample_ID", present_sh))
   }
 
-  ts(sprintf("  Read: %d samples x %d EcM SH columns",
-             nrow(gf_sh_ecm_wide), ncol(gf_sh_ecm_wide) - 1))
-
   # Melt to long format, filter to non-zero abundances
-  ts("  Melting to long format...")
   gf_sh_ecm <- data.table::melt(
     gf_sh_ecm_wide,
     id.vars       = "sample_ID",
@@ -675,9 +841,7 @@ if (!file.exists(gf_sh_path)) {
     as.data.frame()
   rm(gf_sh_ecm_wide)
 
-  ts(sprintf("  Non-zero abundance records: %d", nrow(gf_sh_ecm)))
   saveRDS(gf_sh_ecm, global_sh_ckpt)
-  ts(sprintf("  Saved SH subset checkpoint -> %s", basename(global_sh_ckpt)))
 }
 
 # ---- B3b. Diagnostic: sample_type tally among EcM-positive global GF -------
@@ -697,21 +861,14 @@ if (!file.exists(gf_sh_path)) {
 global_sampletype_tally_out <- file.path(paths$out_eltonian,
                                          "eltonian_sample_type_tally_global.csv")
 
-ts("Part B — Step 3b: Tallying sample_type among EcM-positive global GF samples with a dominant_plant_species entry...")
-
 if (file.exists(global_sampletype_tally_out)) {
-  ts("  Loading existing global sample_type tally...")
   sample_type_tally_global <- readr::read_csv(global_sampletype_tally_out,
                                               show_col_types = FALSE)
 } else if (is.null(gf_sh_ecm) || !file.exists(gf_meta_path)) {
-  ts("  Global EcM SH subset or metadata not available; skipping global sample_type tally.")
   sample_type_tally_global <- NULL
 } else {
   ecm_positive_samples <- unique(gf_sh_ecm$sample_ID)
-  ts(sprintf("  Global samples with >=1 of our Canadian EcM SH codes detected: %d",
-             length(ecm_positive_samples)))
 
-  ts("  Reading sample_ID + sample_type + dominant_plant_species from full GlobalFungi metadata...")
   gf_meta_minimal <- data.table::fread(
     gf_meta_path,
     sep    = "\t",
@@ -728,18 +885,11 @@ if (file.exists(global_sampletype_tally_out)) {
   rm(gf_meta_minimal)
 
   readr::write_csv(sample_type_tally_global, global_sampletype_tally_out)
-  ts(sprintf("  Saved %s", basename(global_sampletype_tally_out)))
-}
-
-if (!is.null(sample_type_tally_global)) {
-  ts("  Global sample_type tally (EcM-positive samples with dominant_plant_species):")
-  print(as.data.frame(sample_type_tally_global))
 }
 
 # Q2 and Q3 from GlobalFungi
 if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 
-  ts("  Computing Q2 and Q3 from GlobalFungi global data...")
   # (sh_lookup already loaded in Part A — Step 3b)
 
   # Attach UNITE species to each SH code observation
@@ -778,8 +928,6 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 
   readr::write_csv(q3,
                    file.path(paths$out_eltonian, "eltonian_global_fungi_to_hosts.csv"))
-  ts(sprintf("  Q3: EcM species with global host associations: %d", nrow(q3)))
-  ts("  Saved eltonian_global_fungi_to_hosts.csv")
 
   # Q2: For each Canadian host species, which EcM fungal species globally (root)?
   # many-to-many expected here too (see NOTE above Q3) — distinct() follows.
@@ -800,11 +948,8 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 
   readr::write_csv(q2,
                    file.path(paths$out_eltonian, "eltonian_global_host_to_fungi.csv"))
-  ts(sprintf("  Q2: Canadian hosts with global EcM species data: %d", nrow(q2)))
-  ts("  Saved eltonian_global_host_to_fungi.csv")
 
   # ---- Long-form pair data frames for the interactions Rds (Part C) ---------
-  ts("  Building long-form global pair data frames (GF)...")
 
   # Host → SH code (global, GF root samples, Canadian hosts only)
   # many-to-many expected here too (see NOTE above Q3) — distinct() follows.
@@ -813,7 +958,6 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
                       relationship = "many-to-many") |>
     dplyr::filter(host_clean %in% host_tbl$species) |>
     dplyr::distinct(host_species = host_clean, sh_code)
-  ts(sprintf("  host_sh_global_gf:      %d host–SH pairs", nrow(host_sh_global_gf)))
 
   # Host → named EcM species (global, GF)
   # many-to-many expected here too (see NOTE above Q3) — distinct() follows.
@@ -823,18 +967,13 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
                       relationship = "many-to-many") |>
     dplyr::filter(host_clean %in% host_tbl$species) |>
     dplyr::distinct(host_species = host_clean, fungal_species)
-  ts(sprintf("  host_species_global_gf: %d host–species pairs",
-             nrow(host_species_global_gf)))
 
   # Host → genus (global, GF, derived from species)
   host_genus_global_gf <- host_species_global_gf |>
     dplyr::mutate(fungal_genus = sub(" .*", "", fungal_species)) |>
     dplyr::distinct(host_species, fungal_genus)
-  ts(sprintf("  host_genus_global_gf:   %d host–genus pairs",
-             nrow(host_genus_global_gf)))
 
 } else {
-  ts("  GlobalFungi global SH data not available; skipping Q2/Q3 (GF).")
   q2 <- NULL
   q3 <- NULL
   host_sh_global_gf      <- NULL
@@ -848,24 +987,17 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 # (and partially Q1/Q2 by the host_taxon field).
 #
 # Each genus is searched separately and results are combined.
-# The search mirrors 03_genbank_fetch.R but removes AND "Canada"[Country].
-
-ts("Part B — Step 4 (GenBank global): Querying GenBank for our EcM genera globally...")
+# The search mirrors 03_genbank.R but removes AND "Canada"[Country].
 
 if (file.exists(global_gb_ckpt)) {
-  ts("  Loading checkpointed GenBank global metadata...")
   gb_global_meta <- readr::read_csv(global_gb_ckpt, show_col_types = FALSE)
-  ts(sprintf("  Records loaded: %d", nrow(gb_global_meta)))
 } else {
 
-  if (Sys.getenv("ENTREZ_KEY") == "") {
-    ts("  ENTREZ_KEY not set in .Renviron — GenBank global step will be rate-limited.")
-    ts("  Set ENTREZ_KEY for faster fetching.")
-  }
+  if (Sys.getenv("ENTREZ_KEY") == "")
+    warning("ENTREZ_KEY not set in .Renviron — the GenBank global step will be ",
+            "rate-limited. Set ENTREZ_KEY for faster fetching.", call. = FALSE)
 
   our_genera_list <- unique(trimws(emf$genus))
-  ts(sprintf("  Querying GenBank globally for %d EcM genera...",
-             length(our_genera_list)))
 
   # Helper: query one genus globally, return host_taxon metadata
   query_genus_globally <- function(genus_name) {
@@ -924,27 +1056,20 @@ if (file.exists(global_gb_ckpt)) {
       }
       dplyr::bind_rows(meta_list)
     }, error = function(e) {
-      message(sprintf("  Genus '%s' query failed: %s", genus_name, conditionMessage(e)))
+      warning(sprintf("  Genus '%s' query failed: %s", genus_name, conditionMessage(e)))
       NULL
     })
   }
 
-  ts("  (This step may take 30-120 min depending on genus list size.)")
-  ts("  Results are checkpointed; delete checkpoint to re-run.")
-
   genus_results <- vector("list", length(our_genera_list))
   for (i in seq_along(our_genera_list)) {
-    ts(sprintf("  Genus %d/%d: %s",
-               i, length(our_genera_list), our_genera_list[i]))
     genus_results[[i]] <- query_genus_globally(our_genera_list[i])
     Sys.sleep(0.5)
   }
 
   gb_global_meta <- dplyr::bind_rows(Filter(Negate(is.null), genus_results))
-  ts(sprintf("  GenBank global records retrieved: %d", nrow(gb_global_meta)))
 
   readr::write_csv(gb_global_meta, global_gb_ckpt)
-  ts(sprintf("  Saved GenBank global checkpoint -> %s", basename(global_gb_ckpt)))
 }
 
 # Extract host_taxon from GenBank global records
@@ -969,8 +1094,6 @@ if (nrow(gb_global_meta) > 0) {
     )
 
   n_gb_with_host <- sum(!is.na(gb_global_meta$host_clean))
-  ts(sprintf("  GenBank global records with host info: %d / %d",
-             n_gb_with_host, nrow(gb_global_meta)))
 
   # Q3 (GenBank): per fungal genus, which Canadian host species globally?
   gb_q3 <- gb_global_meta |>
@@ -988,24 +1111,18 @@ if (nrow(gb_global_meta) > 0) {
 
   readr::write_csv(gb_q3,
                    file.path(paths$out_eltonian, "eltonian_global_gb_fungi_to_hosts.csv"))
-  ts(sprintf("  Q3 (GenBank): EcM genera with host associations: %d", nrow(gb_q3)))
-  ts("  Saved eltonian_global_gb_fungi_to_hosts.csv")
 
   # Q1 (GenBank): which Canadian host species appear as hosts globally in GB?
   gb_q1_hosts <- unique(gb_global_meta$host_clean[
     !is.na(gb_global_meta$host_clean) &
       gb_global_meta$host_clean %in% host_tbl$species
   ])
-  ts(sprintf("  Q1 (GenBank): Canadian hosts with global GenBank records: %d / %d",
-             length(gb_q1_hosts), n_host_species))
 
   # Long-form GenBank global pairs for the interactions Rds (Part C)
   # Host → genus (global, GenBank, from genus_queried field)
   host_genus_global_gb <- gb_global_meta |>
     dplyr::filter(!is.na(host_clean), host_clean %in% host_tbl$species) |>
     dplyr::distinct(host_species = host_clean, fungal_genus = genus_queried)
-  ts(sprintf("  host_genus_global_gb:   %d host–genus pairs (GenBank)",
-             nrow(host_genus_global_gb)))
 
   # Host → named EcM species (global, GenBank, from organism field)
   host_species_global_gb <- gb_global_meta |>
@@ -1016,11 +1133,8 @@ if (nrow(gb_global_meta) > 0) {
                          fungal_species, ignore.case = TRUE),
                   nchar(fungal_species) > 3L) |>
     dplyr::distinct(host_species = host_clean, fungal_species)
-  ts(sprintf("  host_species_global_gb: %d host–species pairs (GenBank)",
-             nrow(host_species_global_gb)))
 
 } else {
-  ts("  No GenBank global records retrieved.")
   gb_q1_hosts            <- character(0L)
   gb_q3                  <- NULL
   host_genus_global_gb   <- NULL
@@ -1036,8 +1150,6 @@ if (nrow(gb_global_meta) > 0) {
 # Canada scope: interactions observed in our Canadian EMF dataset.
 # Global scope: interactions from GF root samples + GenBank globally.
 # =============================================================================
-
-ts("Part C: Assembling eltonian_interactions.rds...")
 
 # ---------- Canada scope, host as focal --------------------------------------
 host_sh_canada      <- sh_pairs             # cols: host_species, sh_code
@@ -1107,16 +1219,10 @@ eltonian_interactions <- list(
 
 saveRDS(eltonian_interactions,
         file.path(paths$out_eltonian, "eltonian_interactions.rds"))
-ts("  Saved eltonian_interactions.rds")
-for (nm in names(eltonian_interactions)) {
-  ts(sprintf("    $%-25s  %d rows", nm, nrow(eltonian_interactions[[nm]])))
-}
 
 # =============================================================================
 # Summary tables
 # =============================================================================
-
-ts("Saving summary tables...")
 
 # Mycobiont-focal association counts (named fungal species -> host species),
 # for the Eltonian "mycobiont side" paragraph. Canada scope from the Canadian
@@ -1224,6 +1330,3 @@ eltonian_summary <- tibble::tibble(
 
 readr::write_csv(eltonian_summary,
                  file.path(paths$out_eltonian, "eltonian_summary.csv"))
-ts("Saved eltonian_summary.csv")
-print(as.data.frame(eltonian_summary))
-ts("19_eltonian.R complete.")

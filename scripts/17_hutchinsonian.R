@@ -1,41 +1,83 @@
 # =============================================================================
-# Hutchinsonian Shortfall (Updated): Environmental and Ecozone Coverage
+# Hutchinsonian Shortfall: Ecozone and Climate-Space Sampling Coverage
 # =============================================================================
-# What proportion of Canadian ecological space with EcM host habitat has
-# been sampled for EcM fungi?
+# PURPOSE
+#   How completely has Canada's ecological space been sampled for
+#   ectomycorrhizal (EcM) fungi? Two complementary partitions of that space are
+#   used, and both ask the same question of it:
+#     Steps 1-5  Ecozones  — Canada's 15 named terrestrial ecozones: which are
+#                sampled at all, which meet the minimum-sample thresholds used
+#                elsewhere in the SI (>=10, >=30), and at what density?
+#     Steps 6-9  Climate   — Canada's two-dimensional temperature x
+#                precipitation space: what proportion of the places sharing
+#                each climate have been sampled, and where in geographic space
+#                do the well- and poorly-covered climates fall?
 #
-# Updates from original 04_hutchinsonian.R:
-#   - BIEN-based host raster (0.5°, from 08_host_rasters.R) replaces
-#     USTreeAtlas 1° raster
-#   - Both GenBank and GlobalFungi coordinates used for sampling points
-#     (GenBank lat/lon parsed from lat_lon_gb where available)
-#   - ecozone climate space analysis added using WorldClim data
+#   Sampling points use both GenBank and GlobalFungi coordinates, restricted to
+#   records whose coordinates were validated inside the GADM Canada boundary at
+#   dataset assembly (coord_in_canada == TRUE, 04_combine_ecm_dataset.R).
 #
-# Design history: this script previously also computed an ecoregion-level
-# habitat-coverage metric (hutchinsonian_ecoregion_summary.csv, using the
-# ecoregion habitat layer from 08_host_rasters.R). It was never reported in
-# the manuscript or supplemental materials -- all reported Hutchinsonian
-# coverage is ecozone-level -- so it was removed 2026-07-05 (pruned by
-# Jason's request) along with its upstream input in 08_host_rasters.R.
+# CLIMATE METHOD (Steps 6-9)
+#   The representation is adapted from Figure 6 in the following preprint:
+# Blitz the Gap: a nation-wide effort to guide citizen science toward the needs
+# of biodiversity science. K. Hebert et al.
+# https://doi.org/10.32942/X2T09G
 #
-# Prerequisite files:
-#   data_derived/bien_host_richness_0.5deg.tif       (08_host_rasters.R)
-#   data_derived/bien_host_species_stack.tif         (08_host_rasters.R)
-#   data_derived/ecm_native_canada_host_species.csv  (06_host_species.R)
-#   data_derived/eltonian_host_matching.csv          (19_eltonian.R)
-#   data_raw/climate/wc2.1_country/CAN_wc2.1_30s_bio.tif
+#   1. Define Canada's climate space from two WorldClim v2.1 layers:
+#        BIO1  = mean annual temperature (MAT, deg C)
+#        BIO12 = mean annual precipitation (MAP, mm)
+#      The native 30 arc-second raster is AGGREGATED to ~10 arc-minutes
+#      (AGG_FACTOR = 20) so the spatial grain matches the colleagues' workflow.
+#   2. Bin the two-dimensional climate space into an N_CLIMATE_BINS x
+#      N_CLIMATE_BINS grid (equal-width bins per axis). Each occupied bin is a
+#      "climate zone". count_canada = number of grid cells per zone.
+#   3. A grid cell is "sampled" if >= 1 EcM sample falls in it.
+#      coverage(zone) = (sampled cells in zone) / (Canada cells in zone),
+#      i.e. the proportion of the places sharing a climate that have been
+#      sampled at all. coverage lies in [0, 1]; 0 = climate present but never
+#      sampled.
+#   4. Produce a 6-panel figure laid out as 2 rows x 3 columns:
+#        Columns: Available climate frequency | GlobalFungi | GF + GenBank
+#        Row 1 (a, b, c): geographic maps
+#        Row 2 (d, e, f): the same quantity in climate space
+#      The "Available climate" column shows climate frequency (count_canada =
+#      Canadian cells per zone, i.e. how common each climate is); this is the
+#      denominator of coverage and is analogous to the colleagues' Fig S5 a/c.
+#      The GlobalFungi and GF + GenBank columns show sampling coverage.
+#      In panel d, zones never sampled by GlobalFungi + GenBank combined (the
+#      grey, coverage == 0 zones in panel f) are additionally outlined in
+#      white, so the unsampled climates are visible directly in panel d
+#      without needing to cross-reference panel f.
 #
-# Outputs:
-#   data_derived/bien_host_data_richness_0.5deg.tif    — host spp. with EcM data
-#   data_derived/bien_host_data_proportion_0.5deg.tif  — proportion with EcM data
-#   data_derived/hutchinsonian_raster_summary.csv
-#   data_derived/hutchinsonian_ecozone_summary.csv     — ecozone sampling-threshold
-#                                                    counts (Table S16b)
-#   figures/Figure-04_host_bivariate_map.png        (paths$fig_host_bivariate)      -- white bg, used in manuscript
-#   figures/Figure-04_host_bivariate_map_grey.png   (paths$fig_host_bivariate_grey) -- #F2F2F2 bg, Figure 5 panel source
+# CLIMATE SCOPES (Steps 6-9)
+#   - "GlobalFungi": GF samples with >= 1 EcM SH code (named or not). Because the
+#     downstream dataset (emf) is already EcM-only, every GF sample qualifies.
+#   - "GlobalFungi + GenBank": the GF samples above plus GenBank EcM records.
+#   In both scopes the sampling unit for coverage is the climate grid cell
+#   (a cell counts once regardless of how many samples fall in it).
+#
+# INPUTS
+#   emf                                                    (auto-loaded by 00_setup.R)
+#   data_derived/spatial/canada_simple.gpkg                (paths$canada_bound)
+#   data_derived/spatial/ecoregions_processed.gpkg         (paths$ecoregions_processed)
+#   data_derived/spatial/lakes_canada_albers.gpkg          (paths$lakes_albers)
+#   data_derived/spatial/ecozone_names.csv                 (paths$ecozone_names)
+#   data_raw/climate/wc2.1_country/CAN_wc2.1_30s_bio.tif   (paths$climate_raster)
+#
+# OUTPUTS
+#   data_derived/hutchinsonian/hutchinsonian_ecozone_summary.csv       — ecozone
+#       sampling-threshold counts (Table S16b)
+#   data_derived/hutchinsonian/hutchinsonian_ecozone_sample_counts.csv — per-ecozone
+#       counts, areas and sampling densities (Table S1)
 #   figures/Figure-S4_ecozone_sampling_map.png      (paths$fig_ecozone_sampling)      -- white bg, used in SI
 #   figures/Figure-S4_ecozone_sampling_map_grey.png (paths$fig_ecozone_sampling_grey) -- #F2F2F2 bg, Figure 5 panel source
-#   figures/hutchinsonian_climate_space.png (currently commented out — see Step 8)
+#   figures/Figure-03_climate_gap.png               (paths$fig_climate_gap)           -- white bg, used in manuscript
+#   figures/Figure-03_climate_gap_grey.png          (paths$fig_climate_gap_grey)      -- #F2F2F2 bg, Figure 5 panel source
+#
+# NOTES
+#   - Deterministic: no random sampling, so no seed is required.
+#   - Sentinel-file guard: the climate-gap figure (Steps 6-9) is rebuilt only if
+#     BOTH versions do not yet exist. Delete one or both to force regeneration.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -48,225 +90,23 @@ library(patchwork)
 sf::sf_use_s2(FALSE)
 
 # ---- Step 1: Prepare sampling points ----------------------------------------
+# coord_in_canada == TRUE guarantees the coordinates were validated against the
+# GADM Canada boundary when the dataset was assembled (04_combine_ecm_dataset.R).
 
-ts("Step 1: Extracting sampling locations from EMF dataset...")
-
-# GlobalFungi: use coord_in_canada == TRUE (coordinates validated within GADM Canada)
-gf_locs <- emf |>
-  dplyr::filter(source == "GlobalFungi", coord_in_canada == TRUE) |>
-  dplyr::distinct(sample_ID, lat, lon)
-
-# GenBank: same filter
+# GenBank records with validated Canadian coordinates, reduced to unique
+# locations. The GlobalFungi locations are added alongside these in Step 2.
 gb_parsed <- emf |>
   dplyr::filter(source == "GenBank", coord_in_canada == TRUE) |>
   dplyr::distinct(lat, lon)
 
-all_locs <- dplyr::bind_rows(gf_locs, gb_parsed) |>
-  dplyr::distinct(lat, lon)
-
-ts(sprintf("  GlobalFungi locations: %d", nrow(gf_locs)))
-ts(sprintf("  GenBank locations (stored coords): %d", nrow(gb_parsed)))
-ts(sprintf("  Unique locations combined: %d", nrow(all_locs)))
-
-# Canada boundary (needed for map steps below)
+# Canada boundary (used by the map steps below)
 canada_bound <- sf::st_read(paths$canada_bound, quiet = TRUE)
 
-# coord_in_canada == TRUE guarantees coordinates were validated within the GADM
-# Canada boundary at dataset assembly (04_combine_ecm_dataset.R).
-locs_sf <- sf::st_as_sf(all_locs, coords = c("lon", "lat"), crs = 4326)
-ts(sprintf("  Unique locations as sf: %d", nrow(locs_sf)))
-
-# ---- Step 2: Load spatial prerequisites -------------------------------------
-
-ts("Step 2: Loading spatial prerequisites...")
-
-if (!file.exists(paths$bien_richness)) {
-  stop("Host richness raster not found: ", paths$bien_richness,
-       "\nRun 08_host_rasters.R first.")
-}
-richness_wgs84 <- terra::rast(paths$bien_richness)
-names(richness_wgs84) <- "richness"
-ts(sprintf("  Richness raster: %d x %d cells", nrow(richness_wgs84), ncol(richness_wgs84)))
-
-# ---- Step 3: Identify host species with EcM data in our dataset -------------
-
-ts("Step 3: Identifying host species with EcM data in dataset...")
-
-host_tbl <- readr::read_csv(paths$host_species, show_col_types = FALSE)
-em_canada_species <- host_tbl$species
-
-# Use eltonian host matching output if available; else build from host fields
-matching_file <- paths$eltonian_host_matching
-
-# Host-name cleaning is handled by the shared canonicalize_host() helper in
-# 00_setup.R. Underscores in GlobalFungi `dominant_plant_species` /
-# `other_plant_species` values are converted to spaces before tokenization.
-clean_host_name <- function(x) canonicalize_host(gsub("_", " ", x))
-
-if (file.exists(matching_file)) {
-  ts("  Using eltonian_host_matching.csv for host species with data...")
-  host_matching   <- readr::read_csv(matching_file, show_col_types = FALSE)
-  em_species_with_data <- unique(
-    host_matching$host_clean[host_matching$matched & !is.na(host_matching$host_clean)]
-  )
-} else {
-  ts("  eltonian_host_matching.csv not found; building from host fields...")
-  # dominant_plant_species / other_plant_species: root samples only (GlobalFungi)
-  emf_gf_root <- dplyr::filter(emf, source == "GlobalFungi", sample_type == "root")
-  all_hosts <- unique(c(
-    clean_host_name(emf_gf_root$dominant_plant_species[!is.na(emf_gf_root$dominant_plant_species)]),
-    clean_host_name(emf_gf_root$other_plant_species[!is.na(emf_gf_root$other_plant_species)]),
-    clean_host_name(emf$host_taxon[!is.na(emf$host_taxon)])
-  ))
-  em_species_with_data <- unique(all_hosts[!is.na(all_hosts) & all_hosts %in% em_canada_species])
-}
-
-ts(sprintf("  Host species represented in our dataset: %d / %d",
-           length(em_species_with_data), length(em_canada_species)))
-
-# Tree / non-tree host species subsets (used for bivariate maps)
-em_canada_tree_species    <- host_tbl$species[host_tbl$growth_form %in% "tree"]
-em_canada_nontree_species <- host_tbl$species[!host_tbl$growth_form %in% "tree"]
-em_species_with_data_tree    <- em_species_with_data[em_species_with_data %in% em_canada_tree_species]
-em_species_with_data_nontree <- em_species_with_data[em_species_with_data %in% em_canada_nontree_species]
-ts(sprintf("  Tree host species:     %d total / %d with EcM data",
-           length(em_canada_tree_species), length(em_species_with_data_tree)))
-ts(sprintf("  Non-tree host species: %d total / %d with EcM data",
-           length(em_canada_nontree_species), length(em_species_with_data_nontree)))
-
-# ---- Step 4: Load species stack and derive all richness rasters --------------
-# The per-species binary stack (one layer per host species, named by species)
-# is produced by 08_host_rasters.R alongside bien_richness_0.5deg.tif.
-# All subset richness rasters are derived by filtering layers + summing, with
-# no range re-rasterization needed here.
-
-ts("Step 4: Loading species stack...")
-
-if (!file.exists(paths$bien_species_stack)) {
-  stop("Species stack not found: ", paths$bien_species_stack,
-       "\nRun 08_host_rasters.R first.", call. = FALSE)
-}
-
-species_stack <- terra::rast(paths$bien_species_stack)
-canada_vect   <- terra::vect(sf::st_transform(canada_bound, 4326))
-
-# Normalise layer names: BIEN stores species with underscores ("Abies_amabilis")
-# but all other species lists in this project use spaces ("Abies amabilis").
-names(species_stack) <- gsub("_", " ", names(species_stack))
-
-ts(sprintf("  Stack loaded: %d layers (%d species)",
-           terra::nlyr(species_stack), terra::nlyr(species_stack)))
-
-# Helper: sum selected layers; uses na.rm = FALSE so outside-Canada cells
-# (all NA in the masked stack) remain NA rather than becoming 0.
-# zero_to_na = TRUE matches the richness_wgs84 convention (no-habitat cells
-# are NA); FALSE preserves 0 for data richness (0 = habitat exists, no data).
-sum_species_layers <- function(stack, species_names, zero_to_na = FALSE) {
-  idx <- which(names(stack) %in% species_names)
-  if (length(idx) == 0L) {
-    warning("No matching layers found in species stack for provided species names.")
-    return(NULL)
-  }
-  r <- terra::app(stack[[idx]], fun = "sum", na.rm = FALSE)
-  if (zero_to_na) r <- terra::ifel(r == 0, NA, r)
-  r
-}
-
-# All-species data richness (hosts present in our EcM dataset)
-ts(sprintf("  Deriving all-species data richness (%d spp. with data)...",
-           length(em_species_with_data)))
-data_richness_wgs84 <- sum_species_layers(
-  species_stack, em_species_with_data, zero_to_na = FALSE
-)
-names(data_richness_wgs84) <- "data_richness"
-terra::writeRaster(data_richness_wgs84, paths$bien_data_rich, overwrite = TRUE)
-ts(sprintf("  Saved -> %s", basename(paths$bien_data_rich)))
-
-# Tree-only richness (all tree host species)
-ts(sprintf("  Deriving tree richness (%d tree spp.)...",
-           length(em_canada_tree_species)))
-richness_tree_wgs84 <- sum_species_layers(
-  species_stack, em_canada_tree_species, zero_to_na = TRUE
-)
-names(richness_tree_wgs84) <- "richness"
-
-# Tree-only data richness (tree host species in our EcM dataset)
-ts(sprintf("  Deriving tree data richness (%d tree spp. with data)...",
-           length(em_species_with_data_tree)))
-data_richness_tree_wgs84 <- sum_species_layers(
-  species_stack, em_species_with_data_tree, zero_to_na = FALSE
-)
-names(data_richness_tree_wgs84) <- "data_richness"
-
-# Non-tree richness and data richness
-ts(sprintf("  Deriving non-tree richness (%d non-tree spp.)...",
-           length(em_canada_nontree_species)))
-richness_nontree_wgs84 <- sum_species_layers(
-  species_stack, em_canada_nontree_species, zero_to_na = TRUE
-)
-names(richness_nontree_wgs84) <- "richness"
-
-ts(sprintf("  Deriving non-tree data richness (%d non-tree spp. with data)...",
-           length(em_species_with_data_nontree)))
-data_richness_nontree_wgs84 <- sum_species_layers(
-  species_stack, em_species_with_data_nontree, zero_to_na = FALSE
-)
-names(data_richness_nontree_wgs84) <- "data_richness"
-
-# ---- Step 5: Proportion raster ----------------------------------------------
-
-ts("Step 5: Computing proportion raster...")
-
-proportion_wgs84 <- terra::clamp(
-  data_richness_wgs84 / richness_wgs84,
-  lower = 0, upper = 1
-)
-# Cells where richness is NA (outside Canada) remain NA
-names(proportion_wgs84) <- "proportion"
-
-terra::writeRaster(proportion_wgs84, paths$bien_proportion, overwrite = TRUE)
-ts(sprintf("  Saved proportion raster -> %s", basename(paths$bien_proportion)))
-
-# Summary statistics
-prop_vals <- terra::values(proportion_wgs84)
-prop_vals <- prop_vals[!is.na(prop_vals)]
-ts(sprintf("  Cells with host habitat: %d  |  cells with any data: %d (%.1f%%)",
-           length(prop_vals),
-           sum(prop_vals > 0),
-           100 * sum(prop_vals > 0) / length(prop_vals)))
-
-# ---- Step 6: Raster summary --------------------------------------------------
-
-raster_summary <- tibble::tibble(
-  metric = c(
-    "Grid cells (0.5°) with EcM host habitat",
-    "Cells with EcM host habitat but no sequence records",
-    "Cells with EcM host habitat and >=1 sequence record",
-    "Mean proportion of host spp. with sequence data (per cell)",
-    "Median proportion of host spp. with sequence data (per cell)",
-    "Max proportion of host spp. with sequence data (per cell)"
-  ),
-  value = c(
-    length(prop_vals),
-    sum(prop_vals == 0),
-    sum(prop_vals > 0),
-    round(mean(prop_vals), 3),
-    round(median(prop_vals), 3),
-    round(max(prop_vals), 3)
-  )
-)
-readr::write_csv(raster_summary,
-                 file.path(paths$out_hutchinsonian, "hutchinsonian_raster_summary.csv"))
-ts("Saved hutchinsonian_raster_summary.csv")
-
-# ---- Step 7: Maps ------------------------------------------------------------
-
-ts("Step 7: Setting up spatial layers for map production...")
+# ---- Step 2: Ecozone setup and sampling-locations map (Figure S4) ------------
 
 canada_albers <- sf::st_transform(canada_bound, crs_albers)
 
 # -- Shared ecozone / ecoregion setup (used by sampling map and ecozone climate space plot) ----
-ts("  Loading ecozone and ecoregion layers...")
 
 ecoregions_raw <- sf::st_read(paths$ecoregions_processed, quiet = TRUE) |>
   sf::st_transform(crs_albers) |>
@@ -321,12 +161,12 @@ lakes_sf <- tryCatch(
     sf::st_make_valid() |>
     sf::st_buffer(0) |>
     sf::st_intersection(sf::st_buffer(sf::st_make_valid(canada_albers), 0)),
-  error = function(e) { ts("  Lakes file not found — skipping."); NULL }
+  error = function(e) { warning("Lakes file not found — skipping.", call. = FALSE); NULL }
 )
 
 # Sampling locations with source label (used by both sampling map and ecozone climate space plot).
 # GenBank is bound first so it is drawn underneath; GlobalFungi is bound second so it
-# is drawn on top — matching the layer order used in sampling_map_group0.png.
+# is drawn on top.
 # Each source is deduplicated within itself (gb_parsed already is; GF deduped below);
 # cross-source deduplication is intentionally omitted so that co-located points from
 # both sources are retained, with the GF point rendered on top.
@@ -341,7 +181,6 @@ locs_src_sf <- dplyr::bind_rows(
   sf::st_transform(crs_albers)
 
 # -- Sampling locations map (ecozone style) ------------------------------------
-ts("  Creating sampling locations map...")
 
 # Pad the plotted extent beyond the Canada boundary bbox so the outer map
 # border doesn't sit flush against the figure edge. Buffer is a fraction of
@@ -376,7 +215,7 @@ build_sampling_map <- function(bg) {
     ggplot2::geom_sf(data = canada_albers,
                      fill = NA, colour = "black", linewidth = 0.2) +
     # Sampling locations: circle (GlobalFungi) or triangle (GenBank),
-    # white fill, colour-blind-safe outline (matching sampling_map_group0 style)
+    # white fill, colour-blind-safe outline
     ggplot2::geom_sf(data = locs_src_sf,
                      ggplot2::aes(colour = source, shape = source),
                      fill = "white", size = 2.2, stroke = 1.1, alpha = 0.8) +
@@ -417,296 +256,15 @@ build_sampling_map <- function(bg) {
 
 save_fig_formats(paths$fig_ecozone_sampling, build_sampling_map("white"),
                  width = 12, height = 9, dpi = 300, bg = "white")
-ts(sprintf("  Saved %s", basename(paths$fig_ecozone_sampling)))
 
 # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
 # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
 ggplot2::ggsave(paths$fig_ecozone_sampling_grey, build_sampling_map(fig5_grey_bg),
                 width = 12, height = 9, dpi = 300, bg = fig5_grey_bg)
-ts(sprintf("  Saved %s", basename(paths$fig_ecozone_sampling_grey)))
 
-# -- Bivariate map (host richness x proportion with data) ---------------------
-# Two panels: (1) all EcM host species, (2) tree host species only.
-# Breaks are computed independently for each panel so each uses its own tertiles.
-ts("  Creating bivariate maps...")
-
-bivar_colors <- c(
-  "1-1" = "#e8e8e8", "2-1" = "#ace4e4", "3-1" = "#5ac8c8",
-  "1-2" = "#dfb0d6", "2-2" = "#a5add3", "3-2" = "#5698b9",
-  "1-3" = "#d272aa", "2-3" = "#ad6aad", "3-3" = "#7759a1"
-)
-
-# Helper: build one bivariate map panel + inset legend
-# richness_r, data_r are WGS84 SpatRasters; title_label is a string; bg sets
-# the panel/plot background colour (white for the manuscript version, grey
-# for the Figure 5 schematic source version -- see build_bivariate_figure()).
-make_bivar_panel <- function(richness_r, data_r, title_label, bg = "white") {
-
-  prop_r <- terra::clamp(data_r / richness_r, lower = 0, upper = 1)
-  names(prop_r) <- "proportion"
-
-  rich_alb <- terra::project(richness_r, crs_albers, method = "near")
-  data_alb <- terra::project(data_r,     crs_albers, method = "near")
-  prop_alb <- terra::project(prop_r,     crs_albers, method = "bilinear")
-  names(rich_alb) <- "richness"
-  names(data_alb) <- "n_with_data"
-  names(prop_alb) <- "proportion"
-
-  # Clip to the Canada boundary (study-area restriction, not a projection fix).
-  # The 0.5-deg BIEN host-richness grid carries ~565 richness > 0 cells outside
-  # Canada (host ranges crossing into the contiguous US, plus half-cell straddle
-  # of the coarse cells along the border). This is a Canada-scoped figure, so
-  # those out-of-country cells are masked out.
-  canada_v_b <- terra::vect(canada_albers)
-  rich_alb   <- terra::mask(rich_alb, canada_v_b)
-  data_alb   <- terra::mask(data_alb, canada_v_b)
-  prop_alb   <- terra::mask(prop_alb, canada_v_b)
-
-  # Breaks computed from this panel's values only
-  rv <- terra::values(rich_alb)
-  rv <- rv[!is.na(rv) & rv > 0]
-  rich_breaks <- c(-Inf, stats::quantile(rv, probs = c(1/3, 2/3), names = FALSE), Inf)
-  prop_breaks <- c(-Inf, 1/3, 2/3, Inf)
-
-  bdf <- as.data.frame(c(rich_alb, data_alb, prop_alb), xy = TRUE) |>
-    stats::setNames(c("x", "y", "richness", "n_with_data", "proportion")) |>
-    dplyr::filter(!is.na(richness), richness > 0) |>
-    dplyr::mutate(
-      proportion = dplyr::if_else(is.na(proportion), 0, proportion),
-      rich_class = as.integer(cut(richness,   breaks = rich_breaks, labels = 1:3)),
-      prop_class = as.integer(cut(proportion, breaks = prop_breaks, labels = 1:3)),
-      bi_class   = paste0(rich_class, "-", prop_class)
-    )
-
-  rich_q      <- round(stats::quantile(rv, probs = c(0, 1/3, 2/3, 1), names = FALSE))
-  rich_labels <- paste0(rich_q[1:3], "\u2013", rich_q[2:4])
-  prop_labels <- c("0\u201333%", "33\u201367%", "67\u2013100%")
-
-  legend_df <- expand.grid(x = factor(1:3), y = factor(1:3)) |>
-    dplyr::mutate(bi_class = paste0(as.integer(x), "-", as.integer(y)))
-
-  p_leg <- ggplot2::ggplot(legend_df, ggplot2::aes(x = x, y = y, fill = bi_class)) +
-    ggplot2::geom_tile(colour = "white", linewidth = 1) +
-    ggplot2::scale_fill_manual(values = bivar_colors, guide = "none") +
-    ggplot2::scale_x_discrete(labels = rich_labels) +
-    ggplot2::scale_y_discrete(labels = prop_labels) +
-    ggplot2::labs(x = "Host richness", y = "Prop. with data") +
-    ggplot2::coord_fixed() +
-    ggplot2::theme_minimal(base_size = 8) +
-    ggplot2::theme(panel.grid = ggplot2::element_blank(),
-                   axis.text  = ggplot2::element_text(colour = "black"),
-                   axis.title = ggplot2::element_text(colour = "black", size = 7))
-
-  p_map <- ggplot2::ggplot() +
-    ggplot2::geom_sf(data = canada_albers, fill = "grey95", colour = NA) +
-    ggplot2::geom_raster(data = bdf, ggplot2::aes(x = x, y = y, fill = bi_class)) +
-    ggplot2::geom_sf(data = canada_albers, fill = NA, colour = "grey40",
-                     linewidth = 0.3) +
-    ggplot2::scale_fill_manual(values = bivar_colors, guide = "none") +
-    ggplot2::coord_sf(crs = crs_albers) +
-    ggplot2::labs(title = title_label) +
-    ggplot2::theme_void() +
-    ggplot2::theme(
-      plot.title      = ggplot2::element_text(size = 10, face = "bold", hjust = 0.5),
-      plot.background = ggplot2::element_rect(fill = bg, colour = NA)
-    ) +
-    patchwork::inset_element(p_leg,
-                             left = 0.72, bottom = 0.62, right = 0.99, top = 0.87)
-  p_map
-}
-
-# build_bivariate_figure(bg) assembles the two-panel (non-tree / tree)
-# composite at the given background colour.
-build_bivariate_figure <- function(bg) {
-  p_all  <- make_bivar_panel(richness_nontree_wgs84, data_richness_nontree_wgs84,
-                             "Non-tree EcM host species", bg = bg)
-  p_tree <- make_bivar_panel(richness_tree_wgs84, data_richness_tree_wgs84,
-                             "Tree EcM host species", bg = bg)
-
-  (p_all / p_tree) +
-    patchwork::plot_layout(ncol = 1) +
-    patchwork::plot_annotation(
-      theme = ggplot2::theme(plot.background = ggplot2::element_rect(fill = bg, colour = NA))
-    )
-}
-
-save_fig_formats(paths$fig_host_bivariate, build_bivariate_figure("white"),
-                 width = 10, height = 14, dpi = 300, bg = "white")
-ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate)))
-
-# Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
-# schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
-ggplot2::ggsave(paths$fig_host_bivariate_grey, build_bivariate_figure(fig5_grey_bg),
-                width = 10, height = 14, dpi = 300, bg = fig5_grey_bg)
-ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate_grey)))
-
-# ---- Step 8: ecozone climate space analysis -------------------------
-# Superseded by the new MAT/MAP sampling maps. Retained for reference.
-# if (FALSE) {  # ----- BEGIN COMMENTED-OUT BLOCK -----
-
-# ts("Step 9: ecozone climate space analysis...")
-# 
-# if (!file.exists(paths$climate_raster)) {
-#   ts(sprintf("  Climate raster not found: %s", paths$climate_raster))
-#   ts("  Skipping climate space analysis.")
-# } else {
-#   ts("  Loading WorldClim raster...")
-#   clim_full <- terra::rast(paths$climate_raster)
-# 
-#   # Layer names vary by download method; match bio_1 and bio_12 by pattern
-#   layer_names <- names(clim_full)
-#   mat_idx <- grep("bio_?1$",  layer_names, value = FALSE)[1]
-#   map_idx <- grep("bio_?12$", layer_names, value = FALSE)[1]
-# 
-#   if (is.na(mat_idx) || is.na(map_idx)) {
-#     ts(sprintf("  Could not find bio_1 and bio_12 in layers: %s",
-#                paste(layer_names, collapse = ", ")))
-#     ts("  Skipping climate space analysis.")
-#   } else {
-#     clim_mat <- clim_full[[mat_idx]]
-#     clim_map <- clim_full[[map_idx]]
-# 
-#     # Convert MAT from ×10 if values suggest ×10 encoding
-#     mat_vals_raw <- terra::values(clim_mat)
-#     if (!all(is.na(mat_vals_raw)) && max(abs(mat_vals_raw), na.rm = TRUE) > 100) {
-#       clim_mat <- clim_mat / 10
-#       ts("  MAT values divided by 10 (detected ×10 encoding)")
-#     }
-# 
-#     # ---- Random climate sample per ecozone (balanced representation) --------
-#     # Dissolve ecoregions to ecozones in WGS84, then spatSample n points each.
-#     # This ensures each ecozone is equally represented in climate space
-#     # regardless of its geographic area.
-#     ts("  Sampling climate per ecozone...")
-# 
-#     n_per_ecozone <- 300L
-# 
-#     ecozones_agg <- ecoregions_clipped |>
-#       dplyr::group_by(NAME_EN) |>
-#       dplyr::summarise(.groups = "drop") |>
-#       sf::st_make_valid() |>
-#       sf::st_transform(4326)
-# 
-#     clim_stack        <- c(clim_mat, clim_map)
-#     names(clim_stack) <- c("MAT", "MAP")
-# 
-#     grid_clim_df <- dplyr::bind_rows(lapply(unique_ecozones, function(ez) {
-#       ez_vect  <- terra::vect(ecozones_agg[ecozones_agg$NAME_EN == ez, ])
-#       clim_ez  <- terra::mask(terra::crop(clim_stack, ez_vect), ez_vect)
-#       n_cells  <- sum(!is.na(terra::values(clim_ez[[1]])))
-#       if (n_cells == 0L) return(NULL)
-#       pts <- terra::spatSample(clim_ez,
-#                                size   = min(n_per_ecozone, n_cells),
-#                                method = "random",
-#                                na.rm  = TRUE)
-#       if (nrow(pts) == 0L) return(NULL)
-#       # Access by position: terra may not preserve "MAT"/"MAP" layer names
-#       # through crop/mask/arithmetic, so column names are not reliable
-#       tibble::tibble(NAME_EN = ez, MAT = pts[[1]], MAP = pts[[2]])
-#     })) |>
-#       dplyr::filter(!is.na(MAT), !is.na(MAP))
-# 
-#     # Remove per-ecozone MAT outliers using Tukey fences (Q1/Q3 ± 1.5×IQR).
-#     # Boundary cells at ecozone edges can carry erroneous or atypical values
-#     # (e.g. a single Arctic Cordillera cell near the coastline showing 0 °C).
-#     n_before <- nrow(grid_clim_df)
-#     grid_clim_df <- grid_clim_df |>
-#       dplyr::group_by(NAME_EN) |>
-#       dplyr::filter(
-#         MAT >= stats::quantile(MAT, 0.25) - 1.5 * stats::IQR(MAT),
-#         MAT <= stats::quantile(MAT, 0.75) + 1.5 * stats::IQR(MAT)
-#       ) |>
-#       dplyr::ungroup()
-#     n_removed <- n_before - nrow(grid_clim_df)
-#     if (n_removed > 0L)
-#       ts(sprintf("  Removed %d MAT outlier(s) via per-ecozone Tukey filter", n_removed))
-# 
-#     ts(sprintf("  Background climate points: %d across %d ecozones",
-#                nrow(grid_clim_df), dplyr::n_distinct(grid_clim_df$NAME_EN)))
-# 
-#     # ---- Climate at actual EcM sampling locations ---------------------------
-#     ts("  Extracting climate at sampling locations...")
-# 
-#     locs_wgs84 <- sf::st_transform(locs_src_sf, 4326)
-#     locs_vect  <- terra::vect(locs_wgs84)
-#     mat_samp   <- terra::extract(clim_mat, locs_vect)[, 2]
-#     map_samp   <- terra::extract(clim_map, locs_vect)[, 2]
-# 
-#     samp_clim_df <- tibble::tibble(
-#       source = locs_src_sf$source,
-#       MAT    = mat_samp,
-#       MAP    = map_samp
-#     ) |>
-#       dplyr::filter(!is.na(MAT), !is.na(MAP))
-# 
-#     ts(sprintf("  Sampling points with climate data: %d", nrow(samp_clim_df)))
-# 
-#     # ---- ecozone climate space plot -----------------------------------------------------
-#     # Background uses colour aesthetic (ecozone_colors, same as sampling map).
-#     # alpha = 0.2 matches the visual weight of the alpha = 0.2 ecozone fills on
-#     # the sampling map, so both plots read as the same palette.
-#     # Sampling points use a mapped shape aesthetic (no mapped colour) so that
-#     # a second legend ("Sample source") can appear without conflicting with the
-#     # ecozone colour scale.  override.aes in the shape guide injects the correct
-#     # fill/colour/stroke so the legend symbols are identical to the sampling map.
-#     p_climate_space <- ggplot2::ggplot() +
-#       # Background: solid circles coloured by ecozone, muted to match map fills
-#       ggplot2::geom_point(data = grid_clim_df,
-#                           ggplot2::aes(x = MAT, y = MAP, colour = NAME_EN),
-#                           shape = 19, size = 1.5, alpha = 0.2) +
-#       # Sampling — GlobalFungi: open circle, black outline, white fill
-#       ggplot2::geom_point(
-#         data = dplyr::filter(samp_clim_df, source == "GlobalFungi"),
-#         ggplot2::aes(x = MAT, y = MAP, shape = source),
-#         fill = "white", colour = "black",
-#         size = 3, stroke = 0.8, alpha = 0.7
-#       ) +
-#       # Sampling — GenBank: open triangle, red outline, white fill
-#       ggplot2::geom_point(
-#         data = dplyr::filter(samp_clim_df, source == "GenBank"),
-#         ggplot2::aes(x = MAT, y = MAP, shape = source),
-#         fill = "white", colour = "red",
-#         size = 3, stroke = 0.8, alpha = 0.7
-#       ) +
-#       ggplot2::scale_colour_manual(
-#         values = ecozone_colors,
-#         name   = "Ecozone",
-#         guide  = ggplot2::guide_legend(order = 1)
-#       ) +
-#       ggplot2::scale_shape_manual(
-#         values = c("GlobalFungi" = 21L, "GenBank" = 24L),
-#         name   = "Sample source",
-#         guide  = ggplot2::guide_legend(
-#           order        = 2,
-#           override.aes = list(
-#             fill   = "white",
-#             colour = c("black", "red"),
-#             size   = 3,
-#             stroke = 0.8
-#           )
-#         )
-#       ) +
-#       ggplot2::labs(
-#         x = "Mean Annual Temperature (\u00b0C)",
-#         y = "Mean Annual Precipitation (mm)"
-#       ) +
-#       ggplot2::theme_bw() +
-#       ggplot2::theme(
-#         legend.position = "right",
-#         legend.text     = ggplot2::element_text(size = 7),
-#         legend.title    = ggplot2::element_text(size = 9, face = "bold")
-#       )
-# 
-#     ggplot2::ggsave(file.path(paths$figures, "hutchinsonian_climate_space.png"),
-#                     p_climate_space, width = 10, height = 7, dpi = 300)
-#     ts("  Saved hutchinsonian_climate_space.png")
-#   }
-# }  # ----- END COMMENTED-OUT BLOCK -----
-# }  # end if (FALSE)
-
-# ---- Step 9: Ecozone-level sampling summary (Table S16b) -------------------
-# Companion to the ecoregion-level summary in Step 6 (Table S16): of Canada's
-# n_ecozones named ecozones (from ecoregions_clipped, Step 8), how many have
+# ---- Step 3: Ecozone-level sampling summary (Table S16b) -------------------
+# Companion to the ecoregion-level summary (Table S16): of Canada's
+# n_ecozones named ecozones (from ecoregions_clipped, Step 2), how many have
 # *any* EcM fungal sampling, and how many meet the minimum-sample thresholds
 # already used elsewhere in the SI (>=10 sites: Figure S8 coverage plot;
 # >=30 sites: Figure S9 accumulation curves)?
@@ -714,7 +272,7 @@ ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate_grey)))
 # Three sample definitions are reported side by side, because "sample" is
 # ambiguous across the SI:
 #   1. GlobalFungi + GenBank combined, raw unique sampling locations
-#      (locs_src_sf, Step 8 -- same data underlying Table S16 and the
+#      (locs_src_sf, Step 2 -- same data underlying Table S16 and the
 #      sampling map).
 #   2. GlobalFungi only, project-standard 3-decimal-binned "sites"
 #      (add_site_id(), 00_setup.R) -- same scope/unit as the >=10 / >=30
@@ -722,8 +280,6 @@ ts(sprintf("  Saved %s", basename(paths$fig_host_bivariate_grey)))
 #   3. GlobalFungi + GenBank combined, 3-decimal-binned "sites" -- same
 #      combined scope as (1), but using the project's canonical site unit
 #      instead of raw coordinates.
-
-ts("Step 9: Ecozone-level sampling summary...")
 
 # Helper: assign a set of points (sf, any CRS) to an ecozone and count points
 # per ecozone.
@@ -802,20 +358,16 @@ ecozone_threshold_summary <- dplyr::bind_rows(
 
 for (i in seq_len(nrow(ecozone_threshold_summary))) {
   r <- ecozone_threshold_summary[i, ]
-  ts(sprintf("  [%s] total=%d  >=1: %d  >=10: %d  >=30: %d",
-             r$definition, r$n_ecozones, r$ecozones_ge1, r$ecozones_ge10, r$ecozones_ge30))
 }
 
 readr::write_csv(ecozone_threshold_summary,
                  file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_summary.csv"))
-ts("  Saved hutchinsonian_ecozone_summary.csv")
 
-# ---- Step 10: Per-ecozone sample counts by source (Table S1) ----------------
+# ---- Step 4: Per-ecozone sample counts by source (Table S1) -----------------
 # One row per named ecozone with raw unique locations and 3-decimal-binned sites,
 # split by source. "Total" columns sum the two source columns (a location/site
 # shared by both sources counts once per source). Same within-polygon +
-# nearest-snap join as Step 10.
-ts("Step 10: Per-ecozone sample counts by source...")
+# nearest-snap join (count_points_per_ecozone()) as Step 3.
 
 counts_gf_locs_ez <- count_points_per_ecozone(dplyr::filter(locs_src_sf, source == "GlobalFungi"))
 counts_gb_locs_ez <- count_points_per_ecozone(dplyr::filter(locs_src_sf, source == "GenBank"))
@@ -840,11 +392,10 @@ ecozone_sample_counts <- tibble::tibble(ecozone = unique_ecozones) |>
                 total_sites     = gf_sites + gb_sites) |>
   dplyr::arrange(ecozone)
 
-# ---- Step 11: Ecozone areas -> sampling density (Table S1) -------------------
+# ---- Step 5: Ecozone areas -> sampling density (Table S1) -------------------
 # Area of each named ecozone within Canada, from the SAME unclipped, Albers
 # ecoregion polygons used to assign the sample counts (so counts and areas share
 # one polygon basis). Ecozone area = sum of its constituent ecoregion areas.
-ts("Step 11: Computing ecozone areas for sampling density...")
 
 ecozone_areas <- ecoregions_named |>
   sf::st_drop_geometry() |>
@@ -861,7 +412,408 @@ ecozone_sample_counts <- ecozone_sample_counts |>
 
 readr::write_csv(ecozone_sample_counts,
                  file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_sample_counts.csv"))
-ts(sprintf("  Saved hutchinsonian_ecozone_sample_counts.csv (%d ecozones; total locations = %d)",
-           nrow(ecozone_sample_counts), sum(ecozone_sample_counts$total_locations)))
 
-ts("17_hutchinsonian.R complete.")
+# =============================================================================
+# Climate-space sampling coverage (Steps 6-9)
+# =============================================================================
+# Steps 1-5 above measure sampling coverage across Canada's ecozones. Steps 6-9
+# ask the same question of Canada's *climate* space, and show where in
+# geographic space the well- and poorly-covered climates fall. See the METHOD
+# and SCOPES notes in the header block at the top of this script.
+# =============================================================================
+
+# ---- Tunable parameters for the climate-space analysis ----------------------
+AGG_FACTOR      <- 20L   # 30 arc-sec -> ~10 arc-min (20 * 30" = 600" = 10')
+N_CLIMATE_BINS  <- 50L   # bins per climate axis (50 x 50 grid of climate zones)
+
+# Colour palettes match the colleagues' figures (via the colorspace package):
+#   - "Batlow" sequential  -> available climate frequency (their Figs S4/S5)
+#   - "Temps"  divergingx   -> sampling coverage, reversed so poor = red and
+#                              full = teal (their Fig 6)
+FREQ_PALETTE         <- "Batlow"
+COVERAGE_PALETTE     <- "Temps"
+NEVER_SAMPLED_COLOUR <- "grey85"   # climate present in Canada but never sampled
+
+fig_out      <- paths$fig_climate_gap
+fig_out_grey <- paths$fig_climate_gap_grey
+
+# Sentinel guard: skip Steps 6-9 entirely only if BOTH versions of the
+# climate-gap figure already exist. Delete one or both to force regeneration.
+if (!(file.exists(fig_out) && file.exists(fig_out_grey))) {
+
+  # ---- Step 6: Build the aggregated, Canada-masked climate grid ------------
+
+  if (!file.exists(paths$climate_raster))
+    stop("Climate raster not found: ", paths$climate_raster, call. = FALSE)
+
+  clim_full <- terra::rast(paths$climate_raster)
+
+  # WorldClim layer naming varies by download method; match BIO1 / BIO12 by the
+  # numeric suffix rather than assuming a fixed band order.
+  layer_names <- names(clim_full)
+  mat_idx <- grep("bio_?1$",  layer_names)[1]
+  map_idx <- grep("bio_?12$", layer_names)[1]
+  if (is.na(mat_idx) || is.na(map_idx))
+    stop("Could not locate BIO1 and BIO12 layers in: ",
+         paste(layer_names, collapse = ", "), call. = FALSE)
+
+  clim <- clim_full[[c(mat_idx, map_idx)]]
+  names(clim) <- c("MAT", "MAP")
+
+  # Some WorldClim distributions store MAT x10 as integers; convert if detected.
+  mat_rng <- terra::values(clim[["MAT"]])
+  if (!all(is.na(mat_rng)) && max(abs(mat_rng), na.rm = TRUE) > 100) {
+    clim[["MAT"]] <- clim[["MAT"]] / 10
+  }
+
+  # Aggregate 30" -> ~10' (mean of contributing fine cells), then mask to the
+  # project's canonical Canada boundary so the climate cloud and the coverage
+  # denominator use Canadian land cells only.
+  clim <- terra::aggregate(clim, fact = AGG_FACTOR, fun = "mean", na.rm = TRUE)
+
+  # This step rebuilds the Canada polygon rather than reusing `canada_bound`
+  # from Step 1: it needs an explicitly WGS84, st_make_valid()-repaired
+  # version for terra::mask() and for the neatline difference below, which is
+  # not how `canada_bound` / `canada_albers` are constructed.
+  canada_wgs84 <- sf::st_read(paths$canada_bound, quiet = TRUE) |>
+    sf::st_transform(4326) |>
+    sf::st_make_valid()
+  canada_vect <- terra::vect(canada_wgs84)
+  clim <- terra::mask(terra::crop(clim, canada_vect), canada_vect)
+
+  # Per-cell climate values, aligned to cell indices (NA outside Canada).
+  cell_vals <- terra::values(clim)            # matrix: columns MAT, MAP
+  cell_ok   <- !is.na(cell_vals[, "MAT"]) & !is.na(cell_vals[, "MAP"])
+
+  # ---- Step 7: Bin climate space into an N x N grid of "climate zones" -----
+
+  mat_ok <- cell_vals[cell_ok, "MAT"]
+  map_ok <- cell_vals[cell_ok, "MAP"]
+
+  # Equal-width breaks spanning the Canadian climate range on each axis.
+  mat_breaks <- seq(min(mat_ok), max(mat_ok), length.out = N_CLIMATE_BINS + 1)
+  map_breaks <- seq(min(map_ok), max(map_ok), length.out = N_CLIMATE_BINS + 1)
+  mat_width  <- diff(mat_breaks)[1]
+  map_width  <- diff(map_breaks)[1]
+
+  # Assign each Canadian cell to a bin on each axis. all.inside = TRUE folds the
+  # uppermost edge value into the last bin (1..N_CLIMATE_BINS).
+  cell_xbin <- rep(NA_integer_, length(cell_ok))
+  cell_ybin <- rep(NA_integer_, length(cell_ok))
+  cell_xbin[cell_ok] <- findInterval(cell_vals[cell_ok, "MAT"], mat_breaks,
+                                     rightmost.closed = TRUE, all.inside = TRUE)
+  cell_ybin[cell_ok] <- findInterval(cell_vals[cell_ok, "MAP"], map_breaks,
+                                     rightmost.closed = TRUE, all.inside = TRUE)
+  cell_bin <- ifelse(cell_ok, paste(cell_xbin, cell_ybin, sep = "_"), NA)
+
+  # count_canada: number of Canadian cells per climate zone.
+  zone_canada <- tibble::as_tibble(table(bin = cell_bin[cell_ok]),
+                                   .name_repair = "minimal")
+  names(zone_canada) <- c("bin", "count_canada")
+  zone_canada$count_canada <- as.integer(zone_canada$count_canada)
+
+  # ---- Step 8: Coverage per scope ------------------------------------------
+  # For a set of sample coordinates, find the unique Canadian climate cells they
+  # fall in, tally sampled cells per zone, and divide by count_canada.
+  # Returns a per-zone tibble joined to zone geometry (bin centres) plus a
+  # coverage SpatRaster for the geographic map.
+  compute_coverage <- function(pts_df, scope_label) {
+
+    xy    <- as.matrix(pts_df[, c("lon", "lat")])
+    cells <- terra::cellFromXY(clim, xy)
+    cells <- unique(cells[!is.na(cells)])
+    cells <- cells[cell_ok[cells]]          # keep only cells with climate data
+
+    samp_bins <- cell_bin[cells]
+    zone_samp <- tibble::as_tibble(table(bin = samp_bins), .name_repair = "minimal")
+    names(zone_samp) <- c("bin", "count_sampled")
+    zone_samp$count_sampled <- as.integer(zone_samp$count_sampled)
+
+    # Per-zone coverage table (all occupied zones; unsampled -> 0).
+    zones <- zone_canada |>
+      dplyr::left_join(zone_samp, by = "bin") |>
+      dplyr::mutate(
+        count_sampled = dplyr::coalesce(count_sampled, 0L),
+        coverage      = count_sampled / count_canada,
+        xbin = as.integer(sub("_.*$", "", bin)),
+        ybin = as.integer(sub("^.*_", "", bin)),
+        # Bin centres in real climate units (for geom_tile placement).
+        mat_centre = mat_breaks[xbin] + mat_width / 2,
+        map_centre = map_breaks[ybin] + map_width / 2,
+        scope      = scope_label
+      )
+
+    # Coverage raster for the map: each Canadian cell takes its zone's coverage.
+    cov_lookup <- stats::setNames(zones$coverage, zones$bin)
+    cov_vec    <- unname(cov_lookup[cell_bin])   # NA outside Canada
+    cov_rast   <- clim[["MAT"]]
+    terra::values(cov_rast) <- cov_vec
+    names(cov_rast) <- "coverage"
+    # Cells whose zone is never sampled (coverage 0) -> NA so the grey Canada
+    # base layer shows through on the map.
+    cov_rast <- terra::ifel(cov_rast == 0, NA, cov_rast)
+
+    list(zones = zones, cov_rast = cov_rast)
+  }
+
+  # GlobalFungi: every EcM-only GF sample qualifies (>= 1 EcM SH by construction).
+  gf_pts <- emf |>
+    dplyr::filter(source == "GlobalFungi", coord_in_canada == TRUE) |>
+    dplyr::distinct(lat, lon)
+
+  # GenBank EcM records with validated Canadian coordinates. Constructed the
+  # same way as `gb_parsed` in Step 1, but kept separate so this climate
+  # analysis reads as a self-contained unit alongside gf_pts / comb_pts.
+  gb_pts <- emf |>
+    dplyr::filter(source == "GenBank", coord_in_canada == TRUE) |>
+    dplyr::distinct(lat, lon)
+
+  # Combined scope: union of distinct coordinates.
+  comb_pts <- dplyr::bind_rows(gf_pts, gb_pts) |>
+    dplyr::distinct(lat, lon)
+
+  cov_gf   <- compute_coverage(gf_pts,   "GlobalFungi")
+  cov_comb <- compute_coverage(comb_pts, "GlobalFungi + GenBank")
+
+  # ---- Available climate frequency (the "denominator" of coverage) ----------
+  # count_canada = number of Canadian grid cells per climate zone, i.e. how
+  # COMMON each climate is across Canada. This is the "available climate space"
+  # shown in the colleagues' Figures S4/S5 (a = climate space, c = geographic).
+  zone_freq <- zone_canada |>
+    dplyr::mutate(
+      xbin = as.integer(sub("_.*$", "", bin)),
+      ybin = as.integer(sub("^.*_", "", bin)),
+      mat_centre = mat_breaks[xbin] + mat_width / 2,
+      map_centre = map_breaks[ybin] + map_width / 2
+    ) |>
+    # Flag zones never sampled by GlobalFungi + GenBank combined (i.e. the
+    # zones shown grey in panel f) so panel d can outline them in white.
+    dplyr::left_join(dplyr::select(cov_comb$zones, bin, coverage), by = "bin") |>
+    dplyr::mutate(never_sampled_comb = coverage == 0)
+
+  # Climate-frequency raster: each Canadian cell takes its zone's count_canada.
+  freq_lookup <- stats::setNames(zone_freq$count_canada, zone_freq$bin)
+  freq_rast   <- clim[["MAT"]]
+  terra::values(freq_rast) <- unname(freq_lookup[cell_bin])
+  names(freq_rast) <- "frequency"
+
+  # ---- Step 9: Build the six panels (2 rows x 3 columns) -------------------
+  #   Columns: Available climate frequency | GlobalFungi | GF + GenBank
+  #   Rows:    geographic maps (top)       | climate space (bottom)
+
+  canada_albers_clim <- sf::st_transform(canada_wgs84, crs_albers)
+
+  # Tight Canada bounding box, used by coord_sf so each map fills its panel.
+  bbox_can <- sf::st_bbox(canada_albers_clim)
+  xlim_can <- c(bbox_can[["xmin"]], bbox_can[["xmax"]])
+  ylim_can <- c(bbox_can[["ymin"]], bbox_can[["ymax"]])
+
+  # Neatline / "outside-Canada" mask: bounding box MINUS Canada. Drawn (white)
+  # on top of the raster but under the boundary line, it hides the part of any
+  # ~10' grid cell that straddles the coastline/border. This clips the *display*
+  # to Canada WITHOUT discarding any data -- every Canadian cell is still shown
+  # in full; only the over-the-border fringe of edge cells is covered.
+  canada_exterior <- sf::st_difference(
+    sf::st_as_sfc(bbox_can),
+    # st_buffer(0) after st_make_valid rebuilds topology and avoids the
+    # "side location conflict" GEOS throws on the GADM-derived polygon.
+    sf::st_union(sf::st_buffer(sf::st_make_valid(canada_albers_clim), 0))
+  )
+
+  # -- Two fill scales (colorspace palettes, matching the colleagues) ---------
+  # Compact horizontal colourbars: each is drawn ONCE, inside a climate-space
+  # panel (frequency -> panel d, coverage -> panel e); the other panels that
+  # share the scale suppress it with guides(fill = "none").
+  cbar <- ggplot2::guide_colourbar(barwidth  = grid::unit(3.0, "cm"),
+                                   barheight = grid::unit(0.3, "cm"),
+                                   title.position = "top")
+
+  # Coverage scale: "Temps" divergingx, reversed (poor = red, full = teal), as
+  # in their Fig 6. Fixed 0-1 limits so the GF and GF + GenBank panels are
+  # directly comparable; mid = 0.5 centres the light tone of the ramp.
+  cov_fill_scale <- colorspace::scale_fill_continuous_divergingx(
+    palette  = COVERAGE_PALETTE, rev = TRUE, mid = 0.5,
+    limits   = c(0, 1),
+    breaks   = c(0, 0.25, 0.5, 0.75, 1),
+    labels   = scales::percent_format(accuracy = 1),
+    na.value = "transparent",
+    name     = "Climate coverage (% of zone's cells sampled)",
+    guide    = cbar
+  )
+
+  # Frequency scale: "Batlow" sequential (rare = dark, common = light), as in
+  # their Figs S4/S5. Square-root transformed because count_canada is strongly
+  # right-skewed (median 10, max ~1500).
+  freq_fill_scale <- colorspace::scale_fill_continuous_sequential(
+    palette  = FREQ_PALETTE, rev = FALSE, trans = "sqrt",
+    na.value = "transparent",
+    name     = "Climate frequency (Canadian cells per zone)",
+    breaks   = c(1, 100, 400, 900, 1400),
+    guide    = cbar
+  )
+
+  # Theme placing a legend inside the upper-left (empty cold/wet corner) of a
+  # climate-space panel, on a semi-transparent background so tiles show through.
+  legend_inside <- ggplot2::theme(
+    legend.position        = "inside",
+    legend.position.inside = c(0.02, 0.90),
+    legend.justification.inside = c(0, 1),
+    legend.direction       = "horizontal",
+    legend.background = ggplot2::element_rect(fill = scales::alpha("white", 0.65),
+                                              colour = NA),
+    legend.title = ggplot2::element_text(size = 8.5),
+    legend.text  = ggplot2::element_text(size = 7.5)
+  )
+
+  # Shared theming helpers (keep the six panels visually consistent).
+  # Both take a `bg` argument (panel/plot background colour) so the whole
+  # composite can be rendered twice -- once white (manuscript), once
+  # #F2F2F2 (Figure 5 schematic source panel) -- from the same panel code.
+  clim_theme_fn <- function(bg) {
+    ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme(
+        panel.grid       = ggplot2::element_blank(),
+        panel.background = ggplot2::element_rect(fill = bg, colour = NA),
+        plot.background  = ggplot2::element_rect(fill = bg, colour = NA)
+      )
+  }
+  map_theme_fn <- function(bg) {
+    ggplot2::theme_void(base_size = 11) +
+      ggplot2::theme(
+        plot.margin      = ggplot2::margin(2, 2, 2, 2),
+        panel.background = ggplot2::element_rect(fill = bg, colour = NA),
+        plot.background  = ggplot2::element_rect(fill = bg, colour = NA)
+      )
+  }
+  clim_labs <- ggplot2::labs(x = "Mean annual temperature (\u00b0C)",
+                             y = "Mean annual precipitation (mm)")
+
+  # Helper: project a Canada-grid raster to Albers and return a tidy data frame
+  # for geom_raster(). The input raster is already restricted to Canada (masked
+  # to the Canada boundary in Step 6), so NO further masking is done here -- all
+  # Canadian cells are shown. Drawing geom_raster() under coord_sf(crs =
+  # crs_albers) (below) keeps the raster and the geom_sf boundary in the SAME
+  # projection; without that explicit crs the two layers misregister and the
+  # raster appears to spill past the boundary line.
+  #
+  # na.rm = FALSE keeps the FULL regular grid (NA cells included). Dropping NA
+  # rows would leave gaps in the column positions, which makes geom_raster warn
+  # that "pixels are placed at uneven horizontal intervals"; NA cells render
+  # transparent (scale na.value) so keeping them is harmless.
+  rast_to_df <- function(r, valname) {
+    r <- terra::project(r, crs_albers, method = "near")
+    df <- terra::as.data.frame(r, xy = TRUE, na.rm = FALSE)
+    names(df) <- c("x", "y", valname)
+    df
+  }
+
+  # -- Coverage climate-space panel (tiles in MAT x MAP space) ----------------
+  build_cov_clim_panel <- function(zones, show_legend = FALSE, bg = "white") {
+    p <- ggplot2::ggplot() +
+      # Climate zones present in Canada but never sampled: solid grey.
+      ggplot2::geom_tile(
+        data = dplyr::filter(zones, coverage == 0),
+        ggplot2::aes(x = mat_centre, y = map_centre),
+        width = mat_width, height = map_width, fill = NEVER_SAMPLED_COLOUR
+      ) +
+      # Sampled zones: coloured by coverage.
+      ggplot2::geom_tile(
+        data = dplyr::filter(zones, coverage > 0),
+        ggplot2::aes(x = mat_centre, y = map_centre, fill = coverage),
+        width = mat_width, height = map_width
+      ) +
+      cov_fill_scale + clim_labs + clim_theme_fn(bg)
+    if (show_legend) p + legend_inside else p + ggplot2::guides(fill = "none")
+  }
+
+  # -- Coverage geographic-map panel (no legend; no title) --------------------
+  build_cov_map_panel <- function(cov_rast, bg = "white") {
+    df <- rast_to_df(cov_rast, "coverage")
+    ggplot2::ggplot() +
+      # Grey Canada landmass shows through where coverage is 0 / NA.
+      ggplot2::geom_sf(data = canada_albers_clim, fill = NEVER_SAMPLED_COLOUR, colour = NA) +
+      ggplot2::geom_raster(data = df, ggplot2::aes(x = x, y = y, fill = coverage)) +
+      # Neatline mask: hide raster cell fringes that straddle the border.
+      # Filled with `bg` (not a fixed "white") so it blends into the panel
+      # background in both the white and grey versions of this figure.
+      ggplot2::geom_sf(data = canada_exterior, fill = bg, colour = NA) +
+      ggplot2::geom_sf(data = canada_albers_clim, fill = NA, colour = "grey40",
+                       linewidth = 0.2) +
+      cov_fill_scale +
+      ggplot2::coord_sf(crs = crs_albers, xlim = xlim_can, ylim = ylim_can,
+                        expand = FALSE) +
+      map_theme_fn(bg) + ggplot2::guides(fill = "none")
+  }
+
+  # -- Available-climate climate-space panel (every zone coloured) ------------
+  # Zones never sampled by GlobalFungi + GenBank combined (coverage == 0 in
+  # panel f, shown there as solid grey) are additionally outlined in white
+  # here, so the reader can see directly -- without cross-referencing panel f
+  # -- which climates remain completely unsampled.
+  build_freq_clim_panel <- function(show_legend = FALSE, bg = "white") {
+    p <- ggplot2::ggplot(zone_freq) +
+      ggplot2::geom_tile(
+        ggplot2::aes(x = mat_centre, y = map_centre, fill = count_canada),
+        width = mat_width, height = map_width
+      ) +
+      ggplot2::geom_tile(
+        data = dplyr::filter(zone_freq, never_sampled_comb),
+        ggplot2::aes(x = mat_centre, y = map_centre),
+        width = mat_width, height = map_width,
+        fill = NA, colour = "white", linewidth = 0.15
+      ) +
+      freq_fill_scale + clim_labs + clim_theme_fn(bg)
+    if (show_legend) p + legend_inside else p + ggplot2::guides(fill = "none")
+  }
+
+  # -- Available-climate geographic-map panel (no legend; no title) -----------
+  build_freq_map_panel <- function(bg = "white") {
+    df <- rast_to_df(freq_rast, "frequency")
+    ggplot2::ggplot() +
+      # Canvas layer under the raster; filled with `bg` for the same reason
+      # as the neatline mask below.
+      ggplot2::geom_sf(data = canada_albers_clim, fill = bg, colour = NA) +
+      ggplot2::geom_raster(data = df, ggplot2::aes(x = x, y = y, fill = frequency)) +
+      # Neatline mask: hide raster cell fringes that straddle the border.
+      ggplot2::geom_sf(data = canada_exterior, fill = bg, colour = NA) +
+      ggplot2::geom_sf(data = canada_albers_clim, fill = NA, colour = "grey40",
+                       linewidth = 0.2) +
+      freq_fill_scale +
+      ggplot2::coord_sf(crs = crs_albers, xlim = xlim_can, ylim = ylim_can,
+                        expand = FALSE) +
+      map_theme_fn(bg) + ggplot2::guides(fill = "none")
+  }
+
+  # Build the six panels and assemble the composite for a given background
+  # colour. Legends are drawn only inside panels d (frequency) and e
+  # (coverage); titles are omitted (described in the figure caption). Row 1 =
+  # maps, row 2 = climate space; top row given slightly less height so the
+  # maps fill their panels; tags a-f read row-major.
+  build_combined <- function(bg) {
+    p_freq_map  <- build_freq_map_panel(bg)
+    p_gf_map    <- build_cov_map_panel(cov_gf$cov_rast, bg)
+    p_cmb_map   <- build_cov_map_panel(cov_comb$cov_rast, bg)
+    p_freq_clim <- build_freq_clim_panel(show_legend = TRUE, bg = bg)            # panel d
+    p_gf_clim   <- build_cov_clim_panel(cov_gf$zones, show_legend = TRUE, bg = bg)   # panel e
+    p_cmb_clim  <- build_cov_clim_panel(cov_comb$zones, show_legend = FALSE, bg = bg) # panel f
+
+    patchwork::wrap_plots(
+      p_freq_map,  p_gf_map,  p_cmb_map,
+      p_freq_clim, p_gf_clim, p_cmb_clim,
+      ncol = 3, nrow = 2, heights = c(0.85, 1)
+    ) +
+      patchwork::plot_annotation(
+        tag_levels = "a",
+        theme = ggplot2::theme(plot.background = ggplot2::element_rect(fill = bg, colour = NA))
+      )
+  }
+
+  save_fig_formats(fig_out, build_combined("white"),
+                   width = 15, height = 10, dpi = 300, bg = "white")
+
+  # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
+  # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
+  ggplot2::ggsave(fig_out_grey, build_combined(fig5_grey_bg),
+                  width = 15, height = 10, dpi = 300, bg = fig5_grey_bg)
+
+}

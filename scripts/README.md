@@ -24,8 +24,9 @@ aborts the run or is logged so the run continues.
 You can also run scripts individually in numeric order — each is
 checkpoint-guarded, so completed steps are skipped on re-run.
 
-The manuscript (`manuscript.qmd`) and Supplemental Information documents
-(`supplemental_information_S1.qmd`, `supplemental_information_S2.qmd`) read
+The manuscript (`FACETS/manuscript_FACETS_final.qmd`) and Supplemental Materials
+documents (`FACETS/supplemental_materials_SM1_FACETS.qmd`,
+`FACETS/supplemental_materials_SM2_FACETS.qmd`) read
 from `data_derived/` to report in-text statistics and tables/figures, but are
 prepared and archived separately for journal submission — rendering them is
 outside this repo's scope (see root `README.md` > Project structure).
@@ -36,7 +37,7 @@ outside this repo's scope (see root `README.md` > Project structure).
 |---|---|---|
 | `vsearch` (≥ 2.x) | `03_genbank.R` | SH assignment of GenBank sequences |
 | `awk` | `02_globalfungi.R` | subsets the ~13 GB GlobalFungi SH matrix |
-| Internet + NCBI Entrez | `03_genbank.R`, `19_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
+| Internet + NCBI Entrez | `03_genbank.R`, `18_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
 | Internet + GBIF credentials | `09_linnean.R` | only if the provided GBIF ZIP is absent (see root `README.md`) |
 | Internet (biendata.org) | `07_bien2_ranges.R` | BIEN2 range downloads |
 | Internet (BIEN) | `06_host_species.R` | native-flora query |
@@ -53,9 +54,9 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 03 | `03_genbank.R` | Fetch + SH-assign Canadian GenBank ITS records | NCBI GenBank, UNITE FASTA | `genbank_emf_canada_long.csv` (+ checkpoints) | dataset, Table 2 |
 | 04 | `04_combine_ecm_dataset.R` | Combine sources, validate coords, EcM-filter via FungalTraits | 02 + 03 outputs, FungalTraits | `emf_canada_em_only.csv`, `emf_canada_combined.csv` | primary dataset |
 | 05 | `05_prepare_fungalroot.R` | Classify EcM-demonstrated plant species | FungalRoot DwC-A | `clean_fungalroot_species.csv` | host list input |
-| 06 | `06_host_species.R` | Native Canadian EcM host species list | 05 output, BIEN native flora | `ecm_native_canada_host_species.csv` | Eltonian/Hutchinsonian denominator |
+| 06 | `06_host_species.R` | Native Canadian EcM host species list | 05 output, BIEN native flora | `ecm_native_canada_host_species.csv` | Eltonian denominator |
 | 07 | `07_bien2_ranges.R` | Download BIEN2 modelled host ranges | 06 output, biendata.org | `data_raw/bien2_ranges/*` | host rasters input |
-| 08 | `08_host_rasters.R` | Rasterize host richness + data coverage | 06 + 07 outputs, `emf` | `bien_host_*` rasters | Figure 4, Hutchinsonian |
+| 08 | `08_host_rasters.R` | Rasterize host richness + data coverage | 06 + 07 outputs, `emf` | `bien_host_*` rasters | Figure 4, Eltonian |
 | 09 | `09_linnean.R` | Taxonomic accounting, dark fraction, GBIF specimens | `emf`, FungalTraits, UNITE, GBIF, van Galen CSV | `linnean_*` outputs (incl. `linnean_gbif_ecm_nosequence_canada.csv`) | Table 1, Table 2, Table S3, in-text Linnean |
 | 10 | `10_dark_diversity.R` | Dark ("undescribed") EcM taxa map | van Galen raster, Canada boundary | `Figure-S1_dark_diversity.png` (+ `..._grey.png`) | Figure S1 |
 | 11 | `11_wallacean.R` | Occurrence/occupancy + SDM sufficiency | `emf`, global GF SH matrix | `wallacean_*` | Table 3, Figure 2 |
@@ -64,11 +65,10 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 14 | `14_prestonian.R` | Temporal coverage vs. BioTIME | BioTIME, `emf` | `prestonian_*` | in-text Prestonian |
 | 15 | `15_darwinian.R` | Genome availability vs. MycoCosm | MycoCosm list, `emf` | `darwinian_*` | in-text Darwinian |
 | 16 | `16_raunkiaeran.R` | Trait coverage from FungalTraits | FungalTraits, `emf` | `raunkiaeran_*` | Table 4 |
-| 17 | `17_hutchinsonian.R` | Per-ecozone coverage, host bivariate map, ecozone sampling map | `emf`, host rasters, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-04_host_bivariate_map.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 4, Figure S4, Table S1 |
-| 18 | `18_climate_gap.R` | Climate-space coverage figure | WorldClim, `emf` | `Figure-03_climate_gap.png` (+ `..._grey.png`) | Figure 3 |
-| 19 | `19_eltonian.R` | Host–fungus interaction coverage (Canada + global) | `emf`, host list, global GF/GenBank | `eltonian_*` | Table S2, in-text Eltonian |
-| 20 | `20_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
-| 21 | `21_depth_discard.R` | % sequencing depth discarded by EcM-genus filtering | GF metadata (02), `emf` | `Figure-S3_depth_discard.png` | Figure S3 |
+| 17 | `17_hutchinsonian.R` | Climate-space coverage, per-ecozone coverage, ecozone sampling map | `emf`, WorldClim, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-03_climate_gap.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 3, Figure S4, Table S1 |
+| 18 | `18_eltonian.R` | Host–fungus interaction coverage (Canada + global), host habitat coverage, host bivariate map | `emf`, host list, host rasters (08), global GF/GenBank | `eltonian_*` (incl. `eltonian_host_raster_summary.csv`), `bien_host_data_richness_0.5deg.tif`, `bien_host_data_proportion_0.5deg.tif`, `Figure-04_host_bivariate_map.png` (+ `..._grey.png`) | Figure 4, Table S2, in-text Eltonian |
+| 19 | `19_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
+| 20 | `20_depth_discard.R` | % sequencing depth discarded by EcM-genus filtering | GF metadata (02), `emf` | `Figure-S3_depth_discard.png` | Figure S3 |
 
 ## Cross-step dependencies to note
 
@@ -76,7 +76,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
   order across the block is `05 → 06 → 07 → 08`.
 - `12`/`13` (global GlobalFungi comparators) require a full scan of the ~13 GB
   SH matrix and are the most compute-intensive steps; run them deliberately.
-- `20_sampling_maps.R` reads the GBIF specimen tables written by `09_linnean.R`.
+- `19_sampling_maps.R` reads the GBIF specimen tables written by `09_linnean.R`.
 
 ## Conventions
 
@@ -85,7 +85,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
 - **Figure 5 grey-background variants**: Figure 5 (`Figure-05_shortfalls_summary.png`)
   is a hand-assembled schematic composite manually built from panels taken
   from Figures 1, 3, 4, S1, S4, and S5, placed on a light-grey (`fig5_grey_bg`,
-  `#F2F2F2` in `00_setup.R`) backdrop. Scripts `10`, `17`, `18`, and `20`
+  `#F2F2F2` in `00_setup.R`) backdrop. Scripts `10`, `17`, `18`, and `19`
   therefore each save two versions of their figure(s): the normal
   white-background copy (`paths$fig_*`, used in the manuscript/SI) and an
   additional grey copy (`paths$fig_*_grey`, filename suffixed `_grey`) used

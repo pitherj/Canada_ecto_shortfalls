@@ -1,5 +1,5 @@
 # =============================================================================
-# 20_sampling_maps.R  —  Sampling-location overview maps
+# 19_sampling_maps.R  —  Sampling-location overview maps
 # =============================================================================
 # PURPOSE
 #   Produce the two whole-Canada sampling maps used in the manuscript:
@@ -50,15 +50,10 @@ need_gbif <- !file.exists(paths$fig_gbif_specimens) ||
              !file.exists(paths$fig_gbif_specimens_grey) ||
              !file.exists(paths$gbif_plotted_counts)
 
-if (!(need_g0 || need_gbif)) {
-  ts("Both sampling maps already exist — nothing to do.")
-}
-
 # =============================================================================
 # Shared basemap layers
 # =============================================================================
 if (need_g0 || need_gbif) {
-  ts("Loading base spatial layers...")
 
   canada_bound  <- sf::st_read(paths$canada_bound, quiet = TRUE) |> sf::st_make_valid()
   canada_albers <- sf::st_transform(canada_bound, crs_albers)
@@ -105,10 +100,7 @@ map_theme_fn <- function(bg) {
 # =============================================================================
 # Figure 1 — EcM sequence sampling locations (GlobalFungi + GenBank)
 # =============================================================================
-ts("Figure 1: sequence sampling-location map...")
-if (!need_g0) {
-  ts("  Already exists — skipping.")
-} else {
+if (!(!need_g0)) {
   # One point per unique coordinate per source (coordinates pre-validated)
   locs_g0 <- dplyr::bind_rows(
     dplyr::filter(emf, source == "GenBank",     coord_in_canada == TRUE) |>
@@ -143,13 +135,11 @@ if (!need_g0) {
 
   save_fig_formats(paths$fig_sampling_map, build_p_g0("white"),
                    width = 12, height = 9, dpi = MAP_DPI, bg = "white")
-  ts(sprintf("  Saved %s", basename(paths$fig_sampling_map)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
   # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
   ggplot2::ggsave(paths$fig_sampling_map_grey, build_p_g0(fig5_grey_bg),
                   width = 12, height = 9, dpi = MAP_DPI, bg = fig5_grey_bg)
-  ts(sprintf("  Saved %s", basename(paths$fig_sampling_map_grey)))
 }
 
 # =============================================================================
@@ -158,12 +148,8 @@ if (!need_g0) {
 # Blue circles: genera that also have sequence data in Canada.
 # Orange triangles: genera without sequence data in Canada.
 # =============================================================================
-ts("Figure S5: GBIF physical specimen map...")
 if (!need_gbif) {
-  ts("  Already exists — skipping.")
-} else if (!file.exists(paths$gbif_ecm) || !file.exists(paths$gbif_ecm_nosequence)) {
-  ts("  GBIF specimen files not found — run 09_linnean.R first.")
-} else {
+} else if (!(!file.exists(paths$gbif_ecm) || !file.exists(paths$gbif_ecm_nosequence))) {
   gbif_labels <- c("Genera with sequence data in Canada",
                    "Genera without sequence data in Canada")
 
@@ -176,10 +162,6 @@ if (!need_gbif) {
     dplyr::filter(!is.na(decimalLatitude), !is.na(decimalLongitude)) |>
     dplyr::distinct(decimalLatitude, decimalLongitude, category, .keep_all = TRUE) |>
     dplyr::mutate(category = factor(category, levels = gbif_labels))
-
-  ts(sprintf("  Georeferenced GBIF records — with data: %d  |  without: %d",
-             sum(gbif_combined$category == gbif_labels[1]),
-             sum(gbif_combined$category == gbif_labels[2])))
 
   gbif_sf <- sf::st_as_sf(gbif_combined, coords = c("decimalLongitude", "decimalLatitude"),
                           crs = 4326) |>
@@ -195,7 +177,6 @@ if (!need_gbif) {
                   sum(gbif_sf$category == gbif_labels[2]))
   )
   readr::write_csv(gbif_plot_counts, paths$gbif_plotted_counts)
-  ts(sprintf("  Saved %s", basename(paths$gbif_plotted_counts)))
 
   # build_p_gbif(bg): as with build_p_g0() above, the provinces_albers "white"
   # land fill is a deliberate design colour and stays fixed across versions.
@@ -219,13 +200,10 @@ if (!need_gbif) {
 
   save_fig_formats(paths$fig_gbif_specimens, build_p_gbif("white"),
                    width = 12, height = 9, dpi = MAP_DPI, bg = "white")
-  ts(sprintf("  Saved %s", basename(paths$fig_gbif_specimens)))
 
   # Grey (#F2F2F2) version: source panel for the hand-assembled Figure 5
   # schematic (see fig5_grey_bg in 00_setup.R); not used elsewhere.
   ggplot2::ggsave(paths$fig_gbif_specimens_grey, build_p_gbif(fig5_grey_bg),
                   width = 12, height = 9, dpi = MAP_DPI, bg = fig5_grey_bg)
-  ts(sprintf("  Saved %s", basename(paths$fig_gbif_specimens_grey)))
 }
 
-ts("20_sampling_maps.R complete.")

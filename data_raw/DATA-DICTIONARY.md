@@ -371,7 +371,7 @@ for Canadian EcM genera.
 **Citation**: Fick SE & Hijmans RJ (2017) *International Journal of Climatology* 37: 4302–4315.
 
 Multi-band bioclimatic raster (30 arc-second, standard WorldClim BIO1–BIO19
-band order). `18_climate_gap.R` uses **BIO1** (mean annual temperature) and
+band order). `17_hutchinsonian.R` uses **BIO1** (mean annual temperature) and
 **BIO12** (mean annual precipitation) to define Canada's climate space; the
 other 17 bands are present but not read by the pipeline.
 
@@ -471,27 +471,25 @@ across Canada (Figure S1).
 | File | Description |
 |---|---|
 | `canada_bound_raw.gpkg` | Canada national + provincial/territorial boundaries (level 1; 13 features) |
-| `usa_bound_raw.gpkg` | USA state boundaries (level 1; 51 features) |
-| `mexico_bound_raw.gpkg` | Mexico state boundaries (level 1; 32 features) |
 
 Auto-downloaded by `01_spatial_data.R` if absent. Used for coordinate
 validation (`04_combine_ecm_dataset.R`) and mapping — only the geometry
 column is used; the attribute fields below are GADM's native schema and are
 not filtered on by the pipeline.
 
-#### Attribute fields (identical schema across all three files)
+#### Attribute fields
 
 | Field | Type | Description |
 |---|---|---|
 | `fid` | integer | Feature ID |
 | `geom` | geometry | Polygon/multipolygon boundary |
 | `GID_1` | character | GADM level-1 unique identifier |
-| `GID_0` | character | GADM country identifier (`CAN`/`USA`/`MEX`) |
+| `GID_0` | character | GADM country identifier (`CAN`) |
 | `COUNTRY` | character | Country name |
 | `NAME_1` | character | Province/state/territory name |
 | `VARNAME_1` | character | Alternate name spellings, pipe-separated |
 | `NL_NAME_1` | character | Native-language name, if different |
-| `TYPE_1` | character | Local administrative-division type (e.g. "Province", "Estado") |
+| `TYPE_1` | character | Local administrative-division type (e.g. "Province") |
 | `ENGTYPE_1` | character | English administrative-division type |
 | `CC_1` | character | Local administrative-division code |
 | `HASC_1` | character | Hierarchical administrative subdivision code |

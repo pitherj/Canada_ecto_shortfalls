@@ -1,5 +1,5 @@
 # =============================================================================
-# 21_depth_discard.R  —  Sequencing depth discarded by EcM-genus filtering (Fig S3)
+# 20_depth_discard.R  —  Sequencing depth discarded by EcM-genus filtering (Fig S3)
 # =============================================================================
 # PURPOSE
 #   Quantify how much of each Canadian GlobalFungi soil sample's total sequencing
@@ -24,18 +24,12 @@
 source(here::here("scripts", "00_setup.R"))
 
 if (file.exists(paths$fig_depth_discard)) {
-  ts("Figure S3 (depth discarded) already exists — skipping.")
-} else if (!file.exists(paths$gf_meta_out)) {
-  ts(sprintf("  GlobalFungi metadata checkpoint not found: %s — run 02_globalfungi.R first.",
-             paths$gf_meta_out))
-} else {
+} else if (!(!file.exists(paths$gf_meta_out))) {
 
   # ---- 1. Canadian soil-sample total sequencing depth (ITS_total) ------------
-  ts("Figure S3: loading Canadian GlobalFungi soil sample metadata...")
   soil_meta <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE) |>
     dplyr::filter(sample_type == "soil") |>
     dplyr::distinct(sample_ID, ITS_total)
-  ts(sprintf("  Canadian soil samples: %d", nrow(soil_meta)))
 
   # ---- 2. Per-sample EcM read sum (post-filter depth) ------------------------
   ecm_per_sample <- emf |>
@@ -54,8 +48,6 @@ if (file.exists(paths$fig_depth_discard)) {
     dplyr::filter(ecm_reads >= 1)
 
   discard_q <- stats::quantile(dilution_df$pct_discarded, probs = c(0, .25, .5, .75, 1))
-  ts(sprintf("  Samples (ecm_reads >= 1): %d | %% discarded min-Q1-med-Q3-max: %.1f-%.1f-%.1f-%.1f-%.1f",
-             nrow(dilution_df), discard_q[1], discard_q[2], discard_q[3], discard_q[4], discard_q[5]))
 
   # ---- 4. Histogram ----------------------------------------------------------
   p_hist <- ggplot2::ggplot(dilution_df, ggplot2::aes(x = pct_discarded)) +
@@ -70,7 +62,5 @@ if (file.exists(paths$fig_depth_discard)) {
     ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
 
   save_fig_formats(paths$fig_depth_discard, p_hist, width = 10, height = 6, dpi = 300)
-  ts(sprintf("  Saved %s", basename(paths$fig_depth_discard)))
 }
 
-ts("21_depth_discard.R complete.")

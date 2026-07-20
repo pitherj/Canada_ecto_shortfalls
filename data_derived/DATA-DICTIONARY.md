@@ -57,7 +57,17 @@ fields.
 | `genbank_emf_canada_long.csv` | `03_genbank.R` | Long-format Canadian GenBank EcM records with UNITE taxonomy, metadata, and provenance. |
 | `clean_fungalroot_species.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant species from FungalRoot (GBIF-backbone-matched, species rule). |
 | `clean_fungalroot_genera_table_s2.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant genera from FungalRoot's published Table S2 (genus rule) — a second, independent selection route consumed by `06_host_species.R` alongside the species-rule output above. |
-| `ecm_native_canada_host_species.csv` | `06_host_species.R` | Native Canadian EcM host species (species-level FungalRoot evidence ∩ BIEN native flora). This list is the denominator of potential host interactions in the Eltonian and Hutchinsonian analyses. |
+| `ecm_native_canada_host_species.csv` | `06_host_species.R` | Native Canadian EcM host species: BIEN native Canadian flora retained where FungalRoot evidence qualifies via **either** route (species-level occurrence record **OR** Table S2 genus call, combined with OR). This list is the denominator of potential host interactions in the Eltonian analysis. |
+
+### `ecm_native_canada_host_species.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `species` | character | Accepted binomial of the native Canadian EcM host species. |
+| `host_demonstrated` | logical | Always `TRUE` by construction (a species is only written here if it qualified). Kept explicit for self-documentation. |
+| `evidence_source` | character | Which FungalRoot route qualified the species: `occurrence` (its own species-level record), `table_s2` (its genus is an EcM/EcM-AM genus in FungalRoot Table S2), or `both`. |
+| `growth_form` | character | Growth form used for the tree / shrub / herbaceous split (`tree`, `shrub`, `herb`, `herb*`, `forb`). |
+| `growth_form_source` | character | Which stage of the growth-form chain supplied the value: `bien` (BIEN trait database), `gift` (GIFT trait 1.2.1), `congener` (modal growth form of congeners in this list), or `manual` (curated override). Lets the provenance of every growth form be audited. |
 
 ### Shared EMF-record fields
 
@@ -93,7 +103,7 @@ built around the same core columns. Columns unique to one file are marked.
 | `its_region` | character | `"ITS2"` or `"ITSboth"`: whether the source sequence had a genuine standalone ITS1 detection in addition to ITS2 — provenance only, does **not** affect SH assignment, which uses the ITS2 fragment alone | GenBank-derived files |
 | `canada_basis` | character | Provenance of the Canada assignment for a GenBank record: `"both"` (country + coordinates both indicate Canada), `"country_only"`, `"coordinates_only"`, `"search_only"` (found only via Canada-targeted search terms), or `"coordinates_outside_canada"` (assigned in `04_combine_ecm_dataset.R` when coordinates validate outside the GADM Canada boundary) | GenBank-derived files |
 | `host_taxon_raw` | character | Raw host string extracted from GenBank record text, before cleaning | GenBank-derived files |
-| `host_taxon` | character | Canonicalized host taxon (via `canonicalize_host()` in `00_setup.R`); used by `17_hutchinsonian.R`, `19_eltonian.R`, `20_sampling_maps.R` | GenBank-derived files |
+| `host_taxon` | character | Canonicalized host taxon (via `canonicalize_host()` in `00_setup.R`); used by `18_eltonian.R` | GenBank-derived files |
 | `coord_in_canada` | logical | `TRUE` = coordinates validated inside the GADM Canada boundary; `FALSE` = coordinates present but outside; `NA` = no coordinates | combined, em_only |
 | `primary_lifestyle`, `secondary_lifestyle` | character | FungalTraits guild fields for the record's genus | em_only only |
 | `ectomycorrhiza_lineage`, `ectomycorrhiza_exploration_type` | character | FungalTraits EcM-specific fields for the record's genus | em_only only |
@@ -105,15 +115,13 @@ built around the same core columns. Columns unique to one file are marked.
 | File | Produced by | Description |
 |---|---|---|
 | `canada_simple.gpkg` | `01_spatial_data.R` | Dissolved, simplified Canada national boundary (WGS84). Single-feature polygon. |
-| `north_america_simple.gpkg` | `01_spatial_data.R` | Canada + contiguous USA + Mexico (WGS84), for basemaps. |
-| `canada_ne_albers.gpkg` | `01_spatial_data.R` | Natural Earth Canada boundary, Canada Albers projection. |
 | `lakes_canada_albers.gpkg` | `01_spatial_data.R` | Major Canadian lakes, Canada Albers projection. |
 | `ecoregions_processed.gpkg` | `01_spatial_data.R` | Canadian ecoregion polygons (WGS84) with ecozone names joined; carries the fields listed under `data_raw/ecoregions/ecoregions.dbf` in `data_raw/DATA-DICTIONARY.md`, plus `NAME_EN`/`NAME_FR` joined in. |
 | `ecozone_names.csv` | `01_spatial_data.R` | Ecozone code → English/French name lookup (copy of `data_raw/ecoregions/Ecoregions/ecozone_names.dbf`; see that file's field table). |
 | `bien_host_richness_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: number of native EcM host species with a BIEN2 range per 0.5° cell. |
 | `bien_host_species_stack.tif` | `08_host_rasters.R` | Multi-layer raster: one binary (0/1) presence layer per host species (layer names = species). |
-| `bien_host_data_richness_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: number of host species with ≥1 Canadian EcM sequence record per cell. |
-| `bien_host_data_proportion_0.5deg.tif` | `08_host_rasters.R` | Single-band raster: proportion of locally present host species with EcM data (data richness / host richness), range 0–1. |
+| `bien_host_data_richness_0.5deg.tif` | `18_eltonian.R` | Single-band raster: number of host species with ≥1 Canadian EcM sequence record per cell. |
+| `bien_host_data_proportion_0.5deg.tif` | `18_eltonian.R` | Single-band raster: proportion of locally present host species with EcM data (data richness / host richness), range 0–1. |
 
 ---
 
@@ -158,7 +166,7 @@ zip: `occurrences.csv`, `measurements.csv`, `media.csv`, `eml.xml`, `meta.xml`,
 | `linnean_genus_coverage.csv` | All FungalTraits EcM genera flagged for whether observed in Canada. |
 | `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S5. |
 | `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for EcM genera **without** sequence data in Canada. Feeds Figure S5 and Table S4. |
-| `linnean_gbif_plotted_counts.csv` | Produced by `20_sampling_maps.R`. Counts of GBIF points actually drawn on Figure S5 (distinct georeferenced coordinates within the Canada boundary), one row per category. Used to caption Figure S5 dynamically in the Supplemental Information. |
+| `linnean_gbif_plotted_counts.csv` | Produced by `19_sampling_maps.R`. Counts of GBIF points actually drawn on Figure S5 (distinct georeferenced coordinates within the Canada boundary), one row per category. Used to caption Figure S5 dynamically in the Supplemental Information. |
 
 #### `linnean_summary.csv` — structure
 
@@ -279,12 +287,13 @@ GBIF section for the full field list — identical schema), plus:
 | `eltonian_global_host_coverage.csv` | Per Canadian host species: whether it has any global GlobalFungi root-sample record. |
 | `eltonian_global_host_to_fungi.csv` | Per Canadian host species: documented global EcM fungal-species associates. |
 | `eltonian_sample_type_tally_canada.csv`, `eltonian_sample_type_tally_global.csv`, `eltonian_genbank_tissue_tally_canada.csv` | Diagnostic tallies of the sample/tissue types underlying the host information. |
+| `eltonian_host_raster_summary.csv` | Summary statistics of 0.5° grid-cell coverage (proportion of host species with EcM data). Long-format `metric,value` table (6 metrics). |
 
 #### `eltonian_summary.csv` — structure
 
 | Field | Type | Description |
 |---|---|---|
-| `metric` | character | Name of the reported statistic (41 rows spanning host/genus coverage, matrix fill rates, and Canada/global mycobiont counts — see `19_eltonian.R` for the full list) |
+| `metric` | character | Name of the reported statistic (41 rows spanning host/genus coverage, matrix fill rates, and Canada/global mycobiont counts — see `18_eltonian.R` for the full list) |
 | `value` | character | Reported value |
 
 #### Other `eltonian/` fields
@@ -320,6 +329,8 @@ GBIF section for the full field list — identical schema), plus:
 | | `n_samples` | integer | Sample count |
 | `eltonian_genbank_tissue_tally_canada.csv` | `category` | character | Tissue/isolation-source category |
 | | `n` | integer | Record count |
+| `eltonian_host_raster_summary.csv` | `metric` | character | e.g. "Grid cells (0.5°) with EcM host habitat", "Mean proportion of host spp. with sequence data (per cell)" |
+| | `value` | character | Reported value |
 
 ---
 
@@ -327,7 +338,6 @@ GBIF section for the full field list — identical schema), plus:
 
 | File | Description |
 |---|---|
-| `hutchinsonian_raster_summary.csv` | Summary statistics of 0.5° grid-cell coverage (proportion of host species with EcM data). Long-format `metric,value` table (6 metrics). |
 | `hutchinsonian_ecozone_summary.csv` | Ecozone-level sample-threshold counts under three sample definitions. |
 | `hutchinsonian_ecozone_sample_counts.csv` | Per-ecozone unique sampling locations and 3-decimal sites by source (GlobalFungi/GenBank), plus ecozone area and sampling density. Points assigned via within-polygon join against the detailed (unclipped) ecoregion layer with a 5 km nearest-ecozone snap; areas share that polygon basis. **Feeds Table S1.** |
 
@@ -335,8 +345,6 @@ GBIF section for the full field list — identical schema), plus:
 
 | File | Field | Type | Description |
 |---|---|---|---|
-| `hutchinsonian_raster_summary.csv` | `metric` | character | e.g. "Grid cells (0.5°) with EcM host habitat", "Mean proportion of host spp. with sequence data (per cell)" |
-| | `value` | character | Reported value |
 | `hutchinsonian_ecozone_summary.csv` | `definition` | character | Sample-threshold definition used |
 | | `n_ecozones` | integer | Total ecozones assessed |
 | | `ecozones_ge1`, `ecozones_ge10`, `ecozones_ge30` | integer | Ecozones meeting ≥1 / ≥10 / ≥30 samples under that definition |
