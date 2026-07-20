@@ -2,13 +2,9 @@
 title: "An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada"
 # NOTE (FACETS): the author list, affiliations, ORCIDs, and corresponding author
 # are rendered as a title-page block in the document body (below), following the
-# co-authored draft. Author *order* was revised by the co-authors. Institutional
-# email addresses still need to be added before submission (FACETS asks for them).
+# co-authored draft.
 # ---------------------------------------------------------------------------
 # FACETS (Canadian Science Publishing) submission formatting.
-# Main-text content is IDENTICAL to ../manuscript.qmd; only the YAML header and
-# output formatting differ (double spacing, continuous line numbers, page
-# numbers, table captions above, PDF + Word outputs).
 # ---------------------------------------------------------------------------
 format:
   pdf:
@@ -199,10 +195,7 @@ host_unresolved_pct <- round(100 * (1 - myco_can_n / sp_named))
 
 <!-- ============================================================= -->
 <!-- FACETS title page. Author order, affiliations, ORCIDs, and the -->
-<!-- corresponding author follow the co-authored draft. This front  -->
-<!-- matter is new relative to the previous qmd, so (per request) it -->
-<!-- is NOT highlighted. Institutional email addresses still need    -->
-<!-- to be supplied before submission.                              -->
+<!-- corresponding author follow the co-authored draft.             -->
 <!-- ============================================================= -->
 
 **AUTHORS:**
@@ -633,8 +626,7 @@ This work was directly supported by a Canadian Institute for Ecology & Evolution
 
 # Data and code availability
 
-Code for the entire workflow is publicly available (XXX). All input and output data
-are archived and publicly available at (YYY). Supplemental Materials SM1 and SM2 are also archived at the same location.
+Data and code will be made publicly available through a Borealis archive. In the meantime, a complementary GitHub repository (https://github.com/pitherj/Canada_ecto_shortfalls) hosts all relevant code.  
 
 # References
 
