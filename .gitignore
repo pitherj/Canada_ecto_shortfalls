@@ -82,3 +82,11 @@ FACETS/
 
 # ---- Claude Code -------------------------------------------------------------
 .claude/
+
+# Reproducibility verification (scripts/99_verify_reproducibility.R).
+# Keep the reference baseline — it is the evidence a rerun is compared against.
+# Ignore the per-run verify artifacts, which are regenerated on every check.
+repro/verify_*
+
+# temporary folder for scratch files
+temp/
