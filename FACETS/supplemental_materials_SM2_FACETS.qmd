@@ -1,0 +1,222 @@
+---
+subtitle: "Supplemental materials (SM2) for: An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada"
+author: "Jason Pither, with assistance from Claude (Sonnet 5 and Opus 4.8)"
+bibliography: references.bib
+csl: facets.csl  
+link-citations: true
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    embed-resources: true
+    theme: cosmo
+    df-print: kable
+execute:
+  echo: false
+  warning: false
+  message: false
+editor: source
+---
+
+```{=html}
+<style>
+/* Left-justify all table header cells (applies to knitr::kable tables and
+   pandoc-rendered markdown pipe tables alike). */
+th {
+  text-align: left !important;
+}
+</style>
+```
+
+# Decisions log
+
+**Purpose**  
+This log inventories the decisions **we** made in assembling and analyzing the
+dataset (Tables A1–A6), and, separately, the upstream decisions **outside our control** that are baked into the external datasets we rely on (Tables B1 - B9).
+
+**How to read the tables**  
+Each row is one decision. The *Choice* column
+records what we did; the *Rationale* column records the stated reason where one
+exists in the code or Supplemental Materials. Parameter values in `code font` are
+taken directly from the pipeline scripts; the parenthetical script reference
+(e.g. `02_globalfungi.R`) points to the source.
+
+---
+
+## PART A — Decisions made by us
+
+### Table A1. GlobalFungi record assembly (`02_globalfungi.R`)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| A1 | Barcoding-region filter | Retain `barcoding_region %in% {ITS2, ITSboth}` | Restricts to samples carrying an ITS2 read, the region used for SH assignment; sets up parity with the GenBank ITS2 restriction (Supp. Methods). |
+| A2 | Manipulation filter | Retain `manipulated == "NO"` | Exclude experimentally manipulated samples so records reflect natural communities (Supp. Methods). |
+| A3 | Substrate exclusion | Drop substrate in `{shoot, air, water, sediment}` | These substrates are irrelevant to (soil/root-associated) EcM fungi (Supp. Methods). |
+| A4 | Species-level GlobalFungi matrix | **Not used**; work from the SH-level matrix only, decoded through the pinned UNITE build | Keeps a single, self-consistent SH definition across the project (`data_raw/DATA-DICTIONARY.md`). |
+
+### Table A2. GenBank record assembly (`03_genbank.R`)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| B1 | Search query | `"Canada"[Country] AND "Fungi"[Organism] AND ("internal transcribed spacer"[All Fields] OR "ITS"[All Fields])`; **no** date cutoff, **no** lifestyle keyword | Returns all matching fungal ITS records regardless of guild; we apply EcM filtering later and consistently (Supp. Methods). |
+| B2 | Sub-region extraction | ITSx (HMMER backend, Fungi profile set) to detect/extract ITS1 and ITS2 | GenBank-side analogue of GlobalFungi's ITS2/ITSboth restriction, for cross-source comparability (Supp. Methods). |
+| B3 | ITS2 minimum length | Exclude ITS2 fragment `< 100 bp` | Floor to exclude spurious very short calls that trivially tie with many unrelated UNITE references (`03_genbank.R`, Supp. Methods). |
+| B4 | SH matching input | Match on the **extracted ITS2 fragment only**; ITS1 not independently classified | Deliberate simplification preserving a one-row-per-accession schema; we disclose the consequence (loss of exact sub-region parity with GlobalFungi) and diagnose it via `genbank_its1_resolution_crosstab.csv` (Supp. Methods). |
+| B5 | `vsearch` identity threshold | `usearch_global` at **98.5% identity** | Matches GlobalFungi's documented SH-assignment criterion (Supp. Methods). |
+| B6 | Tie resolution — named vs dark | Named-species hits compared by species name; dark hits (`_sp` placeholders) compared by SH code | Follows UNITE's own dark-taxon convention (@nilsson_unite_2019; @rybergNewLightNamesNaming2018) (Supp. Methods). |
+| B7 | Tie resolution — fallback rank | Agree at SH → assign SH; disagree but share genus → keep at **genus-only** (`sh_code`/`species` = NA); disagree at genus → **exclude** as ambiguous | "Climb to the lowest unambiguous rank" principle (@heegerLongReadDNAMetabarcoding2018); excluded records logged to `genbank_ambiguous_species_excluded.csv` (Supp. Methods). |
+| B8 | Host taxon source | Structured `host` qualifier, with fallback regex extraction of binomials from `isolation_source` | `host` is the most reliable field; `isolation_source` recovers additional hosts (Supp. Methods). |
+
+### Table A3. Host-name normalization — shared across sources (`canonicalize_host()`, `00_setup.R`)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| C1 | Single shared normalizer | One `canonicalize_host()` applied identically wherever we match a raw host string to a species list (GenBank host field; Eltonian; Hutchinsonian) | Raw host names are free text (binomials, misspellings, abbreviations, common names, inconsistent case/punctuation); one shared function avoids ad hoc per-analysis cleaning and silent match failures (Supp. Methods). |
+| C2 | Normalization steps | Strip surrounding punctuation → collapse whitespace → keep first two tokens → strip per-token punctuation → apply curated typo lookup → case-normalize (Titlecase genus, lowercase epithet) → reject non-Latin-name patterns → NA | Reduce each raw string to a standardized "Genus species"/"Genus" form, or NA if unresolvable (`00_setup.R`). |
+| C3 | Typo-correction lookup | Curated `typo_fixes` (currently `Abies balamifera → Abies balsamea`), extended as new misspellings surface | Manual, auditable corrections rather than fuzzy auto-correction (`00_setup.R`). |
+
+### Table A4. Source combination, spatial validation, EcM guild, and site/occurrence grain conventions (`04_combine_ecm_dataset.R`, `00_setup.R`)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| D1 | Coordinate validation | Spatial-containment check vs GADM Canada boundary, **buffered by 2 km** (in the Canada Albers Equal Area Conic projection) → logical `coord_in_canada` (TRUE / FALSE / NA); original coordinates always preserved | Distinguishes validated-inside from present-but-outside vs no-coordinates, without discarding data. The 2 km buffer absorbs GADM coastline-simplification and topology artefacts that would otherwise exclude a handful of genuinely Canadian coastal and island GlobalFungi records (Supp. Methods). |
+| D2 | Spatial vs non-spatial use | Spatial analyses filter `coord_in_canada == TRUE`; non-spatial enumerations (richness, counts) include **all** records | For counts, we treat a GlobalFungi `country == Canada` label as authoritative even where coordinates fall marginally outside the buffered polygon (Supp. Methods). |
+| D3 | EcM guild assignment | Genus-level: retain records whose UNITE-assigned genus is `primary_lifestyle == "ectomycorrhizal"` in FungalTraits (genus lower-cased before matching) | Genus-level EcM status from a single authoritative trait source (Supp. Methods). |
+| D4 | FungalTraits version | **Pinned** to v1.2 (`FungalTraits_1-2.csv`); one file used by all scripts via `paths$fungaltraits` | Held fixed rather than tracked to a live source, so every script shares an identical EcM genus definition; provenance and SHA256 recorded in `fungaltraits_version.txt` (mirrors the UNITE build-pinning rationale given in Supplemental Materials SM1). |
+| D5 | "Site" definition | Bin lat/lon to **3 decimal places** (~100 m); `add_site_id()` | Collapses GPS-precision noise across repeat readings at one location without merging distinct sites (`00_setup.R`, Supp. Methods). |
+| D6 | Occurrence grain (Wallacean) | Distinct **30 arc-second** (~1 km²) grid cells; `snap_30arcsec()` | Aggregates occurrences to ~1 km² cells matching common SDM practice (`00_setup.R`, Supp. Methods). |
+| D7 | Where we apply 3-decimal site-binning | We use the `add_site_id()` 3-decimal site-binning (D5) for the ecozone sampling-coverage counts, but do **not** apply it to the Wallacean per-taxon location table, whose within-Canada occurrence counts use raw distinct coordinates; we use the separate **30 arc-second** occupancy grid (D6) for the worldwide occupancy comparison and Figure 2 | Distinct raw coordinates preserve per-record occurrences for the Canada location counts, while the coarser 30 arc-second grid gives a like-for-like occupancy comparison against the worldwide GlobalFungi dataset (`11_wallacean.R`, Supp. Methods). |
+
+### Table A5. Reference / host-data preparation (`05_prepare_fungalroot.R`, `06_host_species.R`, `07_bien2_ranges.R`, `08_host_rasters.R`)
+
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| E1 | Host determination — two routes | Species-level (FungalRoot occurrence records) **OR** genus-level (FungalRoot Table S2); combined with OR | Two independent routes; a species/genus can qualify via either or both (Supp. Methods). |
+| E2 | Qualifying species-level labels | Count as EcM-demonstrated only unambiguous EcM-positive labels: `EcM`, `EcM, no AM colonization`, `ErM,EcM` | Restrict to unambiguous positive evidence (Supp. Methods). |
+| E3 | Excluded label — `EcM, AM undetermined` | Excluded as qualifying evidence (but not disqualifying) | Denotes an EcM report with AM status unsurveyed, not a confirmed AM-negative; contradicted in a checked case (*Dryopteris filix-mas*) (Supp. Methods). |
+| E4 | Excluded label — `EcM,AM` (dual-positive) | Excluded as qualifying evidence | On inspection it was the sole EcM evidence for 118 of 698 candidate species across 20 genera (e.g. *Acer*, *Allium*, *Fraxinus*, *Juglans*) with no unambiguous record elsewhere (Supp. Methods). |
+| E5 | Genus-level qualifying labels | Table S2 assignment of `EcM` or `EcM-AM` qualifies | `EcM-AM` captures genuine dual-mycorrhizal genera (*Salix*, *Populus*, *Eucalyptus*) the binary species rule cannot express; ≥67% species-consistency basis is FungalRoot's own (Supp. Methods). |
+| E6 | Non-standard Table S2 rows | Excluded by default (e.g. "species-specific: EcM or NM-AM") | Do not match either qualifying label (Supp. Methods). |
+| E7 | No literature supplementation | Do **not** add case-by-case literature EcM records (e.g. *Acer*, *Fraxinus*, *Juglans*) | Keep host determination reproducible from a single defined source; disclosed cost is under-counting a few genera (Supp. Methods). |
+| E8 | Native host list construction | BIEN species with Canadian distributions → filter to native via Native Status Resolver → retain species qualifying under **either** route in E1 (species-level occurrence list **OR** Table S2 genus list), combined with OR | Applies the two-route host determination (E1) to the native flora; no growth-form restriction. `evidence_source` records which route(s) applied (`06_host_species.R`, Step 4; Supp. Methods). |
+| E9 | Growth-form assignment | Four-stage chain, applied in order: BIEN trait database → GIFT trait 1.2.1 (`agreement = 0.66`) → modal growth form of congeners already in the host list → curated manual override. The stage that supplied each value is recorded in `growth_form_source` | Growth form drives the tree / non-tree split reported in the main text and Figure 4, so it must be resolved for every host species; BIEN alone covers 215 of 272. Recording the source keeps the 42 congener-inferred values distinguishable from values taken from a trait record for the species itself (`06_host_species.R`, Steps 5–7c). |
+| E10 | Unresolved synonymy | Accept drop-outs from independent taxonomic resolvers rather than harmonizing synonyms | A general synonym-harmonization step could shift counts for many species; we flag this as a known limitation instead. The genus route (E1) already rescues most such cases — e.g. we retain *Alnus alnobetula* via genus *Alnus* in Table S2 even though its species-level EcM evidence is filed under *A. crispa* — so a residual drop-out requires the genus to be absent from Table S2 as well (Supp. Methods). |
+| E11 | Host-range rasters | BIEN2 MaxEnt range polygons → reproject WGS84 → clip to Canada → rasterize to **0.5° grid**; three layers (host richness, host-data richness, host-data proportion) | Standardized grid for host richness and data-coverage comparison (Supp. Methods). |
+
+### Table A6. Shortfall-analysis decisions (`09`–`21`)
+
+| # | Shortfall | Decision | Choice | Rationale |
+|---|---|---|---|---|
+| F1 | Linnean | Richness units | Report unique UNITE SH codes, genera, and named species (excluding `_sp`) | SH codes are the primary unit: consistent OTU applicable to both sources, and many EcM taxa are unnamed (Supp. Methods). |
+| F2 | Linnean | Dark fraction | Proportion of detected SH codes lacking a species-level UNITE name (combined and per source) | Operational definition of the "dark fraction" (Supp. Methods). |
+| F3 | Linnean | van Galen comparison | Filter van Galen per-sample table to `Country == Canada` and `biome ∈ {forest, tundra}`; report **unweighted mean** of per-sample unassigned proportion, as a non-equivalent reference only | Subset most comparable to our sampling; explicitly flagged as non-equivalent (different taxonomic units: OTU vs SH) (Supp. Methods). |
+| F4 | Linnean | GBIF vouchered complement | GBIF Kingdom Fungi, Canada, basis `PRESERVED_SPECIMEN`/`LIVING_SPECIMEN`, geospatial issues excluded, filtered to species-rank records in EcM genera (FungalTraits) | Vouchered specimen complement to sequence data; archived download key for reproducibility (retrieved 6 Mar 2026) (Supp. Methods). |
+| F5 | Wallacean | Occurrence levels | Count occurrences per taxon at SH, genus, and named-species levels | Multiple taxonomic resolutions of the shortfall (Supp. Methods). |
+| F6 | Wallacean | Reporting thresholds | Report proportion of taxa known from a single occurrence and from `< 30` occurrences (Canada and global); tabulate common minimum-occurrence SDM thresholds | Straightforward shortfall measures; 30 is a common SDM minimum-sample rule of thumb (Supp. Methods). |
+| F7 | Wallacean | Data source | Occurrence/occupancy counts drawn from **GlobalFungi only** | GlobalFungi provides the structured sampling frame required for meaningful occupancy comparison (Supp. Methods). |
+| F8 | Wallacean | Global comparator | Map each Canadian species/SH to all globally-known SH codes of that identity, matched against the full global GF v5 SH matrix under the same quality filters | Consistent global denominator (Supp. Methods). |
+| F9 | Prestonian | Source & filters | BioTIME (downloaded 5 Mar 2026): studies with ≥1 Canadian location, ≥2 time points, fungi-consistent organism type | Minimal criteria for a fungal time series in Canada (Supp. Methods). |
+| F10 | Prestonian | Shortfall metric | % of named Canadian EcM species lacking any abundance time series **anywhere on Earth** | Operational definition (Supp. Methods). |
+| F11 | Darwinian | Source | JGI MycoCosm "All Fungi" listing (retrieved 5 Mar 2026 by copying the page; bulk export required login and was non-functional) | Only complete accessible listing at the time; fungi-only page needs no extra filtering (Supp. Methods). |
+| F12 | Darwinian | Matching | **Exact** set-membership match after normalization: genus = first token of MycoCosm `taxon_name`, species = first two tokens, both lower-cased/trimmed; matched against lower-cased `emf` genera and named species (placeholder epithets sp/spp/cf/aff excluded) | We use no fuzzy/edit-distance matching or tolerance (`15_darwinian.R`). Limitation: exact matching misses cross-database synonyms and spelling variants, which slightly *over*-states the shortfall. |
+| F13 | Darwinian | Shortfall metric | % of named Canadian EcM species absent from MycoCosm | Operational definition (Supp. Methods). |
+| F14 | Raunkiæran | Traits assessed | Six FungalTraits columns: 3 morphological (fruitbody type, hymenium type, exploration type) + 3 ecological (secondary lifestyle, endophytic-interaction capability, host specificity) | Columns carrying information meaningful for EcM fungi (Supp. Methods). |
+| F15 | Raunkiæran | Excluded trait | Growth form excluded | "Filamentous mycelium" for all EcM genera — uninformative (Supp. Methods). |
+| F16 | Raunkiæran | Coverage definition | Proportion of genus × trait cells non-missing and not literal "unknown"; secondary lifestyle & endophytic capability treated as a **lower bound** | Blanks in those two traits are ambiguous between "not assessed" and "trait absent" (Supp. Methods). |
+| F17 | Hutchinsonian | Ecozone unit | Canada's 15 terrestrial ecozones (National Ecological Framework); report number/proportion sampled across a range of site thresholds | Standard national ecozone framework; no ecozones excluded (all contain predicted host habitat) (Supp. Methods). |
+| F18 | Hutchinsonian | Offshore points | Points just offshore of the ecoregion coastline snapped to nearest ecozone within **5 km** | Recover coastal samples misplaced by coastline generalization; ecozone areas use the same polygon basis (Supp. Methods, Table S1). |
+| F19 | Hutchinsonian | Climate variables | WorldClim 2.1 BIO1 (MAT) and BIO12 (MAP) | Two axes defining Canadian climate space (Supp. Methods). |
+| F20 | Hutchinsonian | Climate grid | Aggregate WorldClim 30″ to ~10′ (`AGG_FACTOR = 20`) | Match the spatial grain of the source workflow (@hebertBlitzGapNationwide2026) (`17_hutchinsonian.R`). |
+| F21 | Hutchinsonian | Climate binning | 50 × 50 equal-width grid of temperature × precipitation; cell "sampled" if ≥1 EcM sample; coverage = sampled cells / Canada cells per zone | Coverage definition adapted from @hebertBlitzGapNationwide2026 (Supp. Methods, `17_hutchinsonian.R`). |
+| F22 | Eltonian | Sample restriction (Canadian scope) | Host associations restricted to **root samples** (GenBank host/isolation_source; GlobalFungi dominant/other plant species) | Direct root extractions give strongest evidence of mycorrhizal association; bulk soil indicates only spatial proximity (Supp. Methods). |
+| F23 | Eltonian | Denominator | Native Canadian EcM host species list (Table 7) as denominator of potential interactions | Fixed, defensible universe of possible hosts (Supp. Methods). |
+| F24 | Eltonian | Matrices & metrics | Interaction matrices at SH, named-species, genus levels; report % hosts with ≥1 association, matrix fill rate, and % pairs from a single record | Multiple resolutions and a single-record fragility check (Supp. Methods). |
+| F25 | Eltonian | Global scope retrieval | GenBank global query retrieves **all matching records per genus** (no cap), paginated via the NCBI history server | No truncation of heavily sequenced genera; a sensitivity check confirmed the earlier 2,000-record cap materially affected only a few macrofungal genera, so we removed the cap (`18_eltonian.R`). |
+| F26 | Sampling maps | Sampling unit (Fig S4) | One distinct raw lat/lon per record | Location-level depiction of sampling (Supp. Methods, Fig S4). |
+| F27 | Depth discard | Metric (Fig S3) | Per Canadian GF soil sample, % of total sequencing depth discarded by EcM-genus filtering, among samples with ≥1 EcM read | Quantifies the data cost of restricting to EcM genera (Supp. Methods, `20_depth_discard.R`). |
+
+---
+
+## PART B — Decisions outside our control (upstream datasets)
+
+These decisions are embedded in the external datasets and tools we use. We
+report them as fully as the sources document them; where a source's internal
+choices are not public in detail, that limitation is itself noted.
+
+### Table B1. GlobalFungi v5 (@vetrovskyGlobalFungiGlobalDatabase2020)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U1 | Sample inclusion & curation | GlobalFungi aggregates published community-survey amplicon studies, re-processed through its own consistent pipeline (documented at globalfungi.com) | Studies use varied sequencing platforms/protocols; predominantly soil samples (Supp. Methods). |
+| U2 | SH pre-assignment | SH codes pre-assigned against a specific UNITE release (the build we pin to; see Supplemental Materials SM1) | We inherit GlobalFungi's SH assignment for its records rather than re-calling them. |
+| U3 | SH-assignment identity criterion | Documented BLASTn criterion at ~98.5% identity | We match this on the GenBank side (B5). |
+| U4 | Read processing / quality filtering | Internal to the GlobalFungi pipeline (denoising, chimera removal, abundance tabulation) | Details not re-implemented or independently audited by us. |
+
+### Table B2. UNITE (@nilsson_unite_2019)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U5 | SH clustering | Dynamic clustering thresholds define SH codes; identifiers renumbered between builds | Motivates our build-pinning (Supplemental Materials SM1). |
+| U6 | Representative sequence & taxonomy | One representative sequence and one taxonomy string per SH | We read taxonomy directly from these (Supplemental Materials SM1). |
+| U7 | Dark-taxon naming | Placeholder names ending `_sp` for unnamed lineages | We follow UNITE's convention in tie resolution (B6) and dark-fraction definition (F2). |
+
+### Table B3. FungalTraits (@polmeFungalTraitsUserfriendlyTraits2020)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U8 | Trait scoring grain | Genus-level trait compilation | Constrains our EcM assignment and trait coverage to genus resolution (D3, F14). |
+| U9 | Primary-lifestyle categories | Includes `ectomycorrhizal` as a primary lifestyle | Basis of our EcM guild filter (D3). |
+| U10 | Blank vs "unknown" semantics | Blanks in some trait columns are ambiguous between "not assessed" and "trait absent" | Forces our lower-bound coverage treatment for two traits (F16). |
+
+### Table B4. FungalRoot (@soudzilovskaiaFungalRootGlobalOnline2020)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U11 | Mycorrhiza-type labels | FungalRoot's occurrence-level label vocabulary (incl. ambiguous `EcM, AM undetermined`, `EcM,AM`) | Drives our qualifying/excluded-label choices (E2–E4). |
+| U12 | Genus-level recommendation (Table S2) | Genus calls based on ≥67% species-level consistency | Basis of our genus-level host route (E5). |
+| U13 | Underlying GBIF taxonomy | Occurrence records resolved against the GBIF backbone | Independent from BIEN resolvers → unresolved synonymy drop-outs (E9). |
+
+### Table B5. BIEN / BIEN2 (@maitner_bien_2018; @moulatletGeneralLawsBiodiversity2025)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U14 | Occurrence name-scrubbing | BIEN applies its own name resolution | Independent resolver → synonymy drop-outs (E9). |
+| U15 | Native Status Resolver | BIEN's algorithm classifies native vs introduced | We accept its native calls (E8). |
+| U16 | BIEN2 range models | MaxEnt-based modelled range polygons with fixed modelling settings (model name encodes settings) | We take ranges as given, reproject, and clip; we do not re-fit SDMs (E11). |
+
+### Table B6. @vangalenBiogeographyConservationEarths2025 dark-taxa data
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U17 | Dark-OTU definition | Proportion of EcM OTUs unassigned to species level, per GF v5 sample | Different taxonomic unit (OTU) from our SH-level dark fraction — comparison is non-equivalent (F3). |
+| U18 | Raster modelling | `percentage_dark_taxa` band from their modelled global layers | Used as-is for the Figure S1 map (`10_dark_diversity.R`). |
+
+### Table B7. BioTIME (@dornelasBioTIMEDatabaseBiodiversity2018)
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U19 | Study inclusion & structure | BioTIME's own criteria for what constitutes an included biodiversity time series | We filter within it (≥1 Canadian location, ≥2 time points, fungi) but inherit its study boundaries (F9). |
+
+### Table B8. JGI MycoCosm
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U20 | Genome inclusion | Which fungal genomes JGI has sequenced/portalized | Defines the Darwinian denominator; reflects JGI project priorities, not random sampling (F11). |
+| U21 | Listing completeness at retrieval | Page-copy snapshot on 5 Mar 2026 (bulk export non-functional) | Snapshot may lag the live portal; retrieval method documented (F11). |
+
+### Table B9. WorldClim 2.1, GADM, Natural Earth, ecoregions, GBIF
+
+| # | Upstream decision | What we know | Note |
+|---|---|---|---|
+| U22 | WorldClim interpolation | Climate surfaces interpolated from station data at 30″ (@fickWorldClim2New2017) | We aggregate to ~10′ (F20); interpolation error inherited. |
+| U23 | Administrative boundaries | GADM / Natural Earth boundary generalization | Affects coordinate validation and offshore snapping (D1, F18). |
+| U24 | Ecozone delineation | National Ecological Framework for Canada polygon definitions | Fixed unit for ecozone coverage (F17). |
+| U25 | GBIF specimen records | Basis-of-record labelling, georeferencing, and dataset coverage vary by publisher | We exclude geospatial-issue records but inherit publisher labelling (F4). |
+
+---
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

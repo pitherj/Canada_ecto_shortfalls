@@ -1,0 +1,764 @@
+---
+title: "An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada"
+# NOTE (FACETS): the author list, affiliations, ORCIDs, and corresponding author
+# are rendered as a title-page block in the document body (below), following the
+# co-authored draft. Author *order* was revised by the co-authors. Institutional
+# email addresses still need to be added before submission (FACETS asks for them).
+date: today
+# ---------------------------------------------------------------------------
+# FACETS (Canadian Science Publishing) submission formatting.
+# Main-text content is IDENTICAL to ../manuscript.qmd; only the YAML header and
+# output formatting differ (double spacing, continuous line numbers, page
+# numbers, table captions above, PDF + Word outputs).
+# ---------------------------------------------------------------------------
+format:
+  pdf:
+    documentclass: article
+    papersize: letter
+    fontsize: 12pt
+    geometry:
+      - margin=1in
+    linestretch: 2            # FACETS: double-spaced
+    number-sections: false    # review manuscript: flexible headings
+    toc: false
+    colorlinks: true
+    fig-cap-location: bottom
+    tbl-cap-location: top     # FACETS: table captions above the table
+    keep-tex: true
+    include-in-header:
+      text: |
+        \usepackage{lineno}   % FACETS: continuous line numbering
+        \linenumbers
+  docx:
+    number-sections: false
+    toc: false
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    # For a Word submission, enable double spacing and continuous line numbers
+    # in Word (Layout > Line Numbers > Continuous; select-all > line spacing 2.0)
+    # or supply a reference-doc template. See FACETS/README.md.
+bibliography: references.bib
+csl: facets.csl                    # official FACETS (author-date) style
+link-citations: true
+execute:
+  echo: false
+  warning: false
+  message: false
+editor: source
+---
+
+```{=html}
+<style>
+/* Left-justify all table header cells (applies to knitr::kable tables and
+   pandoc-rendered markdown pipe tables alike). */
+th {
+  text-align: left !important;
+}
+</style>
+```
+
+```{r setup}
+#| include: false
+# Load the pipeline setup (paths, helpers) and the primary EcM dataset `emf`.
+source(here::here("scripts", "00_setup.R"))
+
+# ---- Load the per-shortfall summary tables ----------------------------------
+.mv <- function(path) if (file.exists(path)) readr::read_csv(path, show_col_types = FALSE) else
+  tibble::tibble(metric = character(), value = numeric())
+linn   <- .mv(file.path(paths$out_linnean,       "linnean_summary.csv"))
+pres   <- .mv(file.path(paths$out_prestonian,    "prestonian_summary.csv"))
+darw   <- .mv(file.path(paths$out_darwinian,     "darwinian_summary.csv"))
+elto   <- .mv(file.path(paths$out_eltonian,      "eltonian_summary.csv"))
+gfw    <- .mv(file.path(paths$checkpoints,        "gf_global_comparator_cheap.csv"))
+gfv    <- .mv(file.path(paths$checkpoints,        "gf_global_comparator_volume.csv"))
+.rd    <- function(path) if (file.exists(path)) readr::read_csv(path, show_col_types = FALSE) else NULL
+wall_loc <- .rd(file.path(paths$out_wallacean, "wallacean_location_summary.csv"))
+locs_sh_can  <- .rd(file.path(paths$out_wallacean, "wallacean_locs_per_sh.csv"))
+locs_sp_can  <- .rd(file.path(paths$out_wallacean, "wallacean_locs_per_species.csv"))
+locs_sh_glob <- .rd(file.path(paths$out_wallacean, "wallacean_global_gf_locs_per_sh.csv"))
+locs_sp_glob <- .rd(file.path(paths$out_wallacean, "wallacean_global_gf_locs_per_species.csv"))
+wall   <- if (file.exists(file.path(paths$out_wallacean, "wallacean_sampling_intensity.csv")))
+  readr::read_csv(file.path(paths$out_wallacean, "wallacean_sampling_intensity.csv"), show_col_types = FALSE) else NULL
+traits <- if (file.exists(file.path(paths$out_raunkiaeran, "raunkiaeran_trait_coverage.csv")))
+  readr::read_csv(file.path(paths$out_raunkiaeran, "raunkiaeran_trait_coverage.csv"), show_col_types = FALSE) else NULL
+ez     <- if (file.exists(file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_sample_counts.csv")))
+  readr::read_csv(file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_sample_counts.csv"), show_col_types = FALSE) else NULL
+
+# ---- Inline-value helpers ---------------------------------------------------
+V   <- function(df, metric_exact) { x <- df$value[df$metric == metric_exact]; if (length(x)) x[1] else NA_real_ }
+nf  <- function(x) format(round(as.numeric(x)), big.mark = ",", trim = TRUE)   # comma integer
+p1  <- function(x) sprintf("%.1f", as.numeric(x))                              # one decimal
+pr  <- function(num, den) round(100 * as.numeric(num) / as.numeric(den))       # integer percent
+WV  <- function(dataset, level, col) if (is.null(wall)) NA else
+  wall[[col]][wall$dataset == dataset & wall$taxonomic_level == level][1]
+# A "named species" is a non-blank UNITE binomial that is not a "Genus_sp"
+# placeholder (matches the pipeline's "excl. _sp" definition).
+named_ok <- function(x) !is.na(x) & x != "" & !grepl("_sp$", x)
+
+# ---- Depth discarded by EcM-genus filtering (same calc as 20_depth_discard.R)
+.discard <- tryCatch({
+  sm  <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE) |>
+    dplyr::filter(sample_type == "soil") |> dplyr::distinct(sample_ID, ITS_total)
+  eps <- emf |>
+    dplyr::filter(source == "GlobalFungi", sample_ID %in% sm$sample_ID, !is.na(sh_code), abundance > 0) |>
+    dplyr::group_by(sample_ID) |> dplyr::summarise(ecm = sum(abundance), .groups = "drop")
+  d <- sm |> dplyr::left_join(eps, by = "sample_ID") |>
+    dplyr::mutate(ecm = dplyr::coalesce(ecm, 0), pct = 100 * (1 - ecm / ITS_total)) |>
+    dplyr::filter(ecm >= 1)
+  list(n = nrow(d), q = stats::quantile(d$pct, c(.25, .5, .75), names = FALSE))
+}, error = function(e) list(n = NA, q = c(NA, NA, NA)))
+
+# ---- Eltonian sample provenance (host-information paragraph) ----------------
+.gf_elt     <- dplyr::filter(emf, source == "GlobalFungi")
+n_gf_samp   <- dplyr::n_distinct(.gf_elt$sample_ID)          # GF samples w/ >=1 EcM SH
+st_tally    <- .rd(file.path(paths$out_eltonian, "eltonian_sample_type_tally_canada.csv"))
+n_gf_host   <- if (!is.null(st_tally)) sum(st_tally$n_samples) else NA_real_
+n_gf_nohost <- n_gf_samp - n_gf_host
+n_soil <- if (!is.null(st_tally)) st_tally$n_samples[st_tally$sample_type == "soil"][1] else NA_real_
+n_root <- if (!is.null(st_tally)) st_tally$n_samples[st_tally$sample_type == "root"][1] else NA_real_
+gb_tally  <- .rd(file.path(paths$out_eltonian, "eltonian_genbank_tissue_tally_canada.csv"))
+.gbv <- function(cat) if (!is.null(gb_tally)) { x <- gb_tally$n[gb_tally$category == cat]; if (length(x)) x[1] else NA_real_ } else NA_real_
+gb_total  <- .gbv("Total EcM fungal records")
+gb_host   <- .gbv("Records with host information")
+gb_nohost <- gb_total - gb_host
+gb_notrec <- .gbv("Not recorded")
+gb_other  <- sum(.gbv("Other / non-tissue description"), .gbv("Soil / rhizosphere"), na.rm = TRUE)
+
+# ---- van Galen (2025) per-sample dark fraction: Canadian forest + tundra ----
+.vg <- tryCatch({
+  d <- readr::read_csv(paths$van_galen_per_sample, show_col_types = FALSE) |>
+    dplyr::filter(Country == "Canada", Biome %in% c("forest", "tundra"))
+  list(n = nrow(d), pct = round(100 * mean(d$Prop_EcM_OTUs_unassigned)))
+}, error = function(e) list(n = NA, pct = NA))
+
+# ---- Eltonian phytobiont: metadata host names vs native EcM host list -------
+# A host_clean string is a species-level identification only if it has exactly
+# two tokens and is not an sp./cf./aff. epithet or an "unidentified" genus token
+# (same rule as the Table S2/S3 chunks in supplemental_materials.qmd).
+.is_sp <- function(x) {
+  toks <- strsplit(x, " ", fixed = TRUE)
+  vapply(toks, function(p) length(p) == 2L &&
+    !grepl("^(sp\\.?|spp\\.?|cf\\.?|aff\\.?|indet\\.?)$", p[2], ignore.case = TRUE) &&
+    !grepl("^(unidentified|indet|unknown)$", p[1], ignore.case = TRUE), logical(1))
+}
+.hm  <- .rd(paths$eltonian_host_matching)
+.hs  <- .rd(paths$host_species)
+.recorded <- if (!is.null(.hm)) { r <- sort(unique(.hm$host_clean)); r[.is_sp(r)] } else character(0)
+.native   <- if (!is.null(.hs)) .hs$species else character(0)
+n_meta_host    <- length(.recorded)                        # unique host names in metadata
+host_matched   <- length(intersect(.native, .recorded))    # matched to native EcM host list
+host_unmatched <- setdiff(.recorded, .native)              # names that did not overlap
+n_host_native  <- if (!is.null(.hs)) nrow(.hs) else NA_real_
+n_tree  <- if (!is.null(.hs)) sum(.hs$growth_form == "tree",  na.rm = TRUE) else NA_real_
+n_shrub <- if (!is.null(.hs)) sum(.hs$growth_form == "shrub", na.rm = TRUE) else NA_real_
+n_herb  <- n_host_native - n_tree - n_shrub
+
+# ---- Eltonian mycobiont: named fungal species -> host associations, by scope
+# (produced by 18_eltonian.R from species_host_canada / species_host_global).
+n_named_fung <- as.numeric(V(elto, "Named EcM fungal species detected anywhere in the Canadian dataset (full column denominator)"))
+myco_can_n   <- as.numeric(V(elto, "Named EcM fungal species with >= 1 documented host species (Canada scope)"))
+myco_can_mx  <- as.numeric(V(elto, "Max host species documented for any named EcM fungal species (Canada scope)"))
+myco_glob_n  <- as.numeric(V(elto, "Named EcM fungal species with >= 1 documented host species (global scope; GlobalFungi root + GenBank worldwide)"))
+myco_glob_mx <- as.numeric(V(elto, "Max host species documented for any named EcM fungal species (global scope)"))
+
+# ---- Wallacean sampling-intensity values used in the Abstract --------------
+wall_sp_n   <- WV("GlobalFungi", "Species", "n_taxa")
+wall_sp_med <- WV("GlobalFungi", "Species", "median_locs")
+
+# Convenience derived values
+sh_total   <- V(linn, "Unique UNITE v10 SH codes (combined dataset, all records)")
+sh_named   <- V(linn, "Named-species SH codes: total unique across GF + GenBank (regardless of coords)")
+sp_named   <- V(linn, "Unique named species (UNITE taxonomy, excl. _sp; combined dataset)")
+sh_gf_can  <- V(linn, "GlobalFungi: unique SH codes (Canadian dataset)")
+sh_global  <- V(gfw,  "EcM SH codes detected (GlobalFungi-wide, matrix presence)")
+
+# ---- Abstract: % of named species lacking host information -----------------
+host_unresolved_pct <- round(100 * (1 - myco_can_n / sp_named))
+```
+
+<!-- ============================================================= -->
+<!-- FACETS title page. Author order, affiliations, ORCIDs, and the -->
+<!-- corresponding author follow the co-authored draft. This front  -->
+<!-- matter is new relative to the previous qmd, so (per request) it -->
+<!-- is NOT highlighted. Institutional email addresses still need    -->
+<!-- to be supplied before submission.                              -->
+<!-- ============================================================= -->
+
+**AUTHORS:**
+
+| **Isaac Eckert**^1,2^ isaac.eckert@mail.mcgill.ca, ORCID [0000-0002-4384-5041](https://orcid.org/0000-0002-4384-5041)
+| **Justine Karst**^3^ karst@ualberta.ca, ORCID [0000-0003-0497-1552](https://orcid.org/0000-0003-0497-1552)
+| **Monika S. Fischer**^4,5^ monika.fischer@botany.ubc.ca, ORCID [0000-0001-5671-5572](https://orcid.org/0000-0001-5671-5572)
+| **Stephanie N. Kivlin**^6^ skivlin@utk.edu, ORCID [0000-0003-2442-7773](https://orcid.org/0000-0003-2442-7773)
+| **Clara Qin**^7^ claralqin@gmail.com, ORCID [0000-0002-9561-4704](https://orcid.org/0000-0002-9561-4704)
+| **Brontë R. Shelton**^8,9^ bronte.shelton@ubc.ca, ORCID [0000-0002-6915-2307](https://orcid.org/0000-0002-6915-2307)
+| **Diego A. Yusta Belsham**^8,9^ dayusta@gmail.com, ORCID [0009-0009-4930-8608](https://orcid.org/0009-0009-4930-8608)
+| **Jason Pither**^8,9,\*^ jason.pither@ubc.ca, ORCID [0000-0002-7490-6839](https://orcid.org/0000-0002-7490-6839)
+
+**Affiliations:**
+
+| ^1^ Department of Biology, McGill University, Montréal, Québec, Canada
+| ^2^ Quebec Centre for Biodiversity Science, Montréal, Québec, Canada
+| ^3^ Department of Renewable Resources, University of Alberta, Edmonton, Alberta, Canada
+| ^4^ Department of Botany, Faculty of Science, University of British Columbia, Vancouver, British Columbia, Canada
+| ^5^ Department of Forest and Conservation Sciences, Faculty of Forestry and Environmental Stewardship, University of British Columbia, Vancouver, British Columbia, Canada
+| ^6^ Ecology and Evolutionary Biology Department, University of Tennessee, Knoxville, Knoxville, Tennessee, USA
+| ^7^ Society for the Protection of Underground Networks (SPUN), Dover, Delaware, USA
+| ^8^ Department of Biology, Irving K. Barber Faculty of Science, University of British Columbia, Kelowna, British Columbia, Canada
+| ^9^ Okanagan Institute for Biodiversity, Resilience, and Ecosystem Services, Irving K. Barber Faculty of Science, University of British Columbia, Kelowna, British Columbia, Canada
+
+\* Corresponding author: Jason Pither (jason.pither@ubc.ca).
+
+# Abstract
+
+Ectomycorrhizal (EcM) fungi play critical roles in global carbon and nutrient cycling. In Canada, vast forest ecosystems dominated by EcM trees are experiencing rapid environmental and anthropogenic change that threaten the symbiosis. Here we quantify and discuss seven biodiversity data shortfalls that constrain our knowledge of EcM fungi in Canada, and impede the development of effective conservation plans. We based our assessments on publicly accessible sequence data from GlobalFungi and GenBank, filtered to samples within Canada. We found **`r nf(sh_total)`** unique EcM fungal species hypotheses, of which only **`r pr(sh_named, sh_total)`**% could be assigned a species name. The **`r nf(sp_named)`** unique named species comprised **`r nf(V(linn, "EcM genera observed in Canada"))`** genera, roughly **`r pr(V(linn, "EcM genera observed in Canada"), V(linn, "Known EcM genera globally (FungalTraits)"))`**% of the genera known globally. An overriding shortfall is that samples are lacking from large areas of the country, and with respect to both abiotic and biotic niche space. For example, host information is missing or unresolved for **`r host_unresolved_pct`**% of the named species, and among **`r nf(wall_sp_n)`** species georeferenced in GlobalFungi, 50% have **`r nf(wall_sp_med)`** or fewer occurrence records nationally. Although our assessment highlights large biodiversity data shortfalls for EcM fungi in Canada, it also provides the foundation for a coordinated, pan-Canadian sampling effort that can be optimized to address multiple shortfalls simultaneously.
+
+# Keywords
+ectomycorrhizal fungi, species hypotheses, biodiversity shortfalls, fungal conservation, DNA metabarcoding, boreal forest
+
+# Introduction
+
+Large scale biodiversity data are often incomplete and unrepresentative, owing to
+several shortfalls that limit ecological and evolutionary knowledge and affect
+land stewardship (conservation, management, restoration) [@hortalSevenShortfallsThat2015].
+These shortfalls include gaps in knowledge about formal species descriptions
+(Linnean), species' geographic distributions (Wallacean), abundance and
+population dynamics (Prestonian), evolution of species lineages (Darwinian),
+species traits and functions (Raunkiæran), abiotic tolerance limits
+(Hutchinsonian), and species interactions (Eltonian).
+
+Significant progress has been made in addressing these shortfalls for animals and
+plants, yielding extensive new data to inform conservation and management
+strategies. For example, billions of new species observations made over the past
+decade have enabled efforts to estimate the geographic ranges of nearly all
+vertebrates, many plant species, and even an increasing number of arthropods
+[@lumbierresAreaHabitatMaps2022; @daruPredictingUndetectedNative2024; @daruGlobalDatabaseButterfly2025; @wwwinaturalistorg_inaturalist_nodate; @moulatletGeneralLawsBiodiversity2025]. The IUCN Red List, which curates a variety of biodiversity data to perform
+extinction risk assessments, has now assessed over 90% of extant vertebrates and
+provides a wealth of standardized information on species geographic distributions,
+habitat preferences, elevational ranges, threats, and demographic trends [@iucn_iucn_2025]. In addition, global efforts to collate data on species functional traits,
+genomes, and biotic interactions have produced or expanded large open access
+databases [@poelenGlobalBioticInteractions2014; @kattgeTRYPlantTrait2020; @schmidtContinentwideEffectsUrbanization2020; @karachaliouUrbanisationAssociatedReduced2025; @matiasrodriguesMicrobeAtlasDatabaseGlobal2026], enabling researchers to
+predict vertebrate food webs [@haoGlobalProjectionTerrestrial2025] and trait-environment relationships [@liGlobalPatternsPlant2024] at global scales, resolve megaphylogenies [@smithConstructingBroadlyInclusive2018; @uphamInferringMammalTree2019; @kawaharaGlobalPhylogenyButterflies2023], and track widespread genetic response to
+ongoing global change [@shawGlobalMetaanalysisShows2025]. Even some of the most challenging
+shortfalls such as the Prestonian (i.e., population abundance and dynamics) are being filled. Updated global
+abundance tracking datasets like BioTIME [@dornelasBioTIME20Expanding2025], PREDICTS [@hudsonDatabasePREDICTSProjecting2017], and the Living Planet Index [@ledgerPresentFutureLiving2023] are routinely
+relied on to detect and attribute biodiversity change, and taxa-specific efforts
+have identified widespread declines in what are historically data deficient groups like
+butterflies [@edwardsRapidButterflyDeclines2025] and other insects [@vanklinkDisproportionateDeclinesFormerly2024]. These
+efforts to address major biodiversity data shortfalls, aside from increasing our
+biodiversity knowledge writ large, have directly benefited both applied and predictive
+research to inform the conservation of Earth's biodiversity amid accelerating
+global change [@steinkeGloballyAggregatedBiodiversity2025].
+
+Far less progress has been made, however, in addressing these shortfalls for fungi
+[@muellerWhatFirst5972022], including ectomycorrhizal (EcM) fungi. EcM fungi form
+obligate associations with the majority of tree stems on earth [@steidingerClimaticControlsDecomposition2019] as well as many shrub and herbaceous species that are widespread in alpine
+and tundra ecosystems globally (e.g. *Salix*, *Betula*, *Bistorta*, *Dryas*; @timlingDistributionDriversEctomycorrhizal2012). EcM fungi mediate soil nutrient and carbon
+cycling [@fryUsingPlantMicrobe2019; @hawkinsMycorrhizalMyceliumGlobal2023], are associated with forest productivity [@anthonyForestTreeGrowth2022], and promote expansion of plant ranges
+[@nunezLackBelowgroundMutualisms2009; @nunez_invasive_2014; @policelliGlobalPineTree2023]. EcM fungi also are
+sensitive to shifts in forest management [@tomaoHowDoesForest2020; @lindahlLongtermEffectsClearcutting2026]
+and climate change [@vannulandClimateMismatchesEctomycorrhizal2024]. Despite their importance and
+sensitivity to the drivers of global change, fungi have only recently been
+considered in conservation assessments or plans [@bazzicalupoMacrofungalConservationCanada2022; @niskanenPushingFrontiersBiodiversity2023; @vangalenBiogeographyConservationEarths2025; @vannulandGlobalHotspotsMycorrhizal2025; @qinHighResolutionRangeMapping2026]. While
+biodiversity assessments have become increasingly common and our ability to
+accurately predict global distributions of fungi is improving [@tedersooEctomycorrhizalLifestyleFungi2010; @tedersooGlobalPatternsDiversity2012; @tedersooGlobalDiversityGeography2014; @tedersooGlobalSoilMycobiome2021; @tedersooGlobalPatternsEndemicity2022; @vetrovskyMetaanalysisGlobalFungal2019; @vetrovskyGlobalFungiGlobalDatabase2020; @qinNicheModellingPredicts2023; @delhayeEctomycorrhizalFungiAre2024; @ovaskainenGlobalSporeSampling2024; @vangalenBiogeographyConservationEarths2025; @vannulandGlobalHotspotsMycorrhizal2025; @qinHighResolutionRangeMapping2026; @abregoAirborneDNAReveals2024], there remains a considerable gap in
+ecologically and evolutionarily relevant data required to inform broadscale
+conservation [@cameronGlobalGapsSoil2018; @garcia-roselloBiasedDistributionExisting2023; @liMycorrhizalEcologyWould2023; @mikryukovConnectingMultipleDimensions2023; @qinNicheModellingPredicts2023; @copotContributionEnvironmentalDNA2024a].
+
+With the aim of inspiring and directing
+progress to gather the biodiversity data required to inform conservation and
+management, here we assess each of
+seven key shortfalls for EcM fungi in Canada. Canada hosts around 12% of the Earth's forests (spanning 40% of
+Canadian land, an area equivalent to six times the size of France; [@naturalresourcescanadaStateCanadasForests2022]), 24% of Earth's remaining intact ecosystems [@allan_temporally_2017], and 20% of global soil carbon stocks in the top 1m
+[@sothe_large_2022]. With the majority of trees in Canada requiring symbiosis with
+EcM fungi [cf. @taylorFungalDiversityEctomycorrhizal2000; @steidingerClimaticControlsDecomposition2019], and large expanses of
+arctic tundra hosting EcM plants [@timlingDistributionDriversEctomycorrhizal2012; @parisyOpportunisticPartnerChoice2025], the conservation of EcM
+fungi across Canada carries planetary consequences for biodiversity and critical
+ecosystem services like carbon cycling.
+
+For each of the seven shortfalls, we discuss past progress in gathering data on EcM
+fungi, and also consider data requirements that distinguish fungi from other groups
+like animals and plants, when appropriate. Finally, we estimate the breadth of current data gaps, laying
+a foundation for future assessments to track progress on addressing the shortfalls.
+
+# Data and Methods
+
+Detailed methods are provided in the Supplemental Materials SM1. Briefly, our assessments draw on publicly accessible fungal sequence records from GlobalFungi v5 [https://globalfungi.com/; @vetrovskyGlobalFungiGlobalDatabase2020] and NCBI GenBank (accessed 29 June 2026), via targeting internal transcribed spacer (ITS) sequence of the small-subunit ribosomal RNA. GlobalFungi is a curated database of community-survey amplicon data, consistently processed but aggregated from studies with varied protocols and mostly derived from soil samples; GenBank is a general-purpose repository spanning diverse studies and sampling efforts, including targeted root sampling.
+For GlobalFungi we retained ITS2 and ITS1+ITS2 amplicon records and used the pre-assigned fungal species hypothesis (SH) codes and taxonomy that GlobalFungi provides from UNITE v10 [https://dx.doi.org/10.15156/BIO/2959332; 4 April 2024; @nilsson_unite_2019]. In their pipeline, representative sequences meet a 98.5% similarity threshold for each SH. As noted by @vangalenBiogeographyConservationEarths2025, GlobalFungi includes samples from the Global Soil Mycobiome Consortium [@tedersooGlobalSoilMycobiome2021], 12 of which are located in Canada.
+For processing GenBank records, we aimed to match the GlobalFungi pipeline as closely as possible. We retrieved all fungal ITS records for Canada and used ITSx [@bengtsson-palmeImprovedSoftwareDetection2013] to detect and extract the ITS2 sub-region, discarding records with no detectable ITS2 or with an ITS2 fragment shorter than 100 bp. This retains only records carrying ITS2, matching the ITS2/ITSboth barcoding_region restriction applied to GlobalFungi. We assigned SH codes and taxonomy to the extracted ITS2 fragments using the same UNITE release (above) and vsearch v2.30.4 [@rognesVSEARCHVersatileOpen2016] at 98.5% global-alignment identity. Because GenBank's content and assigned taxonomy change continuously, all GenBank-derived counts reported here reflect the state of the database on the access date; the retrieved record set is archived with the code and data (YYY) to ensure reproducibility.
+
+We combined the GlobalFungi and GenBank-based SH and taxonomy datasets, then
+assigned the sequences to EcM guilds based on genus-level guild assignments in the FungalTraits
+database [@polmeFungalTraitsUserfriendlyTraits2020]. For any analyses that required georeferenced samples,
+we binned sample coordinates to three decimal places of latitude and longitude
+(~100 m at temperate latitudes), and these are henceforth referred to as sample
+"sites".
+
+Methodological details for each shortfall analysis are provided in the Supplemental Materials SM1. Code for our entire workflow is publicly available (XXX) and aims to be
+computationally reproducible. All input and output data are also archived and
+publicly available at YYY.
+
+@tbl-1 summarizes the key properties of our Canada-specific GlobalFungi dataset,
+alongside comparator figures derived from all GlobalFungi samples worldwide.  @tbl-2 summarizes relevant information about the GenBank data.  @fig-1 shows the locations of both GlobalFungi and GenBank samples in Canada (**`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"])`** GlobalFungi and **`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"])`** GenBank unique locations).
+
+# Linnean shortfall
+
+The Linnean shortfall is operationalized as the discrepancy between the number of
+species that have been formally described and the number of species that exist or
+have ever existed [@lomolino_conservation_2004]. The magnitude of this shortfall is difficult to
+quantify for EcM fungi, since it depends on the total number of species (which is generally
+unknown) as well as our ability to delineate and describe new species [@hortalSevenShortfallsThat2015]. While EcM fungi have been traditionally delineated based on
+morphological characteristics using approaches like microscopy, the advent of
+genetic sequencing and high-throughput technologies completely transformed fungal
+systematics [@mirallesRepositoriesTaxonomicData2020] and greatly increased species description rates
+[@cunninghamFungiSpeciesDescription2024]. These molecular techniques and the corresponding species
+concepts (referred to as species hypotheses) have been widely adopted; in 2018 over 94% of studies
+describing new fungal taxa relied on molecular techniques [@mirallesRepositoriesTaxonomicData2020].
+@cunninghamFungiSpeciesDescription2024 predict that Kingdom Fungi could see an additional
+64,000–74,000 newly described species by the end of the century, thanks to high-throughput workflows. A recent,
+conservative estimate of the global diversity of EcM fungi is 25,499 (+/- 54) – 55,500
+(+/- 518) species based on sequence datasets from GlobalFungi and the Global Soil
+Mycobiome consortium, respectively [@vangalenBiogeographyConservationEarths2025]. However, these
+estimates represent lower-bound estimates and are highly uncertain for reasons
+discussed below.
+
+Despite this progress, the dependency on molecular species concepts means that
+almost all newly identified species remain undescribed, or "dark", taxa. Many
+identified species have only been detected a handful of times, often solely by
+molecular barcoding, and often only by single sequences [@cazabonneSingletonbasedSpeciesNames2024]. In
+both GlobalFungi [@vetrovskyGlobalFungiGlobalDatabase2020] and the Global Soil Mycobiome [@tedersooGlobalSoilMycobiome2021] databases, a minority of taxa (< 25%) are assigned species-level names. As a
+result, when it comes to assessing existing knowledge for fungi, global assessments like the IUCN Red List have evaluated only a tiny
+fraction of described species (@muellerWhatFirst5972022 estimated 0.4%, a percent that is now larger but
+still much less than 5%). The requirement that species be described before qualifying for Red
+List assessment represents a serious bottleneck, and contributes to why fungi are
+the most poorly assessed group across all Eukaryotes excluding protists [@niskanenPushingFrontiersBiodiversity2023; @iucn_iucn_2025].
+
+Quantifying and addressing the Linnean shortfall for EcM fungi has also been
+hindered by the lack of standardized and integrated global taxonomic repositories.
+Unlike for vertebrates and plants, comprehensive and harmonized taxonomies for EcM
+fungi rely on databases that combine more traditional species concepts (e.g.,
+morphological) with modern approaches (e.g., molecular). Fortunately, progress has
+been made on this front. Originally released in 2003, the publicly accessible UNITE database,
+which offers standardized fungal taxonomies based on molecular records, has grown
+rapidly over the past decade [@abarenkovUNITEDatabaseMolecular2024]. For example, since 2014, the number of
+fungal species (species hypotheses) represented in UNITE has more than tripled. Importantly,
+as of 2019, UNITE has started linking molecular sequences (e.g., metabarcodes) to standardized species
+hypotheses harmonized against the Global Biodiversity Information Facility (GBIF) backbone taxonomy, thereby facilitating their use in informing policy. These advances
+have been instrumental in standardizing species concepts across EcM fungal research,
+increasing reproducibility and reusability of data, and facilitating crosstalk with
+other global databases that leverage UNITE.
+
+Our assessment of the Linnean shortfall for EcM fungi in Canada starts with a basic
+accounting of EcM fungal taxonomic data. We emphasize at the outset that the
+sampling footprint in Canada is geographically biased and clustered (@fig-1),
+especially with respect to the potential abiotic and biotic niche space of EcM fungi
+(see Hutchinsonian and Eltonian shortfalls sections), so all results should be interpreted
+with this in mind. Within the combined GlobalFungi and GenBank dataset there were
+**`r nf(sh_total)`** unique UNITE SH codes, and the **`r nf(sh_gf_can)`** codes from
+the Canada-specific GlobalFungi dataset represents **`r pr(sh_gf_can, sh_global)`**%
+of the **`r nf(sh_global)`** EcM fungal SH codes within the entire GlobalFungi
+dataset.
+
+Among the **`r nf(sh_total)`** unique EcM fungal SH codes,
+**`r nf(sh_named)`** (**`r pr(sh_named, sh_total)`**%) were assigned to a UNITE named
+species, and **`r nf(sp_named)`** of these were unique (some SH codes are assigned
+to the same species epithets). Of the named SH codes,
+**`r nf(V(linn, "Named-species SH codes: shared between GlobalFungi and GenBank"))`**
+were shared between GlobalFungi and GenBank,
+**`r nf(V(linn, "Named-species SH codes: GlobalFungi only"))`** were unique to
+GlobalFungi, and **`r nf(V(linn, "Named-species SH codes: GenBank only"))`** were
+unique to GenBank.
+
+The **`r nf(sp_named)`** named species comprise **`r nf(V(linn, "EcM genera observed in Canada"))`**
+unique genera, which is around
+**`r pr(V(linn, "EcM genera observed in Canada"), V(linn, "Known EcM genera globally (FungalTraits)"))`**%
+of the estimated **`r nf(V(linn, "Known EcM genera globally (FungalTraits)"))`** EcM
+fungal genera known globally.
+
+The difference between the **`r nf(sh_total)`** unique SH codes and the **`r nf(sh_named)`**
+with names attached can be considered a form of "dark diversity", specific to our
+dataset: about **`r pr(as.numeric(sh_total) - as.numeric(sh_named), sh_total)`**%
+(**`r nf(as.numeric(sh_total) - as.numeric(sh_named))`**) of codes in the combined
+GlobalFungi + GenBank dataset have no match above the UNITE species-level assignment threshold, and thus
+cannot be assigned a species name at this time. This figure is not directly
+comparable to the OTU-level dark diversity estimates recently reported by @vangalenBiogeographyConservationEarths2025, as they used a custom bioinformatics pipeline that, for example, used a 97% similarity threshold for taxonomic assignment rather than the 98.5% used by GlobalFungi (and by us). Nevertheless, for reference, we (i) provide a Canada-specific map of dark
+EcM fungal richness, adapted from the geospatial model of @vangalenBiogeographyConservationEarths2025
+(Supplemental Materials Figure S1), and (ii) accessed their sample-specific estimates of the proportion of
+OTUs unassigned to species (available at: <https://doi.org/10.6084/m9.figshare.28830371>), which
+is analogous to our measure of dark diversity used above, and calculated an average of
+**`r .vg$pct`**% among their **`r nf(.vg$n)`** Canadian forest and tundra samples (the
+most comparable subset to ours).
+
+The Linnean shortfall for EcM fungi in Canada is clearly substantial, but also
+challenging to estimate accurately because the available sample
+data are (i) so few relative to the target land area,
+(ii) geographically clustered, and (iii) restricted to a small portion of the
+potential EcM fungal niche space (@fig-1; see also Hutchinsonian, Eltonian, and
+Wallacean shortfalls). The same limitations apply to the full GlobalFungi dataset
+(see global sampling density map, Figure S2), upon which the estimate of
+25,500–55,500 EcM fungal species globally was based [@vangalenBiogeographyConservationEarths2025].
+
+Moreover, and the reason we do not provide estimates of sample coverage (Ĉ) or EcM
+fungal taxon richness in Canada, the available estimation methods make assumptions that cannot be met by
+GlobalFungi or comparable community eDNA data. Specifically, Chao1, Chao2, and Ĉ [@chao_estimating_1987; @chiuEstimatingComparingMicrobial2016] all derive from
+the same underlying quantities: the number of rare taxa observed exactly once ($f_1$)
+or twice ($f_2$) in a sample (Chao1), or across sites ($Q_1$ and $Q_2$, the incidence-based analogue, for Chao2).
+Coverage is, in its simplest form $\hat{C} = 1 - f_1/n$, where "$n$" represents the total sample reads. All of these methods assume
+that $f_1$ and $f_2$ (or $Q_1$ and $Q_2$) faithfully reflect how much rare diversity
+remains undetected in the true underlying community. This assumption cannot be met
+with GlobalFungi data because, when estimating richness of specific taxonomic guilds (like EcM fungi), the guild-specific read count of every GlobalFungi sample is the
+outcome of an upstream taxonomic (EcM fungal genus) filtering step applied to each sample's
+whole-community sequencing output. To illustrate, across the
+**`r nf(.discard$n)`** soil-only Canadian GlobalFungi samples with at least one EcM
+fungal read, a median of **`r round(.discard$q[2])`**% (IQR
+**`r round(.discard$q[1])`**–**`r round(.discard$q[3])`**%) of total sample sequencing depth
+is discarded by the EcM filtering step before any richness estimator would see
+the data (**Figure S3**). It is therefore problematic to assume that the $f_1$ and $f_2$
+(or $Q_1$ and $Q_2$) values that come from the remaining EcM fungal reads represent
+what the methods assume they represent. Notably, this problem is separate from the
+widely-recognized challenges that PCR / sequencing methodologies pose for diversity
+estimation [@boshuizenPitfallsStatisticalAnalysis2023; @vangalenBiogeographyConservationEarths2025], and from other problems highlighted in a recent study [@elenaschmitzComprehensiveReviewEvaluation2025].
+
+# Wallacean shortfall
+
+The Wallacean shortfall encompasses our lack of knowledge of where species occur
+(i.e., species geographic distributions). For fungi, the Wallacean shortfall was once
+considered negligible, as longstanding hypotheses predicted that microbial species
+were ubiquitous across space [reviewed in @greenMicrobialBiogeographyTaxonomy2008]. The advent of
+molecular methods enabling whole-community sequencing of fungal diversity, however,
+has shown the opposite. Field surveys detecting putatively endemic fungi are common
+[@talbotEndemismFunctionalConvergence2014; @kivlinSpatialTemporalTurnover2020; @bazzicalupoMacrofungalConservationCanada2022], including in
+Canada or western North America [@kranabetterSpeciesAreaCurve2018], and studies have demonstrated geographically
+constrained dispersal for most EcM fungal spores [@peayMeasuringEctomycorrhizalFungal2012; @abregoAirborneDNAReveals2024]. Thus, although some EcM fungal taxa may be distributed over large areas (e.g. circumpolar; @geml_long-term_2015; @noffsingerBiogeographyHostAssociations2026), many more taxa likely
+exhibit more constrained distributions, mirroring what is observed among other
+taxonomic groups [@brownGEOGRAPHICRANGESize1996].
+
+In recent years, species distribution models (SDMs), which relate species
+occurrences to abiotic and sometimes also biotic predictors to estimate species geographic
+distributions, have increasingly been used to predict the potential distributions of
+EcM fungi [@qinNicheModellingPredicts2023; @vannulandGlobalHotspotsMycorrhizal2025; @qinHighResolutionRangeMapping2026]. For example,
+in the most comprehensive modeling of EcM fungal species distributions thus far, @qinHighResolutionRangeMapping2026 used Hierarchical Modelling of Species Communities (HMSC) [@tikhonovJointSpeciesDistribution2020], informed by
+worldwide GlobalFungi soil samples binned into 30 arc-second grid cells (~1 km ×
+1 km), to model the distributions of 2,669 EcM fungal species hypotheses (based on a tailored pipeline that used OTUs composed of sequences clustered to 97% similarity). This
+equates to approximately 10% of the estimated minimum number of EcM fungal species
+globally (see above). Qin et al. used a minimum occurrence cutoff of 31 grid cells, which is consistent
+with common recommendations [e.g. @vanproosdijMinimumRequiredNumber2016].
+
+```{r occupancy}
+#| include: false
+# Occupancy summary for GlobalFungi-only georeferenced Canadian taxa: for each
+# taxonomic level, count taxa with < 30 occupied 30-arc-second cells, within
+# Canada and across the worldwide GlobalFungi v5 dataset. Taxa absent from the
+# global lookup are treated as < 30 (they occur only in Canadian records).
+occ_tbl <- function(can, glob, key) {
+  if (is.null(can) || is.null(glob)) return(NULL)
+  can <- dplyr::filter(can, dataset == "GlobalFungi")
+  gmap <- stats::setNames(glob$n_locs_global, glob[[key]])
+  n     <- nrow(can)
+  q     <- stats::quantile(can$n_locations, c(.25, .5, .75), names = FALSE)  # Q1, median, Q3
+  lt_can  <- sum(can$n_locations < 30)
+  gl      <- dplyr::coalesce(unname(gmap[can[[key]]]), 0L)
+  lt_glob <- sum(gl < 30)
+  tibble::tibble(n = n, q1 = q[1], med = q[2], q3 = q[3],
+                 mx = max(can$n_locations), lt_can = lt_can, lt_glob = lt_glob)
+}
+occ_sh <- occ_tbl(locs_sh_can, locs_sh_glob, "sh_code")
+occ_sp <- occ_tbl(locs_sp_can, locs_sp_glob, "species")
+```
+
+For comparison, and serving as our first, straightforward measures of the Wallacean
+shortfall, we highlight that among the **`r nf(occ_sh$n)`**
+unique SH codes that were georeferenced in Canada (from GlobalFungi samples
+exclusively),
+**`r nf(occ_sh$lt_glob)`** (**`r pr(occ_sh$lt_glob, occ_sh$n)`**%) have fewer than 30
+occurrence records globally, while **`r nf(occ_sh$lt_can)`**
+(**`r pr(occ_sh$lt_can, occ_sh$n)`**%) have fewer than 30 occurrence records
+within Canada (@tbl-3).
+
+Our second approach to quantifying the Wallacean shortfall focuses on the
+frequencies of occurrence (or detections) of EcM fungal taxa more generally. Figure
+2 shows histograms of those frequencies, enumerated within Canada (panels a and b)
+and globally (c, d) for both named species (a,c) and SH codes (b, d), again
+limiting analyses to the GlobalFungi dataset and sites equating with 30 arc-second
+grid cells. The histograms show that most taxa have been detected in few sites
+whereas a few have been detected in many sites. However, unlike for macro-organisms like mammals and birds, sampling is currently insufficient to estimate the true frequency distributions of occurrence, at any spatial scale, for EcM fungi native to Canada, even among taxa that are putatively endemic to Canada or western North America [@kranabetterSpeciesAreaCurve2018]. Together with @fig-2, the numbers presented in @tbl-3
+provide a straightforward picture of the data limitations that underlie the
+substantial Wallacean shortfall for EcM fungal taxa in Canada.
+
+# Prestonian shortfall
+
+Of the seven shortfalls, the Prestonian, which represents our lack of knowledge about the abundance of species, is often most pronounced [@hochkirchStrategyNextDecade2021]. This is especially true for fungi, since abundance trends and population dynamics over space and time remain mostly unknown [@kochEstimatingTaxonspecificPopulation2018; @martinovicTemporalTurnoverSoil2021]. Evidence from vertebrate communities suggests that most populations require relatively continuous monitoring over decadal timespans to provide robust estimates of abundance change [@whiteMinimumTimeRequired2019]. In contrast, fungi often exhibit fast generation times and rapid community turnover [@ningShiftsEctomycorrhizalFungal2021]; thus, resolving population dynamics likely requires fungal-specific sampling approaches [@tothEcologicalStudiesEctomycorrhizal2010]. Short-term population dynamics (resolved via sequencing host root tissue) can incorporate stable-isotope probing via isotopically-labeled carbon substrates or water to track actively growing EcM fungal taxa [@kochEstimatingTaxonspecificPopulation2018] on the order of days to weeks. Fungal turnover in community composition during intermediate time scales can be addressed via repeated sampling [@kivlinSpatialTemporalTurnover2020; @martinovicTemporalTurnoverSoil2021] and may be important for understanding succession or response to disturbances. Long-term population dynamics meant to indicate factors like extinction risk are likely more complicated and could involve the monitoring of spore deposition [@kranabetterSporeDepositionEctomycorrhizal2026] or spore banks which can sustain viable propagules for many years [@nguyenStayinAliveSurvival2012; @pitherPaleosymbiosisHypothesisHost2017], identifying genetic structures of fungal populations though whole genome sequencing [@vincenotPopulationBiologyEcology2017], and/or incorporating phylogenetic methods to detect radiations versus extirpations [@beaulieuDetectingHiddenDiversification2016]. Unfortunately, studies with repeated sampling designs over both short and long time scales are uncommon for EcM fungi. Correspondingly, estimates of fungal persistence within a single location, much less across a species range, are exceedingly rare. Even when samples are collected repeatedly over time [@averillSpatialVsTemporal2019], the destructive nature of chemical assays, microscopic assays, and DNA sequencing of soils and/or roots means that temporal estimates of fungal persistence must account for a spatial component as well [@cariniEffectsSpatialVariability2020].
+
+Unlike other taxa, approaches taken to measure the abundance of EcM fungi vary considerably, which makes aggregating data across regions, species, and studies challenging. For example, fungal abundance can be represented as estimates of total biomass detected from chemical signatures (e.g., phospholipid fatty acids in [@olssonSignatureFattyAcids1999]; ergosterol in [@ekbladChitinErgosterolCombined1998]; biomass inferred from carbon use efficiencies in [@jorgensenTraitSpectrumLinking2025]) or microscopic counts of EcM fungal root tip colonization [@soudzilovskaiaGlobalPatternsPlant2015]. Minirhizotron tube measurements that track mycorrhizal fungal growth over time are rare but those estimates suggest that EcM fungal hyphae turn over on the order of weeks to months [@tresederSlowTurnoverProduction2010; @allenSituHighfrequencyObservations2013; @defrenneHighresolutionMinirhizotronsAdvance2021]. Estimates of fungal abundance based on DNA sequences (e.g., qPCR and next generation sequencing) are often biased by unequal target gene copy number [@taylorAccurateEstimationFungal2016], PCR bias against certain EcM fungal clades [@janowskiMethodsIdentifyingMeasuring2023], and the fact that the DNA concentration of fungal biomass varies across growthforms (e.g., aseptate arbuscular mycorrhizal fungi). Relative abundance estimates of EcM fungi compared to total read counts suffer from the fact that the former are a simplex (sum to 1) and often are not corrected for total unequal sequencing depth among samples (see above), sequencing technologies, and/or gene regions [@weissNormalizationMicrobialDifferential2017; @quinnFieldGuideCompositional2019]. In the future, estimates of fungal abundance with deeper next generation sequencing may more closely approximate biomass, and targeting sequencing of whole genomes may allow us to estimate the number of individuals in a sample more reliably.
+
+Because it is difficult to estimate the number of fungal individuals in a sample, it is nearly impossible to model population dynamics of most EcM fungal lineages. Demographic models require tracking individuals through survival, growth, and reproduction over time. But, even when sampling of EcM fungi is repeated at monthly time intervals, the same individuals may not be detected. For the purpose of conservation monitoring, @dahlbergApplyingIUCNRedlisting2011 propose fruiting body counts as an operational definition for population size; however, to be reliable, they suggest that EcM fungal population trends should be assessed over at least 50 years. Instead, a focus on genetic diversity over time and among populations across an EcM fungal species' range may be the most promising avenue forward to understand persistence of fungal populations [@douhanPhylogeneticDivergenceLocal2005; @abeHabitatFragmentationStrongly2024]. Using this approach, Golan and colleagues demonstrated that genets of the EcM fungus *Amanita phalloides* can persist for more than three decades across multiple locations [@golanDeathCapsAmanita2024]. As longitudinal data accumulate for EcM fungi, future studies can begin to incorporate changes in abundance into population demographic models, at least as stage-based estimates of population growth and longevity.
+
+To quantify the Prestonian shortfall for EcM fungi in Canada, we used the BioTIME database, which represents the largest and most comprehensive effort to compile abundance data [@dornelasBioTIME20Expanding2025]. Yet, despite decent coverage for other kingdoms, BioTIME includes only a single study that tracks fungal abundance over time based on data collected from Bavarian Forest National Park in south-eastern Germany [@thornChangesDominantAssembly2016] over a period of 5 years. Of the **`r nf(V(pres, "BioTIME species names in fungi studies"))`** fungal species included in that study, two have been recorded in Canada. Here, we operationalize the Prestonian shortfall as the percentage of the **`r nf(V(pres, "EcM species (UNITE, named) in our Canadian dataset"))`** named EcM fungal species present in Canada that lack some form of abundance time series data recorded anywhere on Earth. We estimate this shortfall to be **`r nf(V(pres, "EcM named taxa (species) with NO BioTIME record"))`** out of **`r nf(V(pres, "EcM species (UNITE, named) in our Canadian dataset"))`**, or **`r p1(V(pres, "% of our EcM named taxa absent from BioTIME"))`**%.
+
+# Darwinian shortfall
+
+The Darwinian shortfall describes the lack of knowledge about how species and their traits have evolved [@diniz-filhoDarwinianShortfallsBiodiversity2013]. Traditional species concepts have been especially problematic in microbes as criteria for delineating species differ among groups of fungi [@caiEvolutionSpeciesConcepts2011; @kwon-chungCaseAdoptingSpecies2017; @xuFungalSpeciesConcepts2020; @janowskiMethodsIdentifyingMeasuring2023]; and previously agreed-upon phylogenies can rapidly and drastically shift [@tedersooEctomycorrhizalLifestyleFungi2010; @tedersooGlobalDiversityGeography2014; @niskanenPushingFrontiersBiodiversity2023].
+
+The hyperdiversity and short generation times of microorganisms (including fungi) can make resolving phylogenetic relationships more challenging than in other organisms that lack abundant horizontal gene transfer, multiple genomes, high phenotypic plasticity, or increased potential rates of mutation accumulation [@jamesFullyResolvedFungal2020; @xuFungalSpeciesConcepts2020; @liGenomescalePhylogenyKingdom2021; @janowskiMethodsIdentifyingMeasuring2023]. Although the discussion of the evolution of the EcM fungal habit has been ongoing since at least the 1980s [@mallochEcologicalEvolutionarySignificance1980; @readMycorrhizasEcosystems1991], the topic has continuously been revisited and revised [@hibbettEvolutionaryInstabilityEctomycorrhizal2000; @mathenyOutPalaeotropicsHistorical2009; @satoEvolutionEctomycorrhizalSymbiosis2024]. The timing and geographic origins of the original emergence of EcM fungi are another area that has been limited by the lack of available taxonomic data and has been much discussed and summarized [@rybergAsynchronousOriginsEctomycorrhizal2011; @looneyOutTropicsGlobal2016; @niskanenPushingFrontiersBiodiversity2023; @satoEvolutionEctomycorrhizalSymbiosis2024]. Despite this ongoing research, there is still a lack of agreement on how many times the EcM symbiosis has independently evolved - from as few as 27 [@satoEvolutionEctomycorrhizalSymbiosis2024; @caiEvolutionEctomycorrhizalSymbiosis2024; @sanchez-garciaFruitingBodyForm2020] to upwards of 80 times [@tedersooEctomycorrhizalLifestyleFungi2010; @tedersooLineagesEctomycorrhizalFungi2013; @tedersooGlobalDiversityGeography2014; @tedersooEctomycorrhizalFungalLineages2017; @strullu-derrienOriginEvolutionMycorrhizal2018; @sanchez-garciaDeconstructingTricholomataceaeAgaricales2014] - and which fungal taxa truly belong in the EcM lineage [@tedersooLineagesEctomycorrhizalFungi2013; @tedersooEctomycorrhizalFungalLineages2017], and even which genes should be taken into account when building phylogenies [@satoHostShiftsEnhance2017; @caiEvolutionEctomycorrhizalSymbiosis2024; @liGenomescalePhylogenyKingdom2021; @xuFungalSpeciesConcepts2020].
+
+The limited taxonomic data on EcM fungi necessitates a large amount of extrapolation and reliance on closely related taxa to infer relationships [@tedersooEctomycorrhizalLifestyleFungi2010; @tedersooLineagesEctomycorrhizalFungi2013]. Many attempts to delineate phylogenies have been focused on single lineages [@kobayashiGenomeLyophyllumShimeji2023; @lebretonComparativeGenomicsReveals2022; @caiEvolutionEctomycorrhizalSymbiosis2024; @noffsingerBiogeographyHostAssociations2026], and there have been limited attempts to synthesize across studies [@tedersooEctomycorrhizalLifestyleFungi2010; @tedersooLineagesEctomycorrhizalFungi2013; @tedersooEctomycorrhizalFungalLineages2017], impeding a broader understanding of the overall evolution. Additionally, the majority of attempts have been biased towards the Agaricomycetes class [@caiEvolutionEctomycorrhizalSymbiosis2024; @satoEvolutionEctomycorrhizalSymbiosis2024; @sanchez-garciaDeconstructingTricholomataceaeAgaricales2014; @tedersooGlobalDiversityGeography2014].
+
+Given their symbiotic lifestyle, EcM fungal diversification could be linked to host diversification and host switching [@caiEvolutionEctomycorrhizalSymbiosis2024; @satoEvolutionEctomycorrhizalSymbiosis2024; @satoHostShiftsEnhance2017; @satoTimingEvolutionaryInnovation2019; @strullu-derrienOriginEvolutionMycorrhizal2018; @wilsonEvolutionEctomycorrhizasDriver2017; @vanderlindeEnvironmentHostLargescale2018]. Time since major disturbance, such as the Cretaceous–Paleogene (K–Pg) boundary or global cooling events in the Late Paleogene–Neogene [@strullu-derrienOriginEvolutionMycorrhizal2018], and functional traits, such as fruiting body forms [@sanchez-garciaFruitingBodyForm2020; @vargaMegaphylogenyResolvesGlobal2019] or the formation of spores [@satoEvolutionEctomycorrhizalSymbiosis2024], are also potential drivers of EcM fungal diversification. Due to a lack of available taxonomic data and the difficulties in resolving fungal phylogenies, function or trait-based approaches might be a substitute for evolutionary relationships [@aguilar-triguerosBranchingOutTraitbased2015; @zanneFungalFunctionalEcology2020]. However, context-dependence and the lack of agreed upon life-history strategies and functional groups for EcM fungi, combined with the fact that there is not a standardized set of morphological or functional data collected in EcM studies (see Raunkiaeran shortfall section), has made this approach challenging. For an approach to be viable, studies must move beyond metabarcoding to investigate the functional roles of EcM fungi, and a standardized framework for studying and recording trait data must be implemented.
+
+More recently, there has also been growing interest in the rate of modern EcM fungal evolutionary processes [@dauphinTrackingSignaturesSelection2024]. While there is evidence of fungal evolution on ecologically-relevant timescales, such as adaptation to heavy metals [@bazzicalupoFungalHeavyMetal2020] as well as temperature and precipitation [@sonsteboPopulationGenomicsForest2022], these traits are still relatively poorly characterized, inhibiting effective conservation strategies [@dauphinAdvancingResearchEctomycorrhizal2023; @dauphinTrackingSignaturesSelection2024]. This is another area that will require studies to move away from metabarcoding and towards whole genome sequencing to better investigate speciation, as well as changes in functional genes that barcoding cannot capture [@sheltonFungalEcologyAge2026]. For example, *Suillus* species are emerging as model organisms due to the availability of a high quality genome and detailed knowledge of life cycles [@dauphinTrackingSignaturesSelection2024; @lofgrenSuillusEmergingModel2024; @brancoGeneticIsolationTwo2015; @bazzicalupoFungalHeavyMetal2020]. Overall, fungi lag behind in whole genome studies and, while there has been an increasing number of whole fungal genome sequencing initiatives, the number for EcM fungi in particular is still low with an estimated 0.5% of the 50,000 known EcM fungi genomes sequenced [@dauphinTrackingSignaturesSelection2024].
+
+An increase in whole genome sequencing, as well as improved trait characterization, are necessary to move beyond a single model organism and fully capture the large genetic and functional diversity of EcM fungi. However, whole genome sequencing may be prohibitively expensive and computationally intensive for some studies. In this case, sequencing for conserved functional genes of interest, such as those relating to melanin production or heavy metal tolerance, in addition to traditional ITS sequencing could help to elucidate the potential niche and functionality of EcM fungal communities at a lower cost [@dauphinAdvancingResearchEctomycorrhizal2023; @suenagaTargetedMetagenomicsUnveils2015]. Strategies in landscape genomics that have been developed for other organisms can also be well-applied to EcM fungi, as noted in @dauphinTrackingSignaturesSelection2024, such as targeting gaps in spatial and temporal resolution and employing stratified sampling to increase statistical power [@dauphinAdvancingResearchEctomycorrhizal2023].
+
+Quantifying the Darwinian shortfall is challenging, since approaches to gather and analyze evolutionary data change over time. Here, we decided to focus on the representation of Canadian EcM fungal species in terms of available genomic data. While many fungi, including EcM, are often delineated based on reference barcodes of commonly sequenced regions like ITS (nuclear ribosomal) and CO1 (mitochondrial), these highly conserved regions of the genome are poorly suited to understanding the evolutionary relationships among species [@dentingerComparingCOIITS2011], which is best done using whole genome or long-read approaches [@vargaMegaphylogenyResolvesGlobal2019]. For fungi, the MycoCosm genomic database [@grigorievMycoCosmPortalGearing2014] is the primary source of compiled genomic data. Using this database, we quantified the Darwinian shortfall as the percentage of the **`r nf(V(darw, "EcM species (UNITE, named) in our Canadian dataset"))`** named EcM fungal species in Canada absent from the database. This amounted to **`r nf(V(darw, "EcM species absent from MycoCosm"))`** species, which represents **`r p1(V(darw, "% of our EcM species absent from MycoCosm"))`**%, indicating this shortfall remains severe.
+
+# Raunkiæran shortfall
+
+The Raunkiæran shortfall is the lack of data on species traits and functions. Characterizing species by functional traits instead of phylogenetic relatedness is important for understanding how species contribute to ecosystem functions and interactions [@ackerlyTraitbasedApproachCommunity2007; @aguilar-triguerosBranchingOutTraitbased2015; @kardolHierarchicalFrameworkStudying2016; @fryUsingPlantMicrobe2019]. Importantly, and more so in fungi compared to other kingdoms, phylogenetic relatedness does not always correlate well with the ecological or functional roles that species perform [@martinyPhylogeneticConservatismFunctional2013]. For example, while fungi in the genus *Cenococcum* (Ascomycota) have many functional, ecological, and genomic traits in common with EcM fungi in phylum Basidiomycota [@peterEctomycorrhizalEcologyImprinted2016], fungal species within the same genus can exhibit considerable functional diversity [@carrilloNecromassDiverseRootAssociated2025]. This disconnect between phylogeny and function highlights the need to collect functional trait data to connect fungal species and sequences with ecosystem functioning to better understand the vital role of EcM fungi in ecosystems across Canada.
+
+The large diversity of functions across fungi complicates efforts to standardize trait data collection. Even among mycorrhizal fungal researchers, there are various approaches to collecting and reporting trait data. While researchers of arbuscular mycorrhizal (AM) fungi have adopted Grime's C-S-R framework [@chagnonTraitbasedFrameworkUnderstand2013] to organize and standardize measures of functional traits like life history strategy across multiple dimensions (hosts, soil, fungal ecology; @antunesEnhancingConsistencyArbuscular2025), no such framework exists for EcM fungi. Assigning exploration types to EcM fungi holds promise, especially as these traits appear to covary with capacities for decomposition and nutrient cycling [@mansfieldEcologicalGenomicVariation2026]. However, traits focused on specific genes, enzymes, and/or resource flows can be context-dependent for both the environmental conditions and the specific mycorrhizal fungus being investigated. Thus, while unified trait databases are a valuable tool for summarizing broad patterns and generating testable hypotheses, producing these for EcM fungi remains a challenge.
+
+Currently, FungalTraits is the most comprehensive functional traits database for fungi, with trait descriptions for over 160,000 fungal genera [@polmeFungalTraitsUserfriendlyTraits2020], including 327 EcM fungal genera. Decades of field and laboratory observations form the basis of these trait descriptions that broadly describe fungal genera in terms of morphology (e.g., growth form, and/or mycelial exploration type) and ecology/interactions, which collectively point toward broad ecological roles for fungi.
+
+We quantified the Raunkiæran shortfall as the coverage of trait information for EcM fungi in Canada, using six coarse ecological/morphological traits recorded in the FungalTraits database that are relevant to EcM fungi. A seventh trait, "growth form", is exclusively "filamentous mycelium" for all 327 EcM fungal genera, so is not considered further. It should be noted that the FungalTraits database does not include traits on enzymatic function or carbon acquisition, features critical to EcM fungal function.
+
+As shown in @tbl-4, trait knowledge is concentrated in morphological characters derivable from taxonomy (almost 100% coverage) and is near-absent for ecological-interaction traits. We acknowledge that the host-specificity trait is relevant to the Eltonian shortfall (below), but we discuss it here due to its inclusion in the FungalTraits dataset. The 6 genera with a documented host-specificity entry (all Pinaceae) are *Chroogomphus*, *Gomphidius*, *Pseudoboletus*, *Fuscoboletinus*, *Rhizopogon*, and *Suillus*. However, the first two of these genera appear to be primarily epiparasites of the latter two genera [@olssonMolecularAnatomicalEvidence2000], and based on morphology and multigene phylogenies, *Fuscoboletinus* has recently been reclassified as a subgenus of *Suillus* [@shiSubgenericRevisionGenus2025]. *Pseudoboletus* is a monospecific genus whose single species (*P. parasiticus*) is a parasite of the earthball *Scleroderma citrinum* (though it has been shown to form ectomycorrhiza with *Pinus resinosa* roots in culture; @19920657392). The two ecological/interaction traits with near-zero coverage are documented for the same two genera, both members of the Endogonales (Mucoromycota): *Densospora* and *Jimgerdemannia* [@changPhylogenomicsEndogonaceaeEvolution2019]. *Densospora* is the only genus assigned a secondary lifestyle of "soil saprotroph" and an endophytic interaction capability of "root endophyte", while *Jimgerdemannia* carries the value "root-associated" for both fields. No other Canadian EcM genus has an entry for either trait, so these two characters provide essentially no resolving information across the assemblage. The Raunkiæran shortfall for Canadian EcM fungi is therefore primarily a shortfall in ecological-interaction knowledge specifically.
+
+# Hutchinsonian shortfall
+
+The Hutchinsonian shortfall refers to the lack of knowledge about species tolerances to abiotic environmental conditions [@hortalSevenShortfallsThat2015]. Addressing the Hutchinsonian shortfall will not only improve our understanding of the factors underlying spatio-temporal variation in the abundance and distributions of EcM fungal species, but is also particularly relevant for predicting fungal responses to climate change [@steidingerEctomycorrhizalFungalDiversity2020].
+
+For a taxonomic group as diverse as the EcM fungi, a species-level focus has not been the norm in primary research; instead, most studies assess community-level features such as species richness, composition, community aggregated traits, or total biomass in relation to environmental conditions. For example, soil properties can influence diversity and composition at fine spatial scales [@taylorFirstComprehensiveCensus2014], whereas climate typically emerges as the primary driver at broad spatial scales [@tedersooGlobalDiversityGeography2014; @vetrovskyMetaanalysisGlobalFungal2019; @mikryukovConnectingMultipleDimensions2023]. A community-level focus has also been the classical approach in plant macroecology, which culminated in the creation of plant functional types and the development of dynamic global vegetation models in contrast to individual species response curves [@boxPlantFunctionalTypes1996]. While informative, these assemblage-level patterns provide limited insights into the abiotic niches of individual taxa. However, like the trajectory of plant biogeography, which has shifted from a community to species-level focus, EcM fungal biogeography has begun to shift research focus from describing community-level responses to characterizing individual species-level response curves via ecological niche models and SDMs [@davisonTemperaturePHDefine2021; @kivlinFutureMicrobialEcological2021; @qinNicheModellingPredicts2023; @vannulandClimateMismatchesEctomycorrhizal2024; @qinHighResolutionRangeMapping2026]. Given that the diversity and symbiotrophy of EcM fungi make it infeasible to estimate species' tolerances at scale via controlled physiological experiments, niche modeling will remain the primary means for estimating EcM fungal species' responses to abiotic conditions (but see @lofgrenSuillusEmergingModel2024).
+
+To achieve best accuracy, niche models should be informed by sampling that captures all the environmental conditions in which the target species occurs [@moudryOptimisingOccurrenceData2024]. This is especially important for presence-only occurrence data, for which niche modeling additionally requires that environmental conditions are sampled in proportion to their actual availability [@hastieInferencePresenceonlyData2013]. Thus, for our first assessment of the Hutchinsonian shortfall, we evaluate the degree to which available samples cover Canada's climate space (Figure [-@fig-3]a,d), defined here in simplified terms by mean annual temperature and mean annual precipitation. @fig-3 makes clear that this aspect of the Hutchinsonian shortfall is enormous for EcM fungi in Canada, particularly for the systematic samples from GlobalFungi (Figure [-@fig-3]b,e). For example, the most common climate conditions in Canada - those covering northern boreal, sub-arctic and arctic regions (Fig. [-@fig-3]a) - are among the most poorly represented among GlobalFungi (Figure [-@fig-3]e) and GenBank samples (Fig. [-@fig-3]f). GenBank samples appear biased towards areas with high mean annual temperature (Figure [-@fig-3]f), which are comparatively rare. The global sampling density map (Figure S2), which shows few samples across vast expanses of north-eastern Europe and northern Russia, implies similar climate sampling gaps at the global scale, with implications for EcM fungi SDMs based on global data [@qinHighResolutionRangeMapping2026].
+
+The preceding assessment considered only climate. Evaluating sampling in relation to additional abiotic variables, such as soil and physiographic conditions, would undoubtedly reveal additional gaps, thus broadening the Hutchinsonian shortfall further. As a preliminary assessment of this, Figure S4 shows a map of GlobalFungi and GenBank samples overlaid on Canada's 15 ecozones, and Table S1 shows the sample numbers and sampling density (number of samples per 10,000 km²) for each ecozone. Taken together with the climate space sampling results (@fig-3), these ecozone findings show that the Hutchinsonian shortfall is extensive for EcM fungal taxa in Canada, and a priority will be designing sampling strategies that appropriately represent the potential abiotic niche space of species.
+
+# Eltonian shortfall
+
+The Eltonian shortfall describes the lack of knowledge of biotic interactions. This is especially relevant for EcM fungi as they are primarily obligate symbionts, meaning that most species require a compatible plant host, or "phytobiont", to reproduce. Here we first consider the Eltonian shortfall from the perspective of the EcM fungi (mycobiont), and specifically what data exist about potential hosts for the **`r nf(sp_named)`** named EcM fungal species in Canada. Given that the majority of Canada's forests and much of the tundra are dominated by EcM tree or shrub species, the arena within which functional EcM interactions could be realized is enormous. However, not all EcM plant species are suitable hosts for all EcM fungal species; EcM fungi exhibit a range of host breadths, from the comparatively narrow host-breadth of *Suillus*, which predominantly associates with members of the Pinaceae family, to the broad host-breadth of *Cenococcum geophilum*, which associates with a wide array of EcM tree species including gymnosperms and angiosperms [@molinaMycorrhizaSpecificityIts2015]. While the mechanisms thought to influence host breadth are varied, and implicate processes at both the molecular and genomic level and landscape and regional scales [@molinaMycorrhizaSpecificityIts2015; @martinUnearthingRootsEctomycorrhizal2016], much remains to be learned about why some EcM fungal taxa can colonize a wide range of hosts, while others are more restricted [@martinMycorrhizalSymbiosisResearch2024; @vollerMaintenanceHostSpecialisation2024].
+
+Demonstrating the existence of an EcM symbiosis is itself logistically demanding. The gold standard for evidence is demonstrating the presence of a Hartig net, and, once confirmed, using DNA sampled from the ectomycorrhiza and host roots to identify the mycobiont and phytobiont partners [@brundrettResolvingMycorrhizalStatus2020]. Such evidence is rare in practice. Most common are samples of environmental DNA of fungi (e.g. from soil samples) for whom the potential host species is inferred as the nearest plant, which can be problematic when there are multiple potential host species in the vicinity. Thus, for our first assessment of the Eltonian shortfall, we report that of the **`r nf(n_gf_samp)`** GlobalFungi samples in Canada that included at least one EcM fungal SH code, **`r nf(n_gf_nohost)`** (**`r pr(n_gf_nohost, n_gf_samp)`**%) lacked information about potential hosts, i.e. the "dominant plant species" metadata field was empty. Of the **`r nf(n_gf_host)`** samples that did include potential host information, **`r nf(n_soil)`** (**`r p1(100 * n_soil / n_gf_host)`**%) were collected from soil, and thus potential host information must be inferred. Only **`r nf(n_root)`** samples were collected directly from roots (**`r p1(100 * n_root / n_gf_host)`**%), and would therefore provide more confidence about the potential host identity. Among the **`r nf(gb_total)`** GenBank sequence records, **`r nf(gb_nohost)`** (**`r p1(100 * gb_nohost / gb_total)`**%) were missing host information (in the "host taxon" field). Among the **`r nf(gb_host)`** records that did include host information, **`r nf(gb_notrec)`** (**`r pr(gb_notrec, gb_host)`**%) had no information about the source of the DNA (the "isolation_src" field was empty), and an additional **`r nf(gb_other)`** (**`r pr(gb_other, gb_host)`**%) were likely derived from samples other than ectomycorrhiza or host roots (based on the "isolation_src" field).
+
+Next, we summarize the gap in what is known about potential EcM fungi – host interactions, again using information derived from the GlobalFungi and GenBank samples. On the mycobiont side, among the **`r nf(n_named_fung)`** named EcM fungal species, **`r nf(n_named_fung - myco_can_n)`** (**`r round(100 * (n_named_fung - myco_can_n) / n_named_fung)`**%) lacked any associated host information. Among the **`r nf(myco_can_n)`** named EcM fungal species that were associated with at least one host species, the maximum number of unique host species associated with an EcM fungal species was **`r nf(myco_can_mx)`**. If we expand the scope to include metadata from all global records from GlobalFungi and GenBank, then **`r nf(n_named_fung - myco_glob_n)`** (**`r round(100 * (n_named_fung - myco_glob_n) / n_named_fung)`**%) of the **`r nf(n_named_fung)`** named EcM fungal species in Canada lacked any associated host information anywhere, and among the **`r nf(myco_glob_n)`** species that were associated with at least one host species, the maximum number of unique host species associated with an EcM fungal species was **`r nf(myco_glob_mx)`**.
+
+On the phytobiont side, there were **`r n_meta_host`** unique host plant species documented in the metadata. For comparison, we cross-referenced data from the FungalRoot dataset [@soudzilovskaiaFungalRootGlobalOnline2020, GBIF source: doi:10.15468/a7ujmj] with the BIEN database and its native species resolver [@enquistBIENBiodiversityInformatics2026; @maitner_bien_2018; @boyleNativeSpeciesResolver2024] to assemble a list of vascular plant species native to Canada that are EcM (see detailed methods in Supplemental Materials SM1). This yielded **`r n_host_native`** species; **`r n_tree`** tree species, **`r n_shrub`** shrub species, and **`r n_herb`** herbaceous species. Our estimate of **`r n_host_native`** is conservative: species of *Acer*, *Fraxinus*, and *Juglans*, for example, are excluded from our list despite published evidence of genuine EcM associations for these genera elsewhere in the literature [@testeDualMycorrhizalPlants2020]. FungalRoot's genus-level recommendation does not close this gap, since it independently classifies all three genera as AM. We therefore emphasize that our remaining Eltonian shortfall estimates, which rely on data about potential host species, are conservative estimates. Among the list of **`r n_meta_host`** unique host plant species names documented in the metadata, **`r host_matched`** matched names in our list of native EcM host plant species in Canada (Table S2). The remaining **`r length(host_unmatched)`** names that did not overlap included ornamental species (which we did not consider), mis-spelled names, and other problematic entries (Table S3). 
+
+The preceding data about host information can be summarized as an Eltonian shortfall: **`r n_host_native - host_matched`** (**`r round(100 * (n_host_native - host_matched) / n_host_native)`**%) of the **`r n_host_native`** potential EcM host species native to Canada lack any records of associated EcM fungal partners in either GlobalFungi or GenBank.
+
+Considering the full potential interaction matrix for Canada
+(**`r nf(V(elto, "Canadian EcM host plant species (denominator: BIEN-based native list)"))`**
+host species ×
+**`r nf(V(elto, "Named EcM fungal species detected anywhere in the Canadian dataset (full column denominator)"))`**
+named EcM fungal species =
+**`r nf(V(elto, "Full host x named-species matrix size (n_host_species x n_named_fungal_species)"))`**
+cells), **`r p1(V(elto, "% of full host x named-species matrix cells empty"))`**% lack
+data. Of the
+**`r nf(V(elto, "Filled cells in full host x named-species matrix (observed host-species x fungal-species pairs)"))`**
+filled cells,
+**`r nf(V(elto, "Observed host x named-species pairs supported by exactly 1 occurrence (sample/record)"))`**
+(**`r p1(V(elto, "% of observed host x named-species pairs supported by exactly 1 occurrence"))`**%)
+are supported by a single observation. Coarsening to genus, the matrix collapses to
+**`r nf(V(elto, "Full host-genus x fungal-genus matrix size (n_host_genera x n_fungal_genera_total)"))`**
+cells, of which
+**`r p1(V(elto, "% of full host-genus x fungal-genus matrix cells empty"))`**% lack
+data; of the
+**`r nf(V(elto, "Filled cells in full host-genus x fungal-genus matrix (observed host-genus x fungal-genus pairs)"))`**
+filled cells,
+**`r nf(V(elto, "Observed host-genus x fungal-genus pairs supported by exactly 1 occurrence (sample/record)"))`**
+(**`r p1(V(elto, "% of observed host-genus x fungal-genus pairs supported by exactly 1 occurrence"))`**%)
+rest on a single observation.
+
+Lastly, @fig-4 provides a geographic perspective of the Eltonian shortfall,
+simultaneously mapping the estimated richness (within 0.5° grid cells) of EcM host
+species across Canada and the proportion of species in each cell with at least one
+associated fungal DNA sequence record in Canada.
+
+# The way forward
+
+Across the tree of life, our knowledge and understanding of biodiversity is biased
+and incomplete due to limitations in the extent of available biodiversity data.
+Since 2015, summarizing these data gaps under the shortfall framework proposed by
+@hortalSevenShortfallsThat2015 has proved effective, and we have made substantial progress in
+overcoming these shortfalls for animals (mostly vertebrates) and plants. For groups
+like EcM fungi, progress has been slower. In countries like Canada, with vast
+ecosystems dominated by EcM trees and shrubs, these shortfalls hinder the application of
+eco-evolutionary knowledge in conservation and land management. Our assessment
+reveals that current knowledge in Canada is severely limited, characterized by large gaps in available data for EcM fungi and exacerbated by shifting methodological practices, multiple species concepts, and changing technologies. As such, our ability to integrate EcM fungi into conservation strategies to protect biodiversity is lacking. These findings suggest that there is an urgent and broadscale need for additional data and knowledge on the diversity, distribution, and functioning of EcM fungi across Canadian ecosystems.
+
+From a conservation point of view, the most critical shortfalls to address are the Linnean (taxonomic diversity), Wallacean (geographic distributions), Hutchinsonian (environmental niches), and Eltonian (biotic interactions), especially when it comes to systematically prioritizing land for actions like area-based protection amid ongoing climate change [@eckert_3030_2023; @oconnorUntappedPotentialFood2026; @qinHighResolutionRangeMapping2026]. For example, SDMs are almost certainly going to play an increasingly central role in closing the Wallacean shortfall, and the efforts of @qinHighResolutionRangeMapping2026 and @vannulandClimateMismatchesEctomycorrhizal2024 provide valuable foundations upon which to build. Key to this will be improving model discriminatory power and calibration, which at present is weak for EcM fungal taxa [@qinHighResolutionRangeMapping2026], presumably because (i) most taxa are represented by comparatively few occurrence records; and / or (ii) the occurrence records that are available likely capture only a small portion of the true realized niches (for symbionts like EcM fungi, this includes the abiotic and biotic niche) (see Hutchinsonian and Eltonian shortfalls).
+
+Fortunately, future data collection to overcome these shortfalls for EcM fungi has the potential to benefit from promising synergies. For example, high-throughput molecular methods to identify EcM fungi from spatially-referenced root samples from known host species can simultaneously contribute taxonomic, geographic, environmental, and species interaction data (@fig-5). Moreover, optimizing sampling programs across specific host species, geographies, and environments could rapidly accrue gains in data coverage (@fig-5). Importantly, generating these data can also advance research priorities (e.g. @qinHighResolutionRangeMapping2026) and immediately benefit conservation planning to reach rapidly approaching targets like Canada's commitment to protecting 30% of land by 2030 [@united_nations_convention_on_biological_diversity_kunming-montreal_2022], both of which provide researchers with powerful incentives to expand sampling using more optimized designs.
+
+While we fundamentally need more data on EcM fungi in Canada, solving data limitations alone will not be sufficient to overcome all of the seven shortfalls. This is because, unlike other clades, research on EcM fungi lags behind other fields in producing the open access, standardized, and unified databases that have facilitated broadscale synthesis. For example, while plants and other fungi (like AM fungi) benefit from standardized trait databases [@kattgeTRYPlantTrait2020; @antunesEnhancingConsistencyArbuscular2025] and integrated, openly licensed data infrastructures [@enquistBIENBiodiversityInformatics2026], general trait frameworks are more difficult to develop for EcM fungi owing to their high functional diversity, though there may be promise in using exploration types [@mansfieldEcologicalGenomicVariation2026]. By improving consistency among existing trait data, we can promote broadscale spatial or taxonomic investigations of variation in functional diversity. That said, the existing databases (e.g. GlobalFungi, Global Soil Mycobiome, GenBank) have led to rapid progress in studying EcM fungal diversity at scale, and the numerous, recent contributions from the Society for the Protection of Underground Networks (SPUN; <https://www.spun.earth/>) and collaborators exemplify these efforts [e.g. @vetrovskyMetaanalysisGlobalFungal2019; @tedersooGlobalSoilMycobiome2021; @mikryukovConnectingMultipleDimensions2023; @vannulandClimateMismatchesEctomycorrhizal2024; @vannulandGlobalHotspotsMycorrhizal2025; @vangalenBiogeographyConservationEarths2025; @qinHighResolutionRangeMapping2026].
+
+Finally, for some shortfalls like the Prestonian (abundance patterns) and Darwinian (evolutionary relationships), Canada is essentially starting from scratch. While daunting, this also opens the door for optimizing how we collect data from the beginning, learning from efforts made in other regions, and targeting the most pressing aspects or questions pertaining to the different data shortfalls. For example, while studies have explored shifts in EcM fungal abundance following specific disturbances like nitrogen addition [@hogberg2021carbon] or warming [@clemmensen2006increased], understanding how EcM fungi respond to fire is also critical in a region like Canada, where single fire seasons can produce burns greater in area than ~40% of European nations (in 2023, over 165 thousand km² of forest burned in Canada). Post-fire fungal community surveys often show a reduction in detectable EcM fungi, especially following high severity fire that kills EcM host trees [@dove2017fire; @pulidochavez2021highseverity; @packardSuccessionalChangesFungal2023]. But EcM fungi have been shown to persist, dormant in the soil, until new host seedlings begin to establish [@baar1999mycorrhizal; @yamaoka2025nitrogen]. Better understanding of EcM fungal community distribution, dynamics, dispersal, and persistence is therefore critical for supporting ecosystem recovery and management efforts.
+
+Finally, while we are confident about the data and methods we used to evaluate the seven shortfalls, our study has some important limitations that warrant discussion. First, we based our evaluations exclusively on publicly available and discoverable DNA sequence data from GlobalFungi and GenBank, and did not consider other kinds of data including physical specimen occurrence records available through the Global Biodiversity Information Facility (GBIF). While taxonomic inconsistencies and cryptic diversity render such data less reliable for the present goals, they can nonetheless complement future, molecular-based sampling efforts.  For example, Figure S5 shows a map of physical specimen occurrence records, pulled from GBIF, for **`r nf(as.numeric(V(linn, "GBIF: EcM genera represented (genera with sequence data)")) + as.numeric(V(linn, "GBIF: EcM genera represented (genera without sequence data)")))`** EcM fungal genera, with records distinguished according to whether the genus is represented within our Canada-specific DNA sequence datasets. Table S4 shows the **`r nf(V(linn, "GBIF: EcM genera represented (genera without sequence data)"))`** genera that currently lack associated DNA sequence data in Canada. This list could be used to target future sampling efforts.  Second, our shortfall assessments were not informed in any systematic way by data available solely in the primary research literature; rather, we relied exclusively on curated, discoverable, and publicly accessible data repositories like Mycocosm, BioTime, and FungalRoot. Some shortfalls may therefore be less severe in reality than our limited data suggest. Third, like all studies of this kind, the data acquisition, processing, and analysis pipeline (including bioinformatics pipelines implemented by original sources) involves many decisions, some of which are less well-rationalized than others. This yields a "multiverse" of unique analysis pipelines whose outcomes could vary materially **[@steegenIncreasingTransparencyMultiverse2016]**.  Ideally, one would conduct a "multiverse analysis" that reports the results from all unique pipelines **[@shortSystematicMultiverseAnalysis2025]**.  We are currently exploring that option, but in the interim, for full transparency we provide a thorough "Decisions Log" in the Supplemental Information S2 that documents all decisions and their rationales. Lastly, the data presented in this study represent the shortfalls realized at a given point in time. We are in the process of developing a web-based dashboard that will update our shortfall analyses (plus complementary analyses) quarterly - a form of "digital twin" [@visserDigitalTwinsTool2026].
+
+# Conclusion
+
+While we are making progress in gathering and synthesizing the data we need to
+advance biodiversity knowledge and conservation, we still have a long way to go when
+it comes to understanding the diversity and distribution of EcM fungi in Canada. That
+said, rapid progress is possible if we optimize future sampling and take advantage of
+the lessons learned from other taxa and regions. To that end, our assessment marks an
+important first step in improving our knowledge and understanding of EcM fungi in
+Canada and provides the foundation for a coordinated, pan-Canadian sampling effort
+that can be optimized to address multiple shortfalls simultaneously.
+
+# Acknowledgements
+
+This work was directly supported by a Canadian Institute for Ecology & Evolution Working Group grant (2025). We are grateful to the Accelerate Okanagan (Kelowna, BC) for providing collaboration space and logistical support. The research programs of JP, JK, and MF are supported by the Natural Sciences and Engineering Research Council of Canada Discovery Grant program. SNK was funded by National Science Foundation awards 2106065, 2338421, 2412561. CQ was supported by a grant from the Paul G. Allen Family Foundation to the Society for the Protection of Underground Networks (SPUN).
+
+# Data and code availability
+
+Code for the entire workflow is publicly available (XXX). All input and output data
+are archived and publicly available at (YYY). Supplemental Materials SM1 and SM2 are also archived at the same location.
+
+# References
+
+<!--
+2026-07-06: all in-text citations checked against references.bib. Every
+citation resolves to a bib entry via @key; no author-year prose citations
+or unresolved gaps remain.
+-->
+
+::: {#refs}
+:::
+
+# Tables
+
+```{r}
+#| label: tbl-1
+#| tbl-cap: "Summary of data derived from v5 of the GlobalFungi dataset. Summary data are provided for the Canada-specific samples, and for the full GlobalFungi dataset for comparison."
+gf <- dplyr::filter(emf, source == "GlobalFungi")
+gv <- function(m) as.numeric(V(gfv, m))   # GlobalFungi-wide volume metrics
+cw <- function(m) as.numeric(V(gfw, m))    # GlobalFungi-wide "cheap" metrics
+n_all_ca <- dplyr::n_distinct(
+  readr::read_csv(paths$gf_meta_out, show_col_types = FALSE)$sample_ID)
+
+can <- c(
+  n_all_ca,                                                        # QF samples, all taxa
+  dplyr::n_distinct(gf$sample_ID),                                 # QF samples with >=1 EcM
+  if (!is.null(wall_loc)) wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"] else NA,
+  sum(gf$abundance > 0, na.rm = TRUE),                             # detection records
+  sum(gf$abundance, na.rm = TRUE),                                 # total read abundance
+  dplyr::n_distinct(gf$species[named_ok(gf$species)]),             # named species
+  dplyr::n_distinct(gf$genus[gf$genus != "" & !is.na(gf$genus)]),  # genera
+  dplyr::n_distinct(gf$sh_code[gf$sh_code != "" & !is.na(gf$sh_code)]))  # SH codes
+glob <- c(
+  cw("GlobalFungi v5 samples worldwide (quality-filtered, all taxa)"),
+  gv("GlobalFungi v5 samples worldwide (quality-filtered, with EcM detection)"),
+  cw("EcM unique sampling locations (GlobalFungi-wide)"),
+  gv("EcM detection records (GlobalFungi-wide, quality-filtered samples)"),
+  gv("EcM total read abundance, Sigma reads (GlobalFungi-wide, quality-filtered samples)"),
+  cw("EcM named species detected (GlobalFungi-wide, matrix presence)"),
+  cw("EcM genera detected (GlobalFungi-wide, matrix presence)"),
+  cw("EcM SH codes detected (GlobalFungi-wide, matrix presence)"))
+tibble::tibble(
+  Category = c("Sampling effort", "Sampling effort", "Geographic coverage",
+              "Detection volume", "Detection volume",
+              "Taxonomic richness", "Taxonomic richness", "Taxonomic richness"),
+  Metric = c("Quality-filtered samples, all fungal taxa",
+             "Quality-filtered samples with ≥ 1 EcM detection",
+             "Unique EcM sampling locations",
+             "EcM detection records (sample × SH-code, abundance > 0)",
+             "EcM total read abundance (Σ reads)",
+             "EcM named species detected",
+             "EcM genera detected",
+             "EcM SH codes (UNITE v10) detected"),
+  Canada = nf(can),
+  `GlobalFungi-wide` = nf(glob),
+  `Canada as % of GlobalFungi-wide` = paste0(sprintf("%.1f", 100 * can / glob), "%")
+) |>
+  knitr::kable(align = c("l", "l", "r", "r", "r"))
+```
+
+```{r}
+#| label: tbl-2
+#| tbl-cap: "Properties of the Canadian GenBank EcM sequence dataset, after ITS2/ITS-both filtering and UNITE SH assignment (≥ 98.5% identity). Taxon counts are over all Canadian GenBank records."
+gb <- dplyr::filter(emf, source == "GenBank")
+t2 <- tibble::tibble(
+  Property = c("EcM fungal sequence records",
+               "Records with coordinates",
+               "EcM fungal SH codes",
+               "SH codes with a UNITE species-level name",
+               "EcM fungal genera",
+               "EcM fungal named species",
+               "Unique georeferenced sampling locations"),
+  Value = nf(c(
+    V(linn, "GenBank: total EcM sequence records"),
+    if (!is.null(wall_loc)) wall_loc$n_records_with_coords[wall_loc$dataset == "GenBank"] else NA,
+    V(linn, "GenBank: unique SH codes (Canadian dataset)"),
+    V(linn, "GenBank: SH codes with species-level UNITE name"),
+    dplyr::n_distinct(gb$genus[gb$genus != "" & !is.na(gb$genus)]),
+    dplyr::n_distinct(gb$species[named_ok(gb$species)]),
+    if (!is.null(wall_loc)) wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"] else NA)))
+knitr::kable(t2, align = c("l", "r"))
+```
+
+```{r}
+#| label: tbl-3
+#| tbl-cap: "Occupancy of georeferenced Canadian EcM fungal taxa (GlobalFungi only; sites defined as 30 arc-second grid cells). For each taxonomic level: number of taxa; the first quartile (Q1), median, third quartile (Q3), and maximum number of occupied cells within Canada; and the number (percentage) of taxa recorded in fewer than 30 cells within Canada and across the worldwide GlobalFungi v5 dataset."
+pctc <- function(a, b) paste0(nf(a), " (", pr(a, b), "%)")
+t3 <- tibble::tibble(
+  `Taxonomic level` = c("Named species", "SH codes"),
+  `Taxa` = nf(c(occ_sp$n, occ_sh$n)),
+  `Q1 cells (Canada)` = nf(c(occ_sp$q1, occ_sh$q1)),
+  `Median cells (Canada)` = nf(c(occ_sp$med, occ_sh$med)),
+  `Q3 cells (Canada)` = nf(c(occ_sp$q3, occ_sh$q3)),
+  `Max cells (Canada)` = nf(c(occ_sp$mx, occ_sh$mx)),
+  `< 30 cells in Canada` = c(pctc(occ_sp$lt_can, occ_sp$n), pctc(occ_sh$lt_can, occ_sh$n)),
+  `< 30 cells worldwide` = c(pctc(occ_sp$lt_glob, occ_sp$n), pctc(occ_sh$lt_glob, occ_sh$n)))
+knitr::kable(t3, align = c("l", rep("r", 7)))
+```
+
+```{r}
+#| label: tbl-4
+#| tbl-cap: !expr if (!is.null(traits)) paste0("Trait coverage for the ", traits$n_total[1], " EcM fungal genera detected in Canada, across the six traits within the FungalTraits database applicable to EcM fungi. Coverage is the percentage of genera with a non-missing value; explicit “unknown” entries are counted as missing.") else NULL
+if (!is.null(traits)) {
+  traits |>
+    dplyr::transmute(Trait = dplyr::recode(trait_label, "Specific hosts" = "Host specificity"), `Trait class` = trait_class,
+                     `Genera documented` = paste0(n_documented, " / ", n_total),
+                     `Coverage (%)` = pct_documented) |>
+    knitr::kable()
+} else cat("`raunkiaeran_trait_coverage.csv` not found — run 16_raunkiaeran.R.")
+```
+
+# Figures
+
+```{r}
+#| label: fig-1
+#| fig-cap: !expr paste0("Sampling locations from which EcM fungal records were publicly available from either GlobalFungi v5 (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " unique locations) or GenBank (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"]), " unique locations), for a combined total of ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " unique locations. Many locations overlap so are not clearly visible.")
+#| out-width: "85%"
+if (file.exists(paths$fig_sampling_map)) knitr::include_graphics(paths$fig_sampling_map)
+```
+
+```{r}
+#| label: fig-2
+#| fig-cap: !expr 'paste0("Frequency distributions of the number of 30 arc-second grid cells (~1 km²) occupied by EcM fungal taxa, GlobalFungi only. Top row: occupancy within Canada for (a) named species (n = ", nf(occ_sp$n), " species) and (b) SH codes (n = ", nf(occ_sh$n), " SH codes). Bottom row: occupancy across the full global GlobalFungi v5 dataset for the same (c) named species and (d) SH codes.")'
+#| out-width: "85%"
+if (file.exists(paths$fig_wallacean_occ)) knitr::include_graphics(paths$fig_wallacean_occ)
+```
+
+```{r}
+#| label: fig-3
+#| fig-cap: !expr 'paste0("Available climate space and Canadian EcM fungal sampling coverage, in geographic and climate space (WorldClim v2.1 BIO1 × BIO12, 50 × 50 grid of climate zones). Top row (a–c): geographic maps. Bottom row (d–f): the same in climate space. Left (a, d): available climate frequency; in (d), grid cells outlined in white indicate climates never sampled by GlobalFungi + GenBank combined, i.e. the grey zones in (f). Middle (b, e): GlobalFungi coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " GlobalFungi sampling locations. Right (c, f): combined GlobalFungi + GenBank coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " combined sampling locations. Figure style adapted from @hebertBlitzGapNationwide2026.")'
+#| out-width: "95%"
+if (file.exists(paths$fig_climate_gap)) knitr::include_graphics(paths$fig_climate_gap)
+```
+
+```{r}
+#| label: fig-4
+#| fig-cap: !expr 'paste0("Bivariate maps of EcM host species richness (BIEN2 modelled ranges) versus proportion of host species with EcM fungal molecular detection data in Canada, shown separately for non-tree (shrub and herbaceous; n = ", nf(n_shrub + n_herb), " species; top) and tree (n = ", nf(n_tree), " species; bottom) EcM host species. Sampling unit: 0.5° grid cell; only cells with predicted EcM host habitat are shown.")'
+#| out-width: "80%"
+if (file.exists(paths$fig_host_bivariate)) knitr::include_graphics(paths$fig_host_bivariate)
+```
+
+```{r}
+#| label: fig-5
+#| fig-cap: "Efforts to address current data shortfalls for EcM fungi in Canada can benefit from informed and optimized sampling programs that synergize progress to rapidly improve our taxonomic, geographic, and abiotic knowledge of EcM fungi across many host plant species. Ellipses show how sampling targeting a particular region (Wallacean) or abiotic suite of conditions (Hutchinsonian) can simultaneously address other data shortfalls, including Eltonian and Linnean. For example, the blue ellipse shows how sampling the under-represented climate conditions of the arctic (top-right quadrant) can simultaneously address the Linnean shortfall (top left quadrant). Likewise, the green ellipse shows how filling the large geographic sampling gap across the provinces of Manitoba and Saskatchewan (bottom left quadrant) could simultaneously address both the Hutchinsonian and Eltonian shortfalls (right quadrants)."
+#| out-width: "95%"
+if (file.exists(paths$fig_shortfalls_summary)) knitr::include_graphics(paths$fig_shortfalls_summary) else
+  cat("*(This figure is a designed composite graphic; place it at figures/Figure-05_shortfalls_summary.png.)*")
+```
