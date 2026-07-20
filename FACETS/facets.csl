@@ -179,7 +179,7 @@
       <text variable="locator" prefix=": "/>
     </layout>
   </citation>
-  <bibliography et-al-min="7" et-al-use-first="1" line-spacing="2">
+  <bibliography et-al-min="7" et-al-use-first="1" line-spacing="2" hangingindent="true">
     <sort>
       <key macro="author"/>
       <key macro="year-date"/>

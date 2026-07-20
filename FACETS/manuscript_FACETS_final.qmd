@@ -4,7 +4,6 @@ title: "An assessment of biodiversity data shortfalls for ectomycorrhizal fungi 
 # are rendered as a title-page block in the document body (below), following the
 # co-authored draft. Author *order* was revised by the co-authors. Institutional
 # email addresses still need to be added before submission (FACETS asks for them).
-date: today
 # ---------------------------------------------------------------------------
 # FACETS (Canadian Science Publishing) submission formatting.
 # Main-text content is IDENTICAL to ../manuscript.qmd; only the YAML header and
@@ -29,6 +28,20 @@ format:
       text: |
         \usepackage{lineno}   % FACETS: continuous line numbering
         \linenumbers
+        \usepackage{pdflscape} % FACETS: individual tables rendered on landscape pages
+        \usepackage{setspace} % single-space table content despite double-spaced body text
+        % FACETS: force a hanging-indent bibliography. pandoc's citeproc does not
+        % honour facets.csl's hangingindent="true" attribute for this style, so
+        % override pandoc's own CSLReferences environment (defined later in its
+        % preamble) at \begin{document} time, when it is guaranteed to exist.
+        \AtBeginDocument{%
+          \renewenvironment{CSLReferences}[2]{%
+            \begin{list}{}{%
+              \setlength{\itemindent}{-1\cslhangindent}
+              \setlength{\leftmargin}{\cslhangindent}
+              \setlength{\parsep}{0pt}
+              \setlength{\itemsep}{#2\baselineskip}}}
+            {\end{list}}}
   docx:
     number-sections: false
     toc: false
@@ -306,8 +319,8 @@ Methodological details for each shortfall analysis are provided in the Supplemen
 computationally reproducible. All input and output data are also archived and
 publicly available at YYY.
 
-@tbl-1 summarizes the key properties of our Canada-specific GlobalFungi dataset,
-alongside comparator figures derived from all GlobalFungi samples worldwide.  @tbl-2 summarizes relevant information about the GenBank data.  @fig-1 shows the locations of both GlobalFungi and GenBank samples in Canada (**`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"])`** GlobalFungi and **`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"])`** GenBank unique locations).
+Table 1 summarizes the key properties of our Canada-specific GlobalFungi dataset,
+alongside comparator figures derived from all GlobalFungi samples worldwide.  Table 2 summarizes relevant information about the GenBank data.  Figure 1 shows the locations of both GlobalFungi and GenBank samples in Canada (**`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"])`** GlobalFungi and **`r nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"])`** GenBank unique locations).
 
 # Linnean shortfall
 
@@ -358,7 +371,7 @@ other global databases that leverage UNITE.
 
 Our assessment of the Linnean shortfall for EcM fungi in Canada starts with a basic
 accounting of EcM fungal taxonomic data. We emphasize at the outset that the
-sampling footprint in Canada is geographically biased and clustered (@fig-1),
+sampling footprint in Canada is geographically biased and clustered (Figure 1),
 especially with respect to the potential abiotic and biotic niche space of EcM fungi
 (see Hutchinsonian and Eltonian shortfalls sections), so all results should be interpreted
 with this in mind. Within the combined GlobalFungi and GenBank dataset there were
@@ -401,7 +414,7 @@ The Linnean shortfall for EcM fungi in Canada is clearly substantial, but also
 challenging to estimate accurately because the available sample
 data are (i) so few relative to the target land area,
 (ii) geographically clustered, and (iii) restricted to a small portion of the
-potential EcM fungal niche space (@fig-1; see also Hutchinsonian, Eltonian, and
+potential EcM fungal niche space (Figure 1; see also Hutchinsonian, Eltonian, and
 Wallacean shortfalls). The same limitations apply to the full GlobalFungi dataset
 (see global sampling density map, Figure S2), upon which the estimate of
 25,500–55,500 EcM fungal species globally was based [@vangalenBiogeographyConservationEarths2025].
@@ -481,7 +494,7 @@ exclusively),
 **`r nf(occ_sh$lt_glob)`** (**`r pr(occ_sh$lt_glob, occ_sh$n)`**%) have fewer than 30
 occurrence records globally, while **`r nf(occ_sh$lt_can)`**
 (**`r pr(occ_sh$lt_can, occ_sh$n)`**%) have fewer than 30 occurrence records
-within Canada (@tbl-3).
+within Canada (Table 3).
 
 Our second approach to quantifying the Wallacean shortfall focuses on the
 frequencies of occurrence (or detections) of EcM fungal taxa more generally. Figure
@@ -489,7 +502,7 @@ frequencies of occurrence (or detections) of EcM fungal taxa more generally. Fig
 and globally (c, d) for both named species (a,c) and SH codes (b, d), again
 limiting analyses to the GlobalFungi dataset and sites equating with 30 arc-second
 grid cells. The histograms show that most taxa have been detected in few sites
-whereas a few have been detected in many sites. However, unlike for macro-organisms like mammals and birds, sampling is currently insufficient to estimate the true frequency distributions of occurrence, at any spatial scale, for EcM fungi native to Canada, even among taxa that are putatively endemic to Canada or western North America [@kranabetterSpeciesAreaCurve2018]. Together with @fig-2, the numbers presented in @tbl-3
+whereas a few have been detected in many sites. However, unlike for macro-organisms like mammals and birds, sampling is currently insufficient to estimate the true frequency distributions of occurrence, at any spatial scale, for EcM fungi native to Canada, even among taxa that are putatively endemic to Canada or western North America [@kranabetterSpeciesAreaCurve2018]. Together with Figure 2, the numbers presented in Table 3
 provide a straightforward picture of the data limitations that underlie the
 substantial Wallacean shortfall for EcM fungal taxa in Canada.
 
@@ -529,7 +542,7 @@ Currently, FungalTraits is the most comprehensive functional traits database for
 
 We quantified the Raunkiæran shortfall as the coverage of trait information for EcM fungi in Canada, using six coarse ecological/morphological traits recorded in the FungalTraits database that are relevant to EcM fungi. A seventh trait, "growth form", is exclusively "filamentous mycelium" for all 327 EcM fungal genera, so is not considered further. It should be noted that the FungalTraits database does not include traits on enzymatic function or carbon acquisition, features critical to EcM fungal function.
 
-As shown in @tbl-4, trait knowledge is concentrated in morphological characters derivable from taxonomy (almost 100% coverage) and is near-absent for ecological-interaction traits. We acknowledge that the host-specificity trait is relevant to the Eltonian shortfall (below), but we discuss it here due to its inclusion in the FungalTraits dataset. The 6 genera with a documented host-specificity entry (all Pinaceae) are *Chroogomphus*, *Gomphidius*, *Pseudoboletus*, *Fuscoboletinus*, *Rhizopogon*, and *Suillus*. However, the first two of these genera appear to be primarily epiparasites of the latter two genera [@olssonMolecularAnatomicalEvidence2000], and based on morphology and multigene phylogenies, *Fuscoboletinus* has recently been reclassified as a subgenus of *Suillus* [@shiSubgenericRevisionGenus2025]. *Pseudoboletus* is a monospecific genus whose single species (*P. parasiticus*) is a parasite of the earthball *Scleroderma citrinum* (though it has been shown to form ectomycorrhiza with *Pinus resinosa* roots in culture; @19920657392). The two ecological/interaction traits with near-zero coverage are documented for the same two genera, both members of the Endogonales (Mucoromycota): *Densospora* and *Jimgerdemannia* [@changPhylogenomicsEndogonaceaeEvolution2019]. *Densospora* is the only genus assigned a secondary lifestyle of "soil saprotroph" and an endophytic interaction capability of "root endophyte", while *Jimgerdemannia* carries the value "root-associated" for both fields. No other Canadian EcM genus has an entry for either trait, so these two characters provide essentially no resolving information across the assemblage. The Raunkiæran shortfall for Canadian EcM fungi is therefore primarily a shortfall in ecological-interaction knowledge specifically.
+As shown in Table 4, trait knowledge is concentrated in morphological characters derivable from taxonomy (almost 100% coverage) and is near-absent for ecological-interaction traits. We acknowledge that the host-specificity trait is relevant to the Eltonian shortfall (below), but we discuss it here due to its inclusion in the FungalTraits dataset. The 6 genera with a documented host-specificity entry (all Pinaceae) are *Chroogomphus*, *Gomphidius*, *Pseudoboletus*, *Fuscoboletinus*, *Rhizopogon*, and *Suillus*. However, the first two of these genera appear to be primarily epiparasites of the latter two genera [@olssonMolecularAnatomicalEvidence2000], and based on morphology and multigene phylogenies, *Fuscoboletinus* has recently been reclassified as a subgenus of *Suillus* [@shiSubgenericRevisionGenus2025]. *Pseudoboletus* is a monospecific genus whose single species (*P. parasiticus*) is a parasite of the earthball *Scleroderma citrinum* (though it has been shown to form ectomycorrhiza with *Pinus resinosa* roots in culture; @19920657392). The two ecological/interaction traits with near-zero coverage are documented for the same two genera, both members of the Endogonales (Mucoromycota): *Densospora* and *Jimgerdemannia* [@changPhylogenomicsEndogonaceaeEvolution2019]. *Densospora* is the only genus assigned a secondary lifestyle of "soil saprotroph" and an endophytic interaction capability of "root endophyte", while *Jimgerdemannia* carries the value "root-associated" for both fields. No other Canadian EcM genus has an entry for either trait, so these two characters provide essentially no resolving information across the assemblage. The Raunkiæran shortfall for Canadian EcM fungi is therefore primarily a shortfall in ecological-interaction knowledge specifically.
 
 # Hutchinsonian shortfall
 
@@ -537,9 +550,9 @@ The Hutchinsonian shortfall refers to the lack of knowledge about species tolera
 
 For a taxonomic group as diverse as the EcM fungi, a species-level focus has not been the norm in primary research; instead, most studies assess community-level features such as species richness, composition, community aggregated traits, or total biomass in relation to environmental conditions. For example, soil properties can influence diversity and composition at fine spatial scales [@taylorFirstComprehensiveCensus2014], whereas climate typically emerges as the primary driver at broad spatial scales [@tedersooGlobalDiversityGeography2014; @vetrovskyMetaanalysisGlobalFungal2019; @mikryukovConnectingMultipleDimensions2023]. A community-level focus has also been the classical approach in plant macroecology, which culminated in the creation of plant functional types and the development of dynamic global vegetation models in contrast to individual species response curves [@boxPlantFunctionalTypes1996]. While informative, these assemblage-level patterns provide limited insights into the abiotic niches of individual taxa. However, like the trajectory of plant biogeography, which has shifted from a community to species-level focus, EcM fungal biogeography has begun to shift research focus from describing community-level responses to characterizing individual species-level response curves via ecological niche models and SDMs [@davisonTemperaturePHDefine2021; @kivlinFutureMicrobialEcological2021; @qinNicheModellingPredicts2023; @vannulandClimateMismatchesEctomycorrhizal2024; @qinHighResolutionRangeMapping2026]. Given that the diversity and symbiotrophy of EcM fungi make it infeasible to estimate species' tolerances at scale via controlled physiological experiments, niche modeling will remain the primary means for estimating EcM fungal species' responses to abiotic conditions (but see @lofgrenSuillusEmergingModel2024).
 
-To achieve best accuracy, niche models should be informed by sampling that captures all the environmental conditions in which the target species occurs [@moudryOptimisingOccurrenceData2024]. This is especially important for presence-only occurrence data, for which niche modeling additionally requires that environmental conditions are sampled in proportion to their actual availability [@hastieInferencePresenceonlyData2013]. Thus, for our first assessment of the Hutchinsonian shortfall, we evaluate the degree to which available samples cover Canada's climate space (Figure [-@fig-3]a,d), defined here in simplified terms by mean annual temperature and mean annual precipitation. @fig-3 makes clear that this aspect of the Hutchinsonian shortfall is enormous for EcM fungi in Canada, particularly for the systematic samples from GlobalFungi (Figure [-@fig-3]b,e). For example, the most common climate conditions in Canada - those covering northern boreal, sub-arctic and arctic regions (Fig. [-@fig-3]a) - are among the most poorly represented among GlobalFungi (Figure [-@fig-3]e) and GenBank samples (Fig. [-@fig-3]f). GenBank samples appear biased towards areas with high mean annual temperature (Figure [-@fig-3]f), which are comparatively rare. The global sampling density map (Figure S2), which shows few samples across vast expanses of north-eastern Europe and northern Russia, implies similar climate sampling gaps at the global scale, with implications for EcM fungi SDMs based on global data [@qinHighResolutionRangeMapping2026].
+To achieve best accuracy, niche models should be informed by sampling that captures all the environmental conditions in which the target species occurs [@moudryOptimisingOccurrenceData2024]. This is especially important for presence-only occurrence data, for which niche modeling additionally requires that environmental conditions are sampled in proportion to their actual availability [@hastieInferencePresenceonlyData2013]. Thus, for our first assessment of the Hutchinsonian shortfall, we evaluate the degree to which available samples cover Canada's climate space (Figure 3a,d), defined here in simplified terms by mean annual temperature and mean annual precipitation. Figure 3 makes clear that this aspect of the Hutchinsonian shortfall is enormous for EcM fungi in Canada, particularly for the systematic samples from GlobalFungi (Figure 3b,e). For example, the most common climate conditions in Canada - those covering northern boreal, sub-arctic and arctic regions (Fig. 3a) - are among the most poorly represented among GlobalFungi (Figure 3e) and GenBank samples (Fig. 3f). GenBank samples appear biased towards areas with high mean annual temperature (Figure 3f), which are comparatively rare. The global sampling density map (Figure S2), which shows few samples across vast expanses of north-eastern Europe and northern Russia, implies similar climate sampling gaps at the global scale, with implications for EcM fungi SDMs based on global data [@qinHighResolutionRangeMapping2026].
 
-The preceding assessment considered only climate. Evaluating sampling in relation to additional abiotic variables, such as soil and physiographic conditions, would undoubtedly reveal additional gaps, thus broadening the Hutchinsonian shortfall further. As a preliminary assessment of this, Figure S4 shows a map of GlobalFungi and GenBank samples overlaid on Canada's 15 ecozones, and Table S1 shows the sample numbers and sampling density (number of samples per 10,000 km²) for each ecozone. Taken together with the climate space sampling results (@fig-3), these ecozone findings show that the Hutchinsonian shortfall is extensive for EcM fungal taxa in Canada, and a priority will be designing sampling strategies that appropriately represent the potential abiotic niche space of species.
+The preceding assessment considered only climate. Evaluating sampling in relation to additional abiotic variables, such as soil and physiographic conditions, would undoubtedly reveal additional gaps, thus broadening the Hutchinsonian shortfall further. As a preliminary assessment of this, Figure S4 shows a map of GlobalFungi and GenBank samples overlaid on Canada's 15 ecozones, and Table S1 shows the sample numbers and sampling density (number of samples per 10,000 km²) for each ecozone. Taken together with the climate space sampling results (Figure 3), these ecozone findings show that the Hutchinsonian shortfall is extensive for EcM fungal taxa in Canada, and a priority will be designing sampling strategies that appropriately represent the potential abiotic niche space of species.
 
 # Eltonian shortfall
 
@@ -576,7 +589,7 @@ filled cells,
 (**`r p1(V(elto, "% of observed host-genus x fungal-genus pairs supported by exactly 1 occurrence"))`**%)
 rest on a single observation.
 
-Lastly, @fig-4 provides a geographic perspective of the Eltonian shortfall,
+Lastly, Figure 4 provides a geographic perspective of the Eltonian shortfall,
 simultaneously mapping the estimated richness (within 0.5° grid cells) of EcM host
 species across Canada and the proportion of species in each cell with at least one
 associated fungal DNA sequence record in Canada.
@@ -595,7 +608,7 @@ reveals that current knowledge in Canada is severely limited, characterized by l
 
 From a conservation point of view, the most critical shortfalls to address are the Linnean (taxonomic diversity), Wallacean (geographic distributions), Hutchinsonian (environmental niches), and Eltonian (biotic interactions), especially when it comes to systematically prioritizing land for actions like area-based protection amid ongoing climate change [@eckert_3030_2023; @oconnorUntappedPotentialFood2026; @qinHighResolutionRangeMapping2026]. For example, SDMs are almost certainly going to play an increasingly central role in closing the Wallacean shortfall, and the efforts of @qinHighResolutionRangeMapping2026 and @vannulandClimateMismatchesEctomycorrhizal2024 provide valuable foundations upon which to build. Key to this will be improving model discriminatory power and calibration, which at present is weak for EcM fungal taxa [@qinHighResolutionRangeMapping2026], presumably because (i) most taxa are represented by comparatively few occurrence records; and / or (ii) the occurrence records that are available likely capture only a small portion of the true realized niches (for symbionts like EcM fungi, this includes the abiotic and biotic niche) (see Hutchinsonian and Eltonian shortfalls).
 
-Fortunately, future data collection to overcome these shortfalls for EcM fungi has the potential to benefit from promising synergies. For example, high-throughput molecular methods to identify EcM fungi from spatially-referenced root samples from known host species can simultaneously contribute taxonomic, geographic, environmental, and species interaction data (@fig-5). Moreover, optimizing sampling programs across specific host species, geographies, and environments could rapidly accrue gains in data coverage (@fig-5). Importantly, generating these data can also advance research priorities (e.g. @qinHighResolutionRangeMapping2026) and immediately benefit conservation planning to reach rapidly approaching targets like Canada's commitment to protecting 30% of land by 2030 [@united_nations_convention_on_biological_diversity_kunming-montreal_2022], both of which provide researchers with powerful incentives to expand sampling using more optimized designs.
+Fortunately, future data collection to overcome these shortfalls for EcM fungi has the potential to benefit from promising synergies. For example, high-throughput molecular methods to identify EcM fungi from spatially-referenced root samples from known host species can simultaneously contribute taxonomic, geographic, environmental, and species interaction data (Figure 5). Moreover, optimizing sampling programs across specific host species, geographies, and environments could rapidly accrue gains in data coverage (Figure 5). Importantly, generating these data can also advance research priorities (e.g. @qinHighResolutionRangeMapping2026) and immediately benefit conservation planning to reach rapidly approaching targets like Canada's commitment to protecting 30% of land by 2030 [@united_nations_convention_on_biological_diversity_kunming-montreal_2022], both of which provide researchers with powerful incentives to expand sampling using more optimized designs.
 
 While we fundamentally need more data on EcM fungi in Canada, solving data limitations alone will not be sufficient to overcome all of the seven shortfalls. This is because, unlike other clades, research on EcM fungi lags behind other fields in producing the open access, standardized, and unified databases that have facilitated broadscale synthesis. For example, while plants and other fungi (like AM fungi) benefit from standardized trait databases [@kattgeTRYPlantTrait2020; @antunesEnhancingConsistencyArbuscular2025] and integrated, openly licensed data infrastructures [@enquistBIENBiodiversityInformatics2026], general trait frameworks are more difficult to develop for EcM fungi owing to their high functional diversity, though there may be promise in using exploration types [@mansfieldEcologicalGenomicVariation2026]. By improving consistency among existing trait data, we can promote broadscale spatial or taxonomic investigations of variation in functional diversity. That said, the existing databases (e.g. GlobalFungi, Global Soil Mycobiome, GenBank) have led to rapid progress in studying EcM fungal diversity at scale, and the numerous, recent contributions from the Society for the Protection of Underground Networks (SPUN; <https://www.spun.earth/>) and collaborators exemplify these efforts [e.g. @vetrovskyMetaanalysisGlobalFungal2019; @tedersooGlobalSoilMycobiome2021; @mikryukovConnectingMultipleDimensions2023; @vannulandClimateMismatchesEctomycorrhizal2024; @vannulandGlobalHotspotsMycorrhizal2025; @vangalenBiogeographyConservationEarths2025; @qinHighResolutionRangeMapping2026].
 
@@ -634,11 +647,20 @@ or unresolved gaps remain.
 ::: {#refs}
 :::
 
+```{=latex}
+\newpage
+```
+
 # Tables
 
 ```{r}
-#| label: tbl-1
-#| tbl-cap: "Summary of data derived from v5 of the GlobalFungi dataset. Summary data are provided for the Canada-specific samples, and for the full GlobalFungi dataset for comparison."
+#| include: false
+# Compute the four table objects (t1-t4) and their caption text (cap_t1-cap_t4)
+# separately from rendering. FACETS lists all table captions together on their
+# own page, then presents each table alone on a following landscape page with
+# no repeated caption - so the data/caption computation below is decoupled
+# from where each piece is actually printed further down.
+
 gf <- dplyr::filter(emf, source == "GlobalFungi")
 gv <- function(m) as.numeric(V(gfv, m))   # GlobalFungi-wide volume metrics
 cw <- function(m) as.numeric(V(gfw, m))    # GlobalFungi-wide "cheap" metrics
@@ -663,12 +685,12 @@ glob <- c(
   cw("EcM named species detected (GlobalFungi-wide, matrix presence)"),
   cw("EcM genera detected (GlobalFungi-wide, matrix presence)"),
   cw("EcM SH codes detected (GlobalFungi-wide, matrix presence)"))
-tibble::tibble(
+t1 <- tibble::tibble(
   Category = c("Sampling effort", "Sampling effort", "Geographic coverage",
               "Detection volume", "Detection volume",
               "Taxonomic richness", "Taxonomic richness", "Taxonomic richness"),
   Metric = c("Quality-filtered samples, all fungal taxa",
-             "Quality-filtered samples with ≥ 1 EcM detection",
+             "Quality-filtered samples with $\\geq$ 1 EcM detection",
              "Unique EcM sampling locations",
              "EcM detection records (sample × SH-code, abundance > 0)",
              "EcM total read abundance (Σ reads)",
@@ -678,13 +700,9 @@ tibble::tibble(
   Canada = nf(can),
   `GlobalFungi-wide` = nf(glob),
   `Canada as % of GlobalFungi-wide` = paste0(sprintf("%.1f", 100 * can / glob), "%")
-) |>
-  knitr::kable(align = c("l", "l", "r", "r", "r"))
-```
+)
+cap_t1 <- "Summary of data derived from v5 of the GlobalFungi dataset. Summary data are provided for the Canada-specific samples, and for the full GlobalFungi dataset for comparison."
 
-```{r}
-#| label: tbl-2
-#| tbl-cap: "Properties of the Canadian GenBank EcM sequence dataset, after ITS2/ITS-both filtering and UNITE SH assignment (≥ 98.5% identity). Taxon counts are over all Canadian GenBank records."
 gb <- dplyr::filter(emf, source == "GenBank")
 t2 <- tibble::tibble(
   Property = c("EcM fungal sequence records",
@@ -702,12 +720,8 @@ t2 <- tibble::tibble(
     dplyr::n_distinct(gb$genus[gb$genus != "" & !is.na(gb$genus)]),
     dplyr::n_distinct(gb$species[named_ok(gb$species)]),
     if (!is.null(wall_loc)) wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"] else NA)))
-knitr::kable(t2, align = c("l", "r"))
-```
+cap_t2 <- "Properties of the Canadian GenBank EcM sequence dataset, after ITS2/ITS-both filtering and UNITE SH assignment ($\\geq$ 98.5% identity). Taxon counts are over all Canadian GenBank records."
 
-```{r}
-#| label: tbl-3
-#| tbl-cap: "Occupancy of georeferenced Canadian EcM fungal taxa (GlobalFungi only; sites defined as 30 arc-second grid cells). For each taxonomic level: number of taxa; the first quartile (Q1), median, third quartile (Q3), and maximum number of occupied cells within Canada; and the number (percentage) of taxa recorded in fewer than 30 cells within Canada and across the worldwide GlobalFungi v5 dataset."
 pctc <- function(a, b) paste0(nf(a), " (", pr(a, b), "%)")
 t3 <- tibble::tibble(
   `Taxonomic level` = c("Named species", "SH codes"),
@@ -718,54 +732,171 @@ t3 <- tibble::tibble(
   `Max cells (Canada)` = nf(c(occ_sp$mx, occ_sh$mx)),
   `< 30 cells in Canada` = c(pctc(occ_sp$lt_can, occ_sp$n), pctc(occ_sh$lt_can, occ_sh$n)),
   `< 30 cells worldwide` = c(pctc(occ_sp$lt_glob, occ_sp$n), pctc(occ_sh$lt_glob, occ_sh$n)))
-knitr::kable(t3, align = c("l", rep("r", 7)))
+cap_t3 <- "Occupancy of georeferenced Canadian EcM fungal taxa (GlobalFungi only; sites defined as 30 arc-second grid cells). For each taxonomic level: number of taxa; the first quartile (Q1), median, third quartile (Q3), and maximum number of occupied cells within Canada; and the number (percentage) of taxa recorded in fewer than 30 cells within Canada and across the worldwide GlobalFungi v5 dataset."
+
+if (!is.null(traits)) {
+  t4 <- traits |>
+    dplyr::transmute(Trait = dplyr::recode(trait_label, "Specific hosts" = "Host specificity"), `Trait class` = trait_class,
+                     `Genera documented` = paste0(n_documented, " / ", n_total),
+                     `Coverage (%)` = pct_documented)
+  cap_t4 <- paste0("Trait coverage for the ", traits$n_total[1], " EcM fungal genera detected in Canada, across the six traits within the FungalTraits database applicable to EcM fungi. Coverage is the percentage of genera with a non-missing value; explicit “unknown” entries are counted as missing.")
+} else {
+  t4 <- NULL
+  cap_t4 <- "raunkiaeran_trait_coverage.csv not found -- run 16_raunkiaeran.R."
+}
+```
+
+**Table 1**: `r cap_t1`
+
+**Table 2**: `r cap_t2`
+
+**Table 3**: `r cap_t3`
+
+**Table 4**: `r cap_t4`
+
+```{=latex}
+\begin{landscape}
+```
+
+**Table 1**
+
+```{=latex}
+\begin{singlespace}
 ```
 
 ```{r}
-#| label: tbl-4
-#| tbl-cap: !expr if (!is.null(traits)) paste0("Trait coverage for the ", traits$n_total[1], " EcM fungal genera detected in Canada, across the six traits within the FungalTraits database applicable to EcM fungi. Coverage is the percentage of genera with a non-missing value; explicit “unknown” entries are counted as missing.") else NULL
-if (!is.null(traits)) {
-  traits |>
-    dplyr::transmute(Trait = dplyr::recode(trait_label, "Specific hosts" = "Host specificity"), `Trait class` = trait_class,
-                     `Genera documented` = paste0(n_documented, " / ", n_total),
-                     `Coverage (%)` = pct_documented) |>
-    knitr::kable()
-} else cat("`raunkiaeran_trait_coverage.csv` not found — run 16_raunkiaeran.R.")
+knitr::kable(t1, align = c("l", "l", "r", "r", "r"))
+```
+
+```{=latex}
+\end{singlespace}
+\end{landscape}
+\begin{landscape}
+```
+
+**Table 2**
+
+```{=latex}
+\begin{singlespace}
+```
+
+```{r}
+knitr::kable(t2, align = c("l", "r"))
+```
+
+```{=latex}
+\end{singlespace}
+\end{landscape}
+\begin{landscape}
+```
+
+**Table 3**
+
+```{=latex}
+\begin{singlespace}
+```
+
+```{r}
+knitr::kable(t3, align = c("l", rep("r", 7)))
+```
+
+```{=latex}
+\end{singlespace}
+\end{landscape}
+\begin{landscape}
+```
+
+**Table 4**
+
+```{=latex}
+\begin{singlespace}
+```
+
+```{r}
+if (!is.null(t4)) knitr::kable(t4) else
+  cat("`raunkiaeran_trait_coverage.csv` not found — run 16_raunkiaeran.R.")
+```
+
+```{=latex}
+\end{singlespace}
+\end{landscape}
+\newpage
 ```
 
 # Figures
 
 ```{r}
-#| label: fig-1
-#| fig-cap: !expr paste0("Sampling locations from which EcM fungal records were publicly available from either GlobalFungi v5 (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " unique locations) or GenBank (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"]), " unique locations), for a combined total of ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " unique locations. Many locations overlap so are not clearly visible.")
+#| include: false
+# Compute figure caption text (cap_f1-cap_f5), decoupled from where each
+# figure image is printed further down, for the same reason as the tables.
+cap_f1 <- paste0("Sampling locations from which EcM fungal records were publicly available from either GlobalFungi v5 (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " unique locations) or GenBank (n = ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"]), " unique locations), for a combined total of ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " unique locations. Many locations overlap so are not clearly visible.")
+cap_f2 <- paste0("Frequency distributions of the number of 30 arc-second grid cells (~1 km²) occupied by EcM fungal taxa, GlobalFungi only. Top row: occupancy within Canada for (a) named species (n = ", nf(occ_sp$n), " species) and (b) SH codes (n = ", nf(occ_sh$n), " SH codes). Bottom row: occupancy across the full global GlobalFungi v5 dataset for the same (c) named species and (d) SH codes.")
+cap_f3 <- paste0("Available climate space and Canadian EcM fungal sampling coverage, in geographic and climate space (WorldClim v2.1 BIO1 × BIO12, 50 × 50 grid of climate zones). Top row (a–c): geographic maps. Bottom row (d–f): the same in climate space. Left (a, d): available climate frequency; in (d), grid cells outlined in white indicate climates never sampled by GlobalFungi + GenBank combined, i.e. the grey zones in (f). Middle (b, e): GlobalFungi coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " GlobalFungi sampling locations. Right (c, f): combined GlobalFungi + GenBank coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " combined sampling locations. Figure style adapted from @hebertBlitzGapNationwide2026.")
+cap_f4 <- paste0("Bivariate maps of EcM host species richness (BIEN2 modelled ranges) versus proportion of host species with EcM fungal molecular detection data in Canada, shown separately for non-tree (shrub and herbaceous; n = ", nf(n_nontree_mapped), " species; top) and tree (n = ", nf(n_tree_mapped), " species; bottom) EcM host species. Counts are the host species with a BIEN2 modelled range overlapping Canada, which is fewer than the full native host list (see Supplemental Materials SM1). Sampling unit: 0.5° grid cell; only cells with predicted EcM host habitat are shown.")
+cap_f5 <- "Efforts to address current data shortfalls for EcM fungi in Canada can benefit from informed and optimized sampling programs that synergize progress to rapidly improve our taxonomic, geographic, and abiotic knowledge of EcM fungi across many host plant species. Ellipses show how sampling targeting a particular region (Wallacean) or abiotic suite of conditions (Hutchinsonian) can simultaneously address other data shortfalls, including Eltonian and Linnean. For example, the blue ellipse shows how sampling the under-represented climate conditions of the arctic (top-right quadrant) can simultaneously address the Linnean shortfall (top left quadrant). Likewise, the green ellipse shows how filling the large geographic sampling gap across the provinces of Manitoba and Saskatchewan (bottom left quadrant) could simultaneously address both the Hutchinsonian and Eltonian shortfalls (right quadrants)."
+```
+
+**Figure 1**: `r cap_f1`
+
+**Figure 2**: `r cap_f2`
+
+**Figure 3**: `r cap_f3`
+
+**Figure 4**: `r cap_f4`
+
+**Figure 5**: `r cap_f5`
+
+```{=latex}
+\newpage
+```
+
+Figure 1
+
+```{r}
 #| out-width: "85%"
 if (file.exists(paths$fig_sampling_map)) knitr::include_graphics(paths$fig_sampling_map)
 ```
 
+```{=latex}
+\newpage
+```
+
+Figure 2
+
 ```{r}
-#| label: fig-2
-#| fig-cap: !expr 'paste0("Frequency distributions of the number of 30 arc-second grid cells (~1 km²) occupied by EcM fungal taxa, GlobalFungi only. Top row: occupancy within Canada for (a) named species (n = ", nf(occ_sp$n), " species) and (b) SH codes (n = ", nf(occ_sh$n), " SH codes). Bottom row: occupancy across the full global GlobalFungi v5 dataset for the same (c) named species and (d) SH codes.")'
 #| out-width: "85%"
 if (file.exists(paths$fig_wallacean_occ)) knitr::include_graphics(paths$fig_wallacean_occ)
 ```
 
+```{=latex}
+\newpage
+```
+
+Figure 3
+
 ```{r}
-#| label: fig-3
-#| fig-cap: !expr 'paste0("Available climate space and Canadian EcM fungal sampling coverage, in geographic and climate space (WorldClim v2.1 BIO1 × BIO12, 50 × 50 grid of climate zones). Top row (a–c): geographic maps. Bottom row (d–f): the same in climate space. Left (a, d): available climate frequency; in (d), grid cells outlined in white indicate climates never sampled by GlobalFungi + GenBank combined, i.e. the grey zones in (f). Middle (b, e): GlobalFungi coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "GlobalFungi"]), " GlobalFungi sampling locations. Right (c, f): combined GlobalFungi + GenBank coverage; grey areas denote climates not sampled by any of the ", nf(wall_loc$n_unique_locations[wall_loc$dataset == "Combined"]), " combined sampling locations. Figure style adapted from @hebertBlitzGapNationwide2026.")'
 #| out-width: "95%"
 if (file.exists(paths$fig_climate_gap)) knitr::include_graphics(paths$fig_climate_gap)
 ```
 
+```{=latex}
+\newpage
+```
+
+Figure 4
+
 ```{r}
-#| label: fig-4
-#| fig-cap: !expr 'paste0("Bivariate maps of EcM host species richness (BIEN2 modelled ranges) versus proportion of host species with EcM fungal molecular detection data in Canada, shown separately for non-tree (shrub and herbaceous; n = ", nf(n_nontree_mapped), " species; top) and tree (n = ", nf(n_tree_mapped), " species; bottom) EcM host species. Counts are the host species with a BIEN2 modelled range overlapping Canada, which is fewer than the full native host list (see Supplemental Materials SM1). Sampling unit: 0.5° grid cell; only cells with predicted EcM host habitat are shown.")'
 #| out-width: "80%"
 if (file.exists(paths$fig_host_bivariate)) knitr::include_graphics(paths$fig_host_bivariate)
 ```
 
+```{=latex}
+\newpage
+```
+
+Figure 5
+
 ```{r}
-#| label: fig-5
-#| fig-cap: "Efforts to address current data shortfalls for EcM fungi in Canada can benefit from informed and optimized sampling programs that synergize progress to rapidly improve our taxonomic, geographic, and abiotic knowledge of EcM fungi across many host plant species. Ellipses show how sampling targeting a particular region (Wallacean) or abiotic suite of conditions (Hutchinsonian) can simultaneously address other data shortfalls, including Eltonian and Linnean. For example, the blue ellipse shows how sampling the under-represented climate conditions of the arctic (top-right quadrant) can simultaneously address the Linnean shortfall (top left quadrant). Likewise, the green ellipse shows how filling the large geographic sampling gap across the provinces of Manitoba and Saskatchewan (bottom left quadrant) could simultaneously address both the Hutchinsonian and Eltonian shortfalls (right quadrants)."
 #| out-width: "95%"
 if (file.exists(paths$fig_shortfalls_summary)) knitr::include_graphics(paths$fig_shortfalls_summary) else
   cat("*(This figure is a designed composite graphic; place it at figures/Figure-05_shortfalls_summary.png.)*")
