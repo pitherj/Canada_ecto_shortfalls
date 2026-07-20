@@ -1,9 +1,30 @@
 # `data_raw/` — Raw Input Data: Acquisition Guide and Data Dictionary
 
-All external input data for the ECM_manuscript pipeline. **This directory is
-read-only**: the pipeline never writes here, and nothing in it is produced by
-the project's own scripts. Everything the pipeline generates goes to
-`data_derived/` instead.
+All external input data for the ECM_manuscript pipeline. Everything the
+pipeline generates goes to `data_derived/` instead.
+
+> **Permissions — two subdirectories must stay writable.** The bulk of this
+> directory can safely be made read-only (`chmod -R a-w data_raw`) to protect
+> the inputs from accidental modification. Two subdirectories are exceptions,
+> because scripts write into them:
+>
+> | Subdirectory | Written by | When |
+> |---|---|---|
+> | `bien2_ranges/` | `07_bien2_ranges.R` | **every run** — it rewrites `download_log.csv` even when all ranges are already present |
+> | `biotime/` | `14_prestonian.R` | only if the BioTIME `.rds` is absent |
+>
+> Locking those will abort the pipeline with a "Cannot open file for writing"
+> error. To protect the inputs while keeping the pipeline runnable:
+>
+> ```bash
+> chmod -R a-w data_raw
+> chmod -R u+w data_raw/bien2_ranges data_raw/biotime
+> chmod u+w data_raw data_raw/DATA-DICTIONARY.md   # if editing this file
+> ```
+>
+> `01_spatial_data.R` also downloads into `admin_boundaries/`, `ecoregions/`
+> and `natural_earth/`, but each download is guarded by an existence check, so
+> those stay read-only once populated.
 
 Most files were obtained from external sources and copied into this directory.
 A few small base layers (administrative boundaries, ecoregions, Natural Earth,
@@ -67,7 +88,7 @@ propagates onto the derived data beyond the NonCommercial condition above.
 ## Directory structure summary
 
 ```
-data_raw/                                   # READ-ONLY inputs
+data_raw/                                   # external inputs (see permissions note above)
 ├── DATA-DICTIONARY.md                       # this file
 ├── GlobalFungi/                             # GlobalFungi v5 (~13 GB)
 │   ├── GlobalFungi_5_sample_metadata.txt
