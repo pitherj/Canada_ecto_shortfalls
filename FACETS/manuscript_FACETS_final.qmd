@@ -153,6 +153,14 @@ n_tree  <- if (!is.null(.hs)) sum(.hs$growth_form == "tree",  na.rm = TRUE) else
 n_shrub <- if (!is.null(.hs)) sum(.hs$growth_form == "shrub", na.rm = TRUE) else NA_real_
 n_herb  <- n_host_native - n_tree - n_shrub
 
+# Species actually mapped in Figure 4. The bivariate maps are built from the
+# per-species range stack, which holds one layer per host species with a BIEN2
+# modelled range overlapping Canada — fewer than the full host list above.
+.stk <- tryCatch(names(terra::rast(paths$bien_species_stack)),
+                 error = function(e) character(0))
+n_tree_mapped    <- if (!is.null(.hs)) sum(.hs$species[.hs$growth_form %in% "tree"]  %in% .stk) else NA_real_
+n_nontree_mapped <- if (!is.null(.hs)) sum(.hs$species[!.hs$growth_form %in% "tree"] %in% .stk) else NA_real_
+
 # ---- Eltonian mycobiont: named fungal species -> host associations, by scope
 # (produced by 18_eltonian.R from species_host_canada / species_host_global).
 n_named_fung <- as.numeric(V(elto, "Named EcM fungal species detected anywhere in the Canadian dataset (full column denominator)"))
@@ -750,7 +758,7 @@ if (file.exists(paths$fig_climate_gap)) knitr::include_graphics(paths$fig_climat
 
 ```{r}
 #| label: fig-4
-#| fig-cap: !expr 'paste0("Bivariate maps of EcM host species richness (BIEN2 modelled ranges) versus proportion of host species with EcM fungal molecular detection data in Canada, shown separately for non-tree (shrub and herbaceous; n = ", nf(n_shrub + n_herb), " species; top) and tree (n = ", nf(n_tree), " species; bottom) EcM host species. Sampling unit: 0.5° grid cell; only cells with predicted EcM host habitat are shown.")'
+#| fig-cap: !expr 'paste0("Bivariate maps of EcM host species richness (BIEN2 modelled ranges) versus proportion of host species with EcM fungal molecular detection data in Canada, shown separately for non-tree (shrub and herbaceous; n = ", nf(n_nontree_mapped), " species; top) and tree (n = ", nf(n_tree_mapped), " species; bottom) EcM host species. Counts are the host species with a BIEN2 modelled range overlapping Canada, which is fewer than the full native host list (see Supplemental Materials SM1). Sampling unit: 0.5° grid cell; only cells with predicted EcM host habitat are shown.")'
 #| out-width: "80%"
 if (file.exists(paths$fig_host_bivariate)) knitr::include_graphics(paths$fig_host_bivariate)
 ```

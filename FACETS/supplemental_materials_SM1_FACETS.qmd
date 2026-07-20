@@ -53,9 +53,12 @@ p1  <- function(x) sprintf("%.1f", as.numeric(x))
 .gbt     <- .rd(file.path(paths$out_eltonian, "eltonian_genbank_tissue_tally_canada.csv"))
 gb_total <- if (!is.null(.gbt)) .gbt$n[.gbt$category == "Total EcM fungal records"][1] else NA_real_
 
-# World GlobalFungi samples with >= 1 EcM detection; Canadian GF samples (Fig S2)
-.gfv <- .rd(file.path(paths$checkpoints, "gf_global_comparator_volume.csv"))
-n_world_ecm <- if (!is.null(.gfv)) .gfv$value[.gfv$metric == "GlobalFungi v5 samples worldwide (quality-filtered, with EcM detection)"][1] else NA_real_
+# World GlobalFungi samples actually plotted in Figure S2 (i.e. with usable
+# coordinates), read from the same checkpoint the density map is built from.
+# A small number of quality-filtered EcM samples worldwide lack coordinates
+# and so cannot be mapped; using the mapped count keeps the caption exact.
+.gws <- .rd(file.path(paths$checkpoints, "gf_global_ecm_sample_ids.csv"))
+n_world_ecm <- if (!is.null(.gws)) nrow(.gws) else NA_real_
 n_can_gf    <- dplyr::n_distinct(dplyr::filter(emf, source == "GlobalFungi")$sample_ID)
 
 # Unique sampling locations by source (Fig S4)
@@ -84,6 +87,11 @@ n_host_native <- if (!is.null(.hs)) nrow(.hs) else NA_real_
   table(.hs$growth_form_source) else NULL
 # Absence of a source means zero species came from it.
 gfn <- function(k) if (!is.null(.gfsrc) && k %in% names(.gfsrc)) as.integer(.gfsrc[[k]]) else 0L
+
+# BIEN2 range availability: host-list size vs species that actually contribute a
+# modelled range to the richness rasters (one stack layer per contributing species).
+n_stack <- tryCatch(terra::nlyr(terra::rast(paths$bien_species_stack)), error = function(e) NA_integer_)
+n_norange <- if (!is.na(n_stack) && !is.na(n_host_native)) n_host_native - n_stack else NA_integer_
 
 # Georeferenced GBIF specimen records plotted within Canada (Fig S5).
 # Written by 19_sampling_maps.R as the exact point counts drawn on the map.
@@ -336,7 +344,18 @@ Canada boundary. We rasterized these polygons onto a 0.5° geographic grid to
 produce three layers: host species richness (count of host species with a range
 polygon per cell); host data richness (count of host species with at least one
 Canadian EcM molecular-detection record per cell); and host data proportion
-(the ratio of the two). 
+(the ratio of the two).
+
+Not every host species contributes a range. Of the **`r nf(n_host_native)`**
+native Canadian EcM host species, **`r nf(n_stack)`** have a BIEN2 modelled
+range that overlaps Canada and therefore appear in the richness rasters; the
+remaining **`r nf(n_norange)`** do not, either because BIEN2 has no modelled
+range for the species or because the modelled range does not intersect the
+Canada boundary once clipped. The host-richness and host-proportion layers, and
+Figure 4, are therefore based on the **`r nf(n_stack)`** species with usable
+ranges rather than the full host list. This makes the mapped host coverage
+conservative: a cell may hold EcM host species whose ranges BIEN2 does not
+model. 
 
 ## Shortfall analyses
 
