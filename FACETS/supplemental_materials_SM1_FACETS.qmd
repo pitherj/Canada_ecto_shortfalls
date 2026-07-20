@@ -112,8 +112,10 @@ access; `BIEN` (@maitner_bien_2018) for plant range and native-status data;
 for the plant growth-form traits used to fill gaps in the BIEN trait coverage;
 `readxl` for reading FungalRoot's supplementary workbook; and `data.table` for
 column-selective reads of the multi-gigabyte GlobalFungi matrices.
-We used `vsearch` v2.30.4 (@rognesVSEARCHVersatileOpen2016) for sequence-similarity searching, and for
-extraction from the GlobalFungi abundance matrix we used `awk`.
+We used `ITSx` v1.1.3 (@bengtsson-palmeImprovedSoftwareDetection2013), with its
+`HMMER` 3.x backend, to extract ITS sub-regions from GenBank sequences; `vsearch` v2.30.4
+(@rognesVSEARCHVersatileOpen2016) for sequence-similarity searching; and `awk`
+for extraction from the GlobalFungi abundance matrix.
 
 ## Assembly of the Canadian EcM fungal dataset
 
@@ -160,7 +162,7 @@ NCBI Entrez API (`rentrez`; @winterRentrezPackageNCBI2017).
 
 To make the GenBank component comparable to the
 GlobalFungi component (which we restricted to samples with a `barcoding_region`
-of ITS2 or ITSboth) we used ITSx (@bengtsson-palmeImprovedSoftwareDetection2013; HMMER backend,
+of ITS2 or ITSboth) we used ITSx v1.1.3 (@bengtsson-palmeImprovedSoftwareDetection2013; HMMER backend,
 Fungi profile set) to detect and extract the ITS1 and ITS2 sub-regions from each
 retrieved sequence. We excluded records with no detectable ITS2 or with an extracted ITS2
 fragment shorter than 100 bp before

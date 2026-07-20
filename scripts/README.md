@@ -36,8 +36,10 @@ and invoked directly.
 
 | Requirement | Needed by | Notes |
 |---|---|---|
+| `ITSx` (≥ 1.1; developed under v1.1.3) | `03_genbank.R` | Extracts the ITS1/ITS2 sub-regions; the script stops with an install hint if it is not on `PATH` |
+| `HMMER` (3.x) | `03_genbank.R` | ITSx's backend — ITSx will not run without it |
 | `vsearch` (≥ 2.x) | `03_genbank.R` | SH assignment of GenBank sequences |
-| `awk` | `02_globalfungi.R` | subsets the ~13 GB GlobalFungi SH matrix |
+| `awk` | `00_setup.R` helper, `02_globalfungi.R`, `12_wallacean_density_map.R`, `13_wallacean_global_comparator.R` | column/row subsetting of the multi-gigabyte GlobalFungi matrices |
 | Internet + NCBI Entrez | `03_genbank.R`, `18_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
 | Internet + GBIF credentials | `09_linnean.R` | only if the archived GBIF ZIP in `data_raw/gbif/` is absent (see root `README.md`) |
 | Internet (biendata.org) | `07_bien2_ranges.R` | BIEN2 range downloads |

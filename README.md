@@ -88,9 +88,18 @@ flowchart TD
 - **R** (developed under v4.5.2).
 - **[Quarto](https://quarto.org)** — only needed to render the manuscript or
   Supplemental Materials documents; not required to run the `scripts/` pipeline.
+- **`ITSx`** (≥ 1.1; developed under v1.1.3) — required by `03_genbank.R` to detect and extract the
+  ITS1/ITS2 sub-regions from GenBank sequences. Download from
+  <https://microbiology.se/software/itsx/> and put the `ITSx` script *and its
+  bundled HMM-profile directory* on `PATH`.
+- **`HMMER`** (3.x) — ITSx's backend; ITSx will not run without it.
+  `brew install hmmer` (macOS) / `sudo apt install hmmer` (Ubuntu).
 - **`vsearch`** (≥ 2.x) — required by `03_genbank.R` for SH assignment.
-- **`awk`** — required by `02_globalfungi.R` to subset the ~13 GB GlobalFungi
-  matrix.
+  `brew install vsearch` (macOS) / `sudo apt install vsearch` (Ubuntu).
+- **`awk`** — used by a shared helper in `00_setup.R` and by
+  `02_globalfungi.R`, `12_wallacean_density_map.R` and
+  `13_wallacean_global_comparator.R` to subset the multi-gigabyte GlobalFungi
+  matrices without loading them into R. Standard on macOS and Linux.
 
 ### R packages (managed with `renv`)
 
