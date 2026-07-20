@@ -8,7 +8,7 @@ checkpoint-guarded, so re-running skips any step whose output already exists
 (delete an output to force regeneration).
 
 To run the whole pipeline, use the master runner, which sources `01`–`20` in
-order with per-script timing and log banners:
+order and records per-script status and timing to `data_derived/run_log.csv`:
 
 ```r
 source(here::here("scripts", "run_all.R"))
@@ -24,12 +24,13 @@ aborts the run or is logged so the run continues.
 You can also run scripts individually in numeric order — each is
 checkpoint-guarded, so completed steps are skipped on re-run.
 
-The manuscript (`FACETS/manuscript_FACETS_final.qmd`) and Supplemental Materials
-documents (`FACETS/supplemental_materials_SM1_FACETS.qmd`,
-`FACETS/supplemental_materials_SM2_FACETS.qmd`) read
-from `data_derived/` to report in-text statistics and tables/figures, but are
-prepared and archived separately for journal submission — rendering them is
-outside this repo's scope (see root `README.md` > Project structure).
+The manuscript and Supplemental Materials sources in `FACETS/` read from
+`data_derived/` to report in-text statistics and tables, so the pipeline must
+run before they can be rendered (see `FACETS/README.md`).
+
+After a run, `scripts/99_verify_reproducibility.R` fingerprints the outputs and
+compares a later rerun against that baseline; it is excluded from `run_all.R`
+and invoked directly.
 
 ## External requirements
 
@@ -38,7 +39,7 @@ outside this repo's scope (see root `README.md` > Project structure).
 | `vsearch` (≥ 2.x) | `03_genbank.R` | SH assignment of GenBank sequences |
 | `awk` | `02_globalfungi.R` | subsets the ~13 GB GlobalFungi SH matrix |
 | Internet + NCBI Entrez | `03_genbank.R`, `18_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
-| Internet + GBIF credentials | `09_linnean.R` | only if the provided GBIF ZIP is absent (see root `README.md`) |
+| Internet + GBIF credentials | `09_linnean.R` | only if the archived GBIF ZIP in `data_raw/gbif/` is absent (see root `README.md`) |
 | Internet (biendata.org) | `07_bien2_ranges.R` | BIEN2 range downloads |
 | Internet (BIEN) | `06_host_species.R` | native-flora query |
 

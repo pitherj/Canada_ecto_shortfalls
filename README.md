@@ -1,6 +1,6 @@
 # Background
 
-This repo houses the reproducible analysis pipeline for the manuscript *An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada*. The manuscript and Supplemental Materials documents themselves are prepared and archived separately (see Project structure below).
+This repo houses the reproducible analysis pipeline and manuscript sources for *An assessment of biodiversity data shortfalls for ectomycorrhizal fungi in Canada*.
 
 **Manuscript authors**: Isaac Eckert, Clara Qin, Stephanie Kivlin, Bronte Shelton, Diego Yusta Belsham, Monika Fischer, Justine Karst, and Jason Pither
 
@@ -20,10 +20,10 @@ Galen et al. (2025) dark-taxa dataset.
 
 ## Quick start
 
-**NOTE**: Raw and derived data files are not stored on this repo. Raw inputs
-will be archived (subject to copyright) at an appropriate data repository;
-this repo provides the code to regenerate every derived file from those raw
-inputs.
+**NOTE**: This repo holds code, manuscript sources and figures. It does not
+hold the raw inputs (~16 GB) or the derived data (~1.4 GB); those live in the
+Borealis archive (see Archiving below). The pipeline regenerates every derived
+file from the raw inputs.
 
 ```r
 # 1. From the project root (where ECM_manuscript.Rproj lives):
@@ -39,8 +39,8 @@ inputs. The manuscript (`FACETS/manuscript_FACETS_final.qmd`) and Supplemental
 Materials documents (`FACETS/supplemental_materials_SM1_FACETS.qmd`,
 `FACETS/supplemental_materials_SM2_FACETS.qmd`)
 read from these `data_derived/` outputs to report in-text statistics and
-supplemental tables/figures, but are prepared and archived separately for
-journal submission — they are not tracked in this repo (see `.gitignore`).
+supplemental tables/figures. Rendering them therefore requires either running
+the pipeline first or obtaining `data_derived/` from the Borealis archive.
 
 See `scripts/README.md` for the per-script inputs, outputs, and the manuscript
 items each script supports.
@@ -86,9 +86,8 @@ flowchart TD
 ### Software
 
 - **R** (developed under v4.5.2).
-- **[Quarto](https://quarto.org)** — only needed if rendering the manuscript or
-  Supplemental Materials documents (prepared separately; not required to run
-  the `scripts/` pipeline itself).
+- **[Quarto](https://quarto.org)** — only needed to render the manuscript or
+  Supplemental Materials documents; not required to run the `scripts/` pipeline.
 - **`vsearch`** (≥ 2.x) — required by `03_genbank.R` for SH assignment.
 - **`awk`** — required by `02_globalfungi.R` to subset the ~13 GB GlobalFungi
   matrix.
@@ -123,11 +122,12 @@ with compiled code may need a compiler toolchain:
 The packages the pipeline uses (captured by `renv` on the first snapshot):
 
 ```r
-# core:        here, dplyr, tidyr, readr, ggplot2, tibble
-# spatial:     sf, terra, geodata, rnaturalearth, foreign
-# community:   vegan, iNEXT
-# acquisition: rentrez, rgbif, BIEN, httr
-# misc:        patchwork, scales, knitr, data.table
+# core:        here, dplyr, tidyr, readr, purrr, tibble
+# spatial:     sf, terra, tidyterra, geodata, rnaturalearth, foreign
+# figures:     ggplot2, patchwork, scales, colorspace
+# acquisition: rentrez, rgbif, BIEN, NSR, GIFT, httr, readxl
+# misc:        data.table, usethis
+# rendering:   knitr (manuscript/supplements only)
 ```
 
 ### API keys
@@ -156,22 +156,25 @@ ECM_manuscript/
 │   ├── 01_…_20_….R               # ordered pipeline (see scripts/README.md)
 │   ├── run_all.R                 # master runner (sources 01–20 in order)
 │   └── README.md                 # per-script inputs/outputs
-├── data_raw/                     # READ-ONLY external inputs (see its DATA-DICTIONARY.md)
-├── data_derived/                 # pipeline outputs — starts EMPTY, regenerated
-├── figures/                      # figures — starts EMPTY, regenerated (Figure-xx_*.png)
-└── FACETS/                       # manuscript + Supplemental Materials sources —
-                                  #   not tracked in this repo
+├── data_raw/                     # READ-ONLY external inputs — NOT in this repo
+│   └── DATA-DICTIONARY.md        #   (the dictionary IS tracked: how to obtain each input)
+├── data_derived/                 # pipeline outputs — NOT in this repo
+│   └── DATA-DICTIONARY.md        #   (the dictionary IS tracked)
+├── figures/                      # tracked, except the high-resolution .tif versions
+├── repro/                        # reproducibility baseline (99_verify_reproducibility.R)
+└── FACETS/                       # manuscript + Supplemental Materials sources
     ├── manuscript_FACETS_final.qmd
     ├── supplemental_materials_SM1_FACETS.qmd
-    └── supplemental_materials_SM2_FACETS.qmd
+    ├── supplemental_materials_SM2_FACETS.qmd
+    ├── references.bib            # shared bibliography
+    └── facets.csl                # FACETS citation style
 ```
 
-Note: the entire `FACETS/` folder, its rendered outputs (`.docx`/`.html`/`.pdf`),
-`references.bib`, and the citation style files live in this project folder
-locally but are excluded from the GitHub repo via `.gitignore` — they're
-prepared and archived
-separately for journal submission. This repo's scope is the reproducible
-analysis pipeline (`scripts/` → `data_derived/` + `figures/`).
+What is deliberately **not** in this repo: `data_raw/` and `data_derived/`
+contents (volume), and the high-resolution `.tif` figure versions required by
+FACETS (~332 MB, regenerable). Both data directories keep their
+`DATA-DICTIONARY.md` so every input and output stays documented without being
+stored here.
 
 ## Key outputs
 
@@ -187,8 +190,8 @@ analysis pipeline (`scripts/` → `data_derived/` + `figures/`).
 | Figure S3 | `figures/Figure-S3_depth_discard.png` | `20_depth_discard.R` |
 | Figure S4 | `figures/Figure-S4_ecozone_sampling_map.png` (+ grey variant, see below) | `17_hutchinsonian.R` |
 | Figure S5 | `figures/Figure-S5_gbif_specimens.png` (+ grey variant, see below) | `19_sampling_maps.R` |
-| Tables 1–4 | `data_derived/` CSVs, rendered into tables by `FACETS/manuscript_FACETS_final.qmd` (prepared separately) | 09, 11, 16, 18 |
-| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` (prepared separately) | 09, 17, 18 |
+| Tables 1–4 | `data_derived/` CSVs, rendered into tables by `FACETS/manuscript_FACETS_final.qmd` | 09, 11, 16, 18 |
+| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` | 09, 17, 18 |
 
 Figure 5 is a manually assembled schematic composite built from panels taken
 from Figures 1, 3, 4, S1, S4, and S5. To support that, scripts `10`, `17`,
@@ -205,22 +208,71 @@ Supplemental Materials documents.
 | `scripts/README.md` | Pipeline order, per-script inputs/outputs, external tools |
 | `data_raw/DATA-DICTIONARY.md` | Every raw input: source, DOI, filters, sizes |
 | `data_derived/DATA-DICTIONARY.md` | Every generated file and its producing script |
-| `FACETS/manuscript_FACETS_final.qmd` | Manuscript source (not tracked in this repo — see Project structure) |
-| `FACETS/supplemental_materials_SM1_FACETS.qmd` | SM1: detailed methods (not tracked in this repo) |
-| `FACETS/supplemental_materials_SM2_FACETS.qmd` | SM2: decisions log (not tracked in this repo) |
+| `FACETS/manuscript_FACETS_final.qmd` | Manuscript source |
+| `FACETS/supplemental_materials_SM1_FACETS.qmd` | SM1: detailed methods |
+| `FACETS/supplemental_materials_SM2_FACETS.qmd` | SM2: decisions log |
+| `scripts/99_verify_reproducibility.R` | Fingerprints outputs and verifies a rerun reproduces them |
+| `ARCHIVING.md` | Borealis deposit plan: what is archived, licences, checklist |
+
+## Archiving
+
+This GitHub repository is the working home for the code and manuscript
+sources. The **Borealis** deposit (UBC's Dataverse instance) is the citable
+archive of record, with a minted DOI.
+
+| Component | GitHub | Borealis |
+|---|---|---|
+| `scripts/`, `FACETS/` sources | ✅ tracked | ✅ snapshot at submission |
+| `figures/` (PNG, JPG) | ✅ tracked | ✅ |
+| `figures/` (TIF, ~332 MB) | ❌ regenerable | ✅ |
+| `data_derived/` (~1.4 GB) | ❌ volume | ✅ |
+| `data_raw/` (~16 GB) | ❌ volume | ⚠️ selectively — see below |
+
+The full plan, including the deposit structure and checklist, is in
+[`ARCHIVING.md`](ARCHIVING.md).
+
+**Raw inputs are cited, not copied.** Most source datasets are published,
+versioned and retrievable by DOI or a stable versioned URL, so the archive
+records exactly how to obtain each one rather than duplicating it. Every entry
+in `data_raw/DATA-DICTIONARY.md` carries the source, version and access date
+needed to rebuild `data_raw/` from scratch.
+
+Two categories are exceptions and **are** deposited, because citation alone
+does not make them retrievable:
+
+- **The GBIF occurrence download.** GBIF deletes download files six months
+  after creation; the DOI then resolves to a record of the query, not the
+  data. Re-running the query later returns a different result set.
+- **Live-query snapshots** (`data_derived/checkpoints/`) from BIEN, NSR, GIFT,
+  MycoCosm and GenBank. These query moving targets with no versioning, so the
+  exact result cannot be re-obtained.
 
 ## How to cite
 
 > [Journal / year — TODO: update on acceptance.]
 
-For the code and data archive, cite the repository release DOI once minted
-(`[TODO: add archive DOI]`).
+For the code and data archive, cite the Borealis deposit DOI once minted
+(`[TODO: add Borealis DOI]`).
 
-## License
+## Licence
 
-- **Code** (`scripts/`): MIT License.
-- **Derived data** (`data_derived/`): CC BY-NC 4.0, subject to the terms of the
-  upstream source databases.
+Code and data are licensed separately, as they are different kinds of work:
+
+| Component | Licence |
+|---|---|
+| **Code** — `scripts/`, `FACETS/` sources | [MIT](LICENSE) |
+| **Derived data** — `data_derived/`, `figures/` | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) |
+
+The NonCommercial condition on the data is inherited from two inputs
+(FungalRoot and our GBIF occurrence download, both CC BY-NC 4.0); products
+derived from them cannot be released more permissively. CC0 is therefore not
+available for this deposit. No input imposes a NoDerivatives or ShareAlike
+term.
+
+Per-source terms for all 20 inputs are tabulated in
+`data_raw/DATA-DICTIONARY.md` > Licence summary. Two sources — GADM and
+WorldClim — prohibit redistribution entirely, and four state no licence at all;
+see [`ARCHIVING.md`](ARCHIVING.md) for how the deposit handles both cases.
 
 ## References
 
@@ -229,5 +281,4 @@ biodiversity. *Annual Review of Ecology, Evolution, and Systematics* 46:
 523–549.
 
 Full dataset citations are listed in `data_raw/DATA-DICTIONARY.md` and the
-References section of the manuscript/Supplemental Materials (prepared
-separately; not tracked in this repo).
+References section of the manuscript and Supplemental Materials.
