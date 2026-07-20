@@ -1,7 +1,7 @@
 # Archiving plan — Borealis deposit
 
-The **Borealis** deposit (UBC's Dataverse instance) is the citable archive of
-record for this project, with a minted DOI. This GitHub repository is the
+The **Borealis** deposit (UBC's Dataverse instance) will be the citable archive of
+record for this project, with a minted DOI. A [GitHub repository](https://github.com/pitherj/Canada_ecto_shortfalls) is also available and is the
 working home for code and manuscript sources; the two are complementary, not
 duplicates.
 
