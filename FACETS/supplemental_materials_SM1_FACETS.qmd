@@ -578,7 +578,9 @@ tibble::tibble(
 (`Figure-S5_gbif_specimens_grey.png`), following the same convention as the
 panels above, but it is not used in Figure 5.
 
-# Supplemental figures and tables
+\pagebreak
+
+# Supplemental Tables
 
 ```{r table-s1-ecozone}
 ez_path <- file.path(paths$out_hutchinsonian, "hutchinsonian_ecozone_sample_counts.csv")
@@ -609,6 +611,8 @@ if (file.exists(ez_path)) {
   cat("`hutchinsonian_ecozone_sample_counts.csv` not found — run 17_hutchinsonian.R first.")
 }
 ```
+
+\pagebreak
 
 ```{r table-s2-host-species}
 elt_match_path <- file.path(paths$out_eltonian, "eltonian_host_matching.csv")
@@ -644,6 +648,7 @@ if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
 }
 ```
 
+\pagebreak
 
 ```{r table-s3-unmatched-hosts}
 if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
@@ -660,6 +665,7 @@ if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
 }
 ```
 
+\pagebreak
 
 ```{r table-s3-gbif-genera}
 if (file.exists(paths$gbif_ecm_nosequence)) {
@@ -684,6 +690,10 @@ if (file.exists(paths$gbif_ecm_nosequence)) {
 }
 ```
 
+\pagebreak
+
+# Supplemental Figures
+
 ```{r figS1-dark}
 #| out-width: "100%"
 #| fig-cap: '**Figure S1.** Modelled dark ("undescribed") EcM fungal diversity across Canada (percentage of EcM OTUs undescribed), clipped from the global geospatial dataset of @vangalenBiogeographyConservationEarths2025.'
@@ -693,6 +703,8 @@ if (file.exists(paths$fig_dark_diversity)) {
   cat("`Figure-S1_dark_diversity.png` not found — run 10_dark_diversity.R.")
 }
 ```
+
+\pagebreak
 
 ```{r figS2-density}
 #| out-width: "100%"
@@ -704,6 +716,8 @@ if (file.exists(paths$fig_density_world)) {
 }
 ```
 
+\pagebreak
+
 ```{r figS3-depth}
 #| out-width: "100%"
 #| fig-cap: !expr 'paste0("**Figure S3.** Distribution of the percentage of each Canadian GlobalFungi soil sample''s total sequencing depth discarded by EcM-genus filtering, for every sample with at least one EcM-classified read (n = ", nf(.discard$n), " samples). Q1–median–Q3: ", p1(.discard$q[1]), "–", p1(.discard$q[2]), "–", p1(.discard$q[3]), "%. The vertical dashed line marks the median (", round(.discard$q[2]), "%).")'
@@ -713,6 +727,8 @@ if (file.exists(paths$fig_depth_discard)) {
   cat("`Figure-S3_depth_discard.png` not found — run 20_depth_discard.R.")
 }
 ```
+
+\pagebreak
 
 ```{r figS4-ecozone-map}
 #| out-width: "100%"
@@ -724,6 +740,8 @@ if (file.exists(paths$fig_ecozone_sampling)) {
 }
 ```
 
+\pagebreak
+
 ```{r figS5-gbif}
 #| out-width: "100%"
 #| fig-cap: !expr 'paste0("**Figure S5.** Occurrence records associated with physical EcM fungal specimen records in Canada, retrieved from GBIF on 6 March 2026 (`PRESERVED_SPECIMEN` and `LIVING_SPECIMEN`; unique occurrence records). Blue circles: occurrence records of EcM fungal genera (FungalTraits) with sequence data in Canada (combined GlobalFungi + GenBank; n = ", nf(.gbif$withseq), " plotted records). Orange triangles: occurrence records of EcM fungal genera without any sequence data in Canada (n = ", nf(.gbif$noseq), " plotted records). Plotted records are the georeferenced, distinct-coordinate occurrences within the Canada boundary, far fewer than the total specimen records because most GBIF records lack coordinates or share a coordinate. Source: GBIF Occurrence Download <https://doi.org/10.15468/dl.92rns5>.")'
@@ -733,6 +751,8 @@ if (file.exists(paths$fig_gbif_specimens)) {
   cat("`Figure-S5_gbif_specimens.png` not found — run 19_sampling_maps.R.")
 }
 ```
+
+\pagebreak
 
 # References {.unnumbered}
 
