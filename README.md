@@ -227,8 +227,8 @@ Supplemental Materials documents.
 ## Archiving
 
 This GitHub repository is the working home for the code and manuscript
-sources. The **Borealis** deposit (UBC's Dataverse instance) is the citable
-archive of record, with a minted DOI.
+sources. The **Borealis** deposit (UBC's Dataverse instance) will be the citable
+archive of record, with a minted DOI (being prepared currently).
 
 | Component | GitHub | Borealis |
 |---|---|---|
