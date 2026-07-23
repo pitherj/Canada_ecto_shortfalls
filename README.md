@@ -6,7 +6,7 @@ This repo houses the reproducible analysis pipeline and manuscript sources for *
 
 **Script authors**: Jason Pither and Claude (Sonnet 4.6, 5, Opus 4.8)
 
-**Citation**: This will be provided once (i) a manuscript preprint has been submitted and (ii) we have a DOI for the data and code archive.
+**Citation**: A preprint of this manuscript is available on EcoEvoRxiv: [https://ecoevorxiv.org/repository/view/14029/](https://ecoevorxiv.org/repository/view/14029/). A DOI for the data and code archive on Borealis will be provided when ready. 
 
 **Contacts**:
 - Jason Pither — jason.pither@ubc.ca | ORCID: https://orcid.org/0000-0002-7490-6839 | Irving K. Barber Faculty of Science, The University of British Columbia, Kelowna, BC, Canada
