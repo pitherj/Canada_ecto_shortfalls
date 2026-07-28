@@ -390,16 +390,15 @@ of the estimated **`r nf(V(linn, "Known EcM genera globally (FungalTraits)"))`**
 fungal genera known globally.
 
 The difference between the **`r nf(sh_total)`** unique SH codes and the **`r nf(sh_named)`**
-with names attached can be considered a form of "dark diversity", specific to our
+with names attached represents the complement of "dark taxa" specific to our
 dataset: about **`r pr(as.numeric(sh_total) - as.numeric(sh_named), sh_total)`**%
 (**`r nf(as.numeric(sh_total) - as.numeric(sh_named))`**) of codes in the combined
 GlobalFungi + GenBank dataset have no match above the UNITE species-level assignment threshold, and thus
 cannot be assigned a species name at this time. This figure is not directly
-comparable to the OTU-level dark diversity estimates recently reported by @vangalenBiogeographyConservationEarths2025, as they used a custom bioinformatics pipeline that, for example, used a 97% similarity threshold for taxonomic assignment rather than the 98.5% used by GlobalFungi (and by us). Nevertheless, for reference, we (i) provide a Canada-specific map of dark
-EcM fungal richness, adapted from the geospatial model of @vangalenBiogeographyConservationEarths2025
+comparable to the OTU-level enumerations of dark taxa recently reported by @vangalenBiogeographyConservationEarths2025, as they used a custom bioinformatics pipeline that, for example, used a 97% similarity threshold for taxonomic assignment rather than the 98.5% used by GlobalFungi (and by us). Nevertheless, for reference, we (i) provide a Canada-specific map of the estimated percentage of EcM fungal OTUs within local assemblages that are dark taxa, adapted from the geospatial model of @vangalenBiogeographyConservationEarths2025
 (Supplemental Materials Figure S1), and (ii) accessed their sample-specific estimates of the proportion of
 OTUs unassigned to species (available at: <https://doi.org/10.6084/m9.figshare.28830371>), which
-is analogous to our measure of dark diversity used above, and calculated an average of
+is analogous to our estimates described above, and calculated an average of
 **`r .vg$pct`**% among their **`r nf(.vg$n)`** Canadian forest and tundra samples (the
 most comparable subset to ours).
 
@@ -670,25 +669,25 @@ can <- c(
   dplyr::n_distinct(gf$sh_code[gf$sh_code != "" & !is.na(gf$sh_code)]))  # SH codes
 glob <- c(
   cw("GlobalFungi v5 samples worldwide (quality-filtered, all taxa)"),
-  gv("GlobalFungi v5 samples worldwide (quality-filtered, with EcM detection)"),
-  cw("EcM unique sampling locations (GlobalFungi-wide)"),
-  gv("EcM detection records (GlobalFungi-wide, quality-filtered samples)"),
-  gv("EcM total read abundance, Sigma reads (GlobalFungi-wide, quality-filtered samples)"),
-  cw("EcM named species detected (GlobalFungi-wide, matrix presence)"),
-  cw("EcM genera detected (GlobalFungi-wide, matrix presence)"),
-  cw("EcM SH codes detected (GlobalFungi-wide, matrix presence)"))
+  gv("GlobalFungi v5 samples worldwide (quality-filtered, with EcM fungi detection)"),
+  cw("EcM fungi unique sampling locations (GlobalFungi-wide)"),
+  gv("EcM fungi detection records (GlobalFungi-wide, quality-filtered samples)"),
+  gv("EcM fungi total read abundance, Sigma reads (GlobalFungi-wide, quality-filtered samples)"),
+  cw("EcM fungal named species detected (GlobalFungi-wide, matrix presence)"),
+  cw("EcM fungal genera detected (GlobalFungi-wide, matrix presence)"),
+  cw("EcM fungal SH codes detected (GlobalFungi-wide, matrix presence)"))
 t1 <- tibble::tibble(
   Category = c("Sampling effort", "Sampling effort", "Geographic coverage",
               "Detection volume", "Detection volume",
               "Taxonomic richness", "Taxonomic richness", "Taxonomic richness"),
   Metric = c("Quality-filtered samples, all fungal taxa",
-             "Quality-filtered samples with $\\geq$ 1 EcM detection",
-             "Unique EcM sampling locations",
-             "EcM detection records (sample × SH-code, abundance > 0)",
-             "EcM total read abundance (Σ reads)",
-             "EcM named species detected",
-             "EcM genera detected",
-             "EcM SH codes (UNITE v10) detected"),
+             "Quality-filtered samples with $\\geq$ 1 EcM fungi detection",
+             "Unique EcM fungi sampling locations",
+             "EcM fungi detection records (sample × SH-code, abundance > 0)",
+             "EcM fungi total read abundance (Σ reads)",
+             "EcM fungal named species detected",
+             "EcM fungal genera detected",
+             "EcM fungal SH codes (UNITE v10) detected"),
   Canada = nf(can),
   `GlobalFungi-wide` = nf(glob),
   `Canada as % of GlobalFungi-wide` = paste0(sprintf("%.1f", 100 * can / glob), "%")
@@ -705,14 +704,14 @@ t2 <- tibble::tibble(
                "EcM fungal named species",
                "Unique georeferenced sampling locations"),
   Value = nf(c(
-    V(linn, "GenBank: total EcM sequence records"),
+    V(linn, "GenBank: total EcM fungal sequence records"),
     if (!is.null(wall_loc)) wall_loc$n_records_with_coords[wall_loc$dataset == "GenBank"] else NA,
     V(linn, "GenBank: unique SH codes (Canadian dataset)"),
     V(linn, "GenBank: SH codes with species-level UNITE name"),
     dplyr::n_distinct(gb$genus[gb$genus != "" & !is.na(gb$genus)]),
     dplyr::n_distinct(gb$species[named_ok(gb$species)]),
     if (!is.null(wall_loc)) wall_loc$n_unique_locations[wall_loc$dataset == "GenBank"] else NA)))
-cap_t2 <- "Properties of the Canadian GenBank EcM sequence dataset, after ITS2/ITS-both filtering and UNITE SH assignment ($\\geq$ 98.5% identity). Taxon counts are over all Canadian GenBank records."
+cap_t2 <- "Properties of the Canadian GenBank EcM fungal sequence dataset, after ITS2/ITS-both filtering and UNITE SH assignment ($\\geq$ 98.5% identity). Taxon counts are over all Canadian GenBank records."
 
 pctc <- function(a, b) paste0(nf(a), " (", pr(a, b), "%)")
 t3 <- tibble::tibble(
