@@ -667,7 +667,7 @@ if (file.exists(elt_match_path) && file.exists(paths$host_species)) {
 
 \pagebreak
 
-```{r table-s3-gbif-genera}
+```{r table-s4-gbif-genera}
 if (file.exists(paths$gbif_ecm_nosequence)) {
   gbif_genera <- readr::read_csv(paths$gbif_ecm_nosequence, show_col_types = FALSE) |>
     dplyr::filter(!is.na(genus), genus != "") |>
