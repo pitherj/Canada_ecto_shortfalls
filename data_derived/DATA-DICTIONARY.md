@@ -325,7 +325,7 @@ GBIF section for the full field list — identical schema), plus:
 
 | Field | Type | Description |
 |---|---|---|
-| `metric` | character | Name of the reported statistic (41 rows spanning host/genus coverage, matrix fill rates, and Canada/global mycobiont counts — see `18_eltonian.R` for the full list) |
+| `metric` | character | Name of the reported statistic (41 rows spanning sample-level host-information coverage, host/genus coverage, matrix fill rates, and Canada/global mycobiont counts — see `18_eltonian.R` for the full list) |
 | `value` | character | Reported value |
 
 #### Other `eltonian/` fields

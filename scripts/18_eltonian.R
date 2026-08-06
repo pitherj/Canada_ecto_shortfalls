@@ -187,6 +187,16 @@ readr::write_csv(host_long,
 # `emf` carries one row per (sample x SH code): a sample with several
 # co-occurring EcM detections would otherwise be tallied once per detection.
 
+# Denominator for the diagnostic tally and for the host-information-coverage
+# statistic reported in the manuscript (Eltonian intro paragraph): all
+# distinct Canadian GlobalFungi samples with >= 1 EcM fungal SH code detected
+# (i.e. every sample_type, not just those with dominant_plant_species filled
+# in -- that restriction is applied below).
+n_gf_samples_total <- emf |>
+  dplyr::filter(source == "GlobalFungi") |>
+  dplyr::distinct(sample_ID) |>
+  nrow()
+
 sample_type_tally_canada <- emf |>
   dplyr::filter(source == "GlobalFungi", !is.na(dominant_plant_species)) |>
   dplyr::distinct(sample_ID, sample_type) |>
@@ -1238,6 +1248,8 @@ myco_glob <- myco_counts(species_host_global)
 
 eltonian_summary <- tibble::tibble(
   metric = c(
+    # Sample-level host-information coverage (Eltonian intro paragraph)
+    "GlobalFungi samples in Canada with >= 1 EcM fungal SH code detected",
     # Canadian-scope denominators and basic interaction counts
     "Canadian EcM host plant species (denominator: BIEN-based native list)",
     "Canadian EcM host genera (denominator: BIEN-based native list)",
@@ -1285,6 +1297,7 @@ eltonian_summary <- tibble::tibble(
     "Max host species documented for any named EcM fungal species (global scope)"
   ),
   value = c(
+    n_gf_samples_total,
     n_host_species,
     n_host_genera,
     n_hosts_with_genus_data <- dplyr::n_distinct(genus_pairs$host_species),

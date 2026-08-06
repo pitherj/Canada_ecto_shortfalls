@@ -80,7 +80,7 @@ figures/*.tif
 # regenerate the manuscript and supplemental materials, so they are part of the
 # reproducible pipeline. Only their rendered outputs are excluded.
 FACETS/*.docx
-FACETS/*.pdf
+#FACETS/*.pdf
 FACETS/*.html
 FACETS/*.tex
 

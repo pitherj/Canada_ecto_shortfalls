@@ -6,6 +6,7 @@ title: "An assessment of biodiversity data shortfalls for ectomycorrhizal fungi 
 # ---------------------------------------------------------------------------
 # FACETS (Canadian Science Publishing) submission formatting.
 # ---------------------------------------------------------------------------
+date: today
 format:
   pdf:
     documentclass: article
