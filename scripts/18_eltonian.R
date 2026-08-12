@@ -1056,34 +1056,37 @@ if (!file.exists(gf_meta_path)) {
 
 if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
 
-  # Extract all host strings from global root samples (dominant + other)
-  global_hosts <- c(
-    clean_host_name(gf_global_root$dominant_plant_species[
-      !is.na(gf_global_root$dominant_plant_species)]),
-    clean_host_name(gf_global_root$other_plant_species[
-      !is.na(gf_global_root$other_plant_species)])
-  )
-  global_hosts <- unique(global_hosts[!is.na(global_hosts)])
+  # Build the sample -> host lookup for every global root sample.
+  #
+  # REVISION 2026-08 (multi-host split, global branch). This block previously
+  # passed each whole plant field to clean_host_name(), which keeps only a
+  # string's first two tokens -- so for a sample recorded as
+  # "Picea mariana, Picea glauca, Pinus banksiana" every plant after the first
+  # was silently discarded, exactly as in the Canadian branch (Step A2b). The
+  # labels are now split on commas and semicolons first, so every named plant
+  # is retained. Both plant fields are stacked, then split, then canonicalized.
+  gf_root_hosts <- dplyr::bind_rows(
+    gf_global_root |>
+      dplyr::filter(!is.na(dominant_plant_species)) |>
+      dplyr::select(sample_ID, host_raw = dominant_plant_species),
+    gf_global_root |>
+      dplyr::filter(!is.na(other_plant_species)) |>
+      dplyr::select(sample_ID, host_raw = other_plant_species)
+  ) |>
+    dplyr::mutate(host_items = strsplit(host_raw, "[,;]")) |>
+    tidyr::unnest_longer(host_items, values_to = "host_item") |>
+    dplyr::mutate(host_clean = clean_host_name(trimws(host_item))) |>
+    dplyr::filter(!is.na(host_clean)) |>
+    dplyr::distinct(sample_ID, host_clean)
+
+  # Every distinct host name appearing in a global root sample. Derived from
+  # gf_root_hosts rather than rebuilt, so the two cannot disagree.
+  global_hosts <- unique(gf_root_hosts$host_clean)
 
   # Match against our Canadian host list
   canada_hosts_with_global_gf <- intersect(host_tbl$species, global_hosts)
   n_canada_hosts_with_gf <- length(canada_hosts_with_global_gf)
   pct_with_gf <- round(100 * n_canada_hosts_with_gf / n_host_species, 1)
-
-  # Build sample-host lookup for the next steps
-  # (sample_ID → cleaned dominant_plant_species) for root samples only
-  gf_root_hosts <- dplyr::bind_rows(
-    gf_global_root |>
-      dplyr::filter(!is.na(dominant_plant_species)) |>
-      dplyr::transmute(sample_ID,
-                       host_clean = clean_host_name(dominant_plant_species)),
-    gf_global_root |>
-      dplyr::filter(!is.na(other_plant_species)) |>
-      dplyr::transmute(sample_ID,
-                       host_clean = clean_host_name(other_plant_species))
-  ) |>
-    dplyr::filter(!is.na(host_clean)) |>
-    dplyr::distinct()
 
   # Filter to sample_IDs where host is a Canadian EcM host species
   gf_root_canadian_hosts <- dplyr::filter(gf_root_hosts,
