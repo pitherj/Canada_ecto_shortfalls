@@ -26,6 +26,9 @@
 #   temp/globalfungi_canada_ids.txt         — Canada sample ID list (for awk)
 #   temp/globalfungi_canada_SH_abundance.txt — Canada rows from 13 GB matrix
 #   globalfungi_canada_long.csv             — final long-format table
+#   globalfungi_sample_type_tally.csv       — sample_type composition of
+#                                             GlobalFungi v5, worldwide and
+#                                             Canada-wide (Step 2b)
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -132,6 +135,60 @@ if (!file.exists(paths$gf_meta_out)) {
 
   readr::write_csv(canada_meta, paths$gf_meta_out)
   writeLines(canada_meta$sample_ID, paths$gf_ids_out)
+
+}
+
+# ---- Step 2b: Sample-type composition of GlobalFungi v5 ---------------------
+# ADDED 2026-08. The manuscript describes what GlobalFungi is made of ("soil
+# and soil-derived substrates account for X% of its samples, roots for Y%"),
+# and separately makes the point that thin root coverage in Canada is a
+# Canadian sampling gap rather than a property of the database. Those
+# percentages used to be typed into the prose. This step computes them from
+# the raw metadata so the manuscript can read them from a file, like every
+# other reported number in the project.
+#
+# Two scopes are tallied and stacked in one long-format file:
+#   scope = "worldwide"  every sample in the raw metadata file
+#   scope = "canada"     every sample whose country is Canada. NOTE: this is a
+#                        country filter ONLY -- deliberately NOT the fuller
+#                        Canadian filter used in Step 2 above (which also
+#                        requires an ITS2/ITSboth barcode, unmanipulated
+#                        samples, and drops shoot/air/water/sediment). The
+#                        point of this tally is to describe the database as
+#                        deposited, so the two scopes must be comparable to
+#                        each other.
+# A third scope -- Canadian samples that actually carry EcM taxa -- is tallied
+# in 18_eltonian.R (Step A2c), because it needs the assembled EcM dataset.
+#
+# Cheap: reads three columns of the ~78 MB metadata file, so it is not
+# checkpoint-guarded against the file's own existence in the same way as the
+# heavy steps; it simply re-runs if the output is absent.
+
+if (!file.exists(paths$gf_sample_type_tally)) {
+
+  meta_types <- data.table::fread(
+    paths$gf_metadata, sep = "\t", quote = "",
+    select = c("sample_ID", "country", "sample_type")
+  ) |>
+    as.data.frame()
+
+  tally_one <- function(df, scope_label) {
+    df |>
+      dplyr::distinct(sample_ID, sample_type) |>
+      dplyr::count(sample_type, name = "n_samples") |>
+      dplyr::mutate(scope = scope_label,
+                    pct   = round(100 * n_samples / sum(n_samples), 1)) |>
+      dplyr::arrange(dplyr::desc(n_samples))
+  }
+
+  gf_sample_type_tally <- dplyr::bind_rows(
+    tally_one(meta_types, "worldwide"),
+    tally_one(dplyr::filter(meta_types, country == "Canada"), "canada")
+  ) |>
+    dplyr::select(scope, sample_type, n_samples, pct)
+
+  readr::write_csv(gf_sample_type_tally, paths$gf_sample_type_tally)
+  rm(meta_types)
 
 }
 

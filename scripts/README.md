@@ -69,9 +69,10 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 15 | `15_darwinian.R` | Genome availability vs. MycoCosm | MycoCosm list, `emf` | `darwinian_*` | in-text Darwinian |
 | 16 | `16_raunkiaeran.R` | Trait coverage from FungalTraits | FungalTraits, `emf` | `raunkiaeran_*` | Table 4 |
 | 17 | `17_hutchinsonian.R` | Climate-space coverage, per-ecozone coverage, ecozone sampling map | `emf`, WorldClim, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-03_climate_gap.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 3, Figure S4, Table S1 |
-| 18 | `18_eltonian.R` | Host–fungus interaction coverage (Canada + global), host habitat coverage, host bivariate map | `emf`, host list, host rasters (08), global GF/GenBank | `eltonian_*` (incl. `eltonian_host_raster_summary.csv`), `bien_host_data_richness_0.5deg.tif`, `bien_host_data_proportion_0.5deg.tif`, `Figure-04_host_bivariate_map.png` (+ `..._grey.png`) | Figure 4, Tables S2 and S3, in-text Eltonian |
+| 18 | `18_eltonian.R` | Host–fungus interaction coverage (Canada + global; root-derived evidence only), host habitat coverage, host bivariate map | `emf`, host list, host rasters (08), global GF/GenBank | `eltonian_*` (incl. `eltonian_host_raster_summary.csv`, `eltonian_pair_confidence.csv`, `eltonian_sensitivity_confidence.csv`, `eltonian_sample_type_tally_canada_all.csv`), `bien_host_data_richness_0.5deg.tif`, `bien_host_data_proportion_0.5deg.tif`, `Figure-04_host_bivariate_map.png` (+ `..._grey.png`) | Figure 4, Tables S2 and S3, in-text Eltonian |
 | 19 | `19_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
 | 20 | `20_depth_discard.R` | % sequencing depth discarded by EcM-genus filtering | GF metadata (02), `emf` | `Figure-S3_depth_discard.png` | Figure S3 |
+| 21 | `21_geographic_possibility.R` | Sensitivity check on the Eltonian matrix denominator: how much of the host × fungus grid is geographically possible, at six spatial grains | `emf`, host list, BIEN ranges (07/08), ecoregions (01), Eltonian outputs (18) | `geo_possibility/output1`–`output5*`, `run_log.txt` | in-text Eltonian sensitivity sentence, SM1 |
 
 ## Cross-step dependencies to note
 
@@ -80,6 +81,10 @@ shortfall analyses (in manuscript order) and the sampling maps.
 - `12`/`13` (global GlobalFungi comparators) require a full scan of the ~13 GB
   SH matrix and are the most compute-intensive steps; run them deliberately.
 - `19_sampling_maps.R` reads the GBIF specimen tables written by `09_linnean.R`.
+- `21_geographic_possibility.R` reads `eltonian_summary.csv` and
+  `eltonian_species_occurrence_counts.csv` and **stops** unless its own
+  recomputed denominator reproduces them exactly, so it must run after
+  `18_eltonian.R` and be re-run whenever `18_eltonian.R` changes.
 
 ## Conventions
 

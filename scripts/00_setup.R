@@ -233,6 +233,9 @@ paths <- list(
   out_raunkiaeran   = here::here("data_derived", "raunkiaeran"),
   out_hutchinsonian = here::here("data_derived", "hutchinsonian"),
   out_eltonian      = here::here("data_derived", "eltonian"),
+  # Geographic-possibility sensitivity analysis (21_geographic_possibility.R),
+  # a supplementary check on the Eltonian interaction-matrix denominator.
+  out_geo_possibility = here::here("data_derived", "geo_possibility"),
 
   # ---- raw: spatial ----------------------------------------------------------
   canada_bound_raw = here::here("data_raw", "admin_boundaries", "canada_bound_raw.gpkg"),
@@ -286,6 +289,9 @@ paths <- list(
   gf_meta_out      = here::here("data_derived", "checkpoints", "globalfungi_canada_metadata.csv"),
   unite_taxonomy   = here::here("data_derived", "checkpoints", "unite_sh_taxonomy.csv"),
   gf_sh_unmatched  = here::here("data_derived", "checkpoints", "globalfungi_sh_unmatched.csv"),
+  # Sample-type composition of GlobalFungi v5, worldwide and Canada-wide
+  # (02_globalfungi.R, Step 2b). Read by the manuscript Methods.
+  gf_sample_type_tally = here::here("data_derived", "globalfungi_sample_type_tally.csv"),
   gb_fasta_out     = here::here("data_derived", "checkpoints", "genbank_emf_canada.fasta"),
   gf_long_out      = here::here("data_derived", "globalfungi_canada_long.csv"),
   gb_long_out      = here::here("data_derived", "genbank_emf_canada_long.csv"),
@@ -338,7 +344,8 @@ paths <- list(
 for (d in c(paths$checkpoints, paths$figures, paths$biotime_db,
             paths$out_linnean, paths$out_wallacean, paths$out_prestonian,
             paths$out_darwinian, paths$out_raunkiaeran, paths$out_hutchinsonian,
-            paths$out_eltonian, here::here("data_derived", "spatial"))) {
+            paths$out_eltonian, paths$out_geo_possibility,
+            here::here("data_derived", "spatial"))) {
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
 }
 

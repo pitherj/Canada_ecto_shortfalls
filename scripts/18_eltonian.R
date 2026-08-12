@@ -21,13 +21,28 @@
 #                  full SH abundance matrix (13 GB) — fungal species per sample
 #     GenBank:     global query for our EcM genera (no Canada filter)
 #
-# IMPORTANT NOTE on dominant_plant_species:
-#   GlobalFungi samples have a 'dominant_plant_species' field recording which
-#   plant species dominates the sample site. This can only be interpreted as
-#   the likely mycorrhizal host when sample_type == "root" (i.e., the sample
-#   is a direct root sample rather than a bulk soil or other substrate).
-#   The same logic applies to 'other_plant_species'. This constraint is applied
-#   throughout both Part A and Part B.
+# IMPORTANT NOTE on the root-evidence rule:
+#   Every fungus-host association reported by this script rests on root-derived
+#   evidence, by two different mechanisms:
+#     GlobalFungi — samples have a 'dominant_plant_species' field recording
+#       which plant species dominates the sample site. This can only be
+#       interpreted as the likely mycorrhizal host when sample_type == "root"
+#       (i.e. a direct root sample rather than bulk soil or another substrate).
+#       The same logic applies to 'other_plant_species'.
+#     GenBank — there is no controlled sample-type field, so we require the
+#       free-text isolation_source to name root or ectomycorrhizal material
+#       (keyword rule root_kw, Step A2-0). Records from soil, rhizosphere,
+#       non-root tissue, a habitat description, or a blank field are excluded
+#       from all association analyses; they remain in the taxonomic and
+#       geographic assessments carried out by the other scripts.
+#   This constraint is applied throughout both Part A and Part B.
+#
+#   REVISION HISTORY. Until 2026-08 the GenBank host field was used with no
+#   tissue test at all, while GlobalFungi was root-only. The two databases were
+#   therefore held to different evidential standards, and because both feed
+#   `host_long`, the asymmetry propagated to every downstream statistic. The
+#   same revision fixed a silent data loss in the host-name cleaner, which kept
+#   only the first plant named in a multi-plant label (see Step A2b).
 #
 #   Part A also maps this knowledge onto geographic space (steps A5-A9): which
 #   parts of Canada hold EcM host habitat, and what proportion of the host
@@ -47,7 +62,11 @@
 #
 # Outputs:
 #   data_derived/eltonian/eltonian_host_list.csv
-#   data_derived/eltonian/eltonian_host_matching.csv
+#   data_derived/eltonian/eltonian_host_matching.csv — the ANALYSIS table: one
+#       row per (record x named plant), root-derived evidence only
+#   data_derived/eltonian/eltonian_host_names_metadata.csv — the DESCRIPTIVE
+#       inventory: the same rows without the root-evidence restriction, plus a
+#       `root_evidence` flag. Backs the host-name quality tables (S2, S3)
 #   data_derived/eltonian/eltonian_matrix_genus.csv
 #   data_derived/eltonian/eltonian_matrix_sh.csv
 #   data_derived/eltonian/eltonian_matrix_species.csv — host x named-EcM-species
@@ -72,9 +91,20 @@
 #   data_derived/eltonian/eltonian_global_host_to_fungi.csv    — Q2: per-host EcM fungal associations
 #   data_derived/eltonian/eltonian_global_fungi_to_hosts.csv   — Q3: per-fungal-species host associations
 #   data_derived/eltonian/eltonian_global_gb_fungi_to_hosts.csv — Q3, GenBank scope
+#   data_derived/eltonian/eltonian_pair_confidence.csv — how many observed
+#       host x fungus pairs rest on samples that named a single candidate plant
+#       ("unambiguous") versus several ("ambiguous"), for both the SH-code and
+#       the named-species pair sets
+#   data_derived/eltonian/eltonian_sensitivity_confidence.csv — the headline
+#       Canadian numbers recomputed from unambiguous (single-host-sample)
+#       evidence only, as a sensitivity check on the pair set above
 #   data_derived/eltonian/eltonian_sample_type_tally_canada.csv — diagnostic: sample_type
 #       composition of EcM-positive Canadian GF samples with a
 #       dominant_plant_species entry
+#   data_derived/eltonian/eltonian_sample_type_tally_canada_all.csv — diagnostic:
+#       sample_type composition of ALL EcM-positive Canadian GF samples (no
+#       dominant_plant_species restriction), for comparison with the worldwide
+#       GlobalFungi tally written by 02_globalfungi.R
 #   data_derived/eltonian/eltonian_sample_type_tally_global.csv — diagnostic: sample_type
 #       composition of EcM-positive global GF samples (>=1 of our Canadian
 #       EcM SH codes detected) with a dominant_plant_species entry
@@ -128,45 +158,173 @@ readr::write_csv(host_tbl, file.path(paths$out_eltonian, "eltonian_host_list.csv
 # IMPORTANT: dominant_plant_species and other_plant_species are only reliable
 # host indicators for root samples (sample_type == "root"). For soil and other
 # sample types these fields record the dominant plant at the site but do NOT
-# imply a direct mycorrhizal association. The host_taxon field (from GenBank
-# host or isolation_source parsing) is used unconditionally.
+# imply a direct mycorrhizal association.
+#
+# REVISION 2026-08 (root-evidence rule). The GenBank host_taxon field was
+# previously used UNCONDITIONALLY, i.e. with no tissue test at all. That held
+# the two databases to different evidential standards: GlobalFungi host links
+# were root-samples-only while GenBank host links came from soil, rhizosphere,
+# habitat descriptions or a blank tissue field on the same footing as a root
+# tip. Both branches feed `host_long`, and `matched_interactions` (Step A3) is
+# the sole ancestor of every downstream host-association statistic, so the
+# asymmetry propagated everywhere. GenBank records are now restricted to those
+# whose free-text isolation_source names root or ectomycorrhizal material,
+# using the SAME keyword rule as the tissue tally in Step A2c below. A fungus
+# sequenced from soil beside a tree is not evidence that the tree was its
+# partner.
 
-# Root samples only for GlobalFungi dominant/other plant species fields
+# ---- A2-0. Tissue keyword rules (shared by Step A2 and the tally in A2c) -----
+# Defined here, ABOVE their first use, so the host-record restriction in A2 and
+# the descriptive tally in A2c can never drift apart. Word boundaries (\\b) are
+# used where a bare substring would produce false positives -- most importantly
+# "stem", which is a substring of "root system" (184 records).
+#
+#   root_kw   root / ectomycorrhizal material
+#   soil_kw   soil, rhizosphere, or forest-floor duff
+#   tiss_kw   plainly non-root fungal or plant tissue (sporocarps, leaves,
+#             needles, bark, stems, algal thallus)
+root_kw <- "root|mycorrhiz|\\becm\\b"
+soil_kw <- "soil|rhizosphere|\\bduff\\b"
+tiss_kw <- paste0("basidiocarp|sporocarp|\\bleaf\\b|\\bleaves\\b|\\bneedle",
+                  "s?\\b|\\bbark\\b|\\bstem\\b|thallus|macroalga")
+
+# How many plant names does a free-text label contain? Labels separate plants
+# with commas or semicolons. A missing label contributes no candidate plants.
+n_listed <- function(x) {
+  ifelse(is.na(x), 0L, lengths(strsplit(x, "[,;]")))
+}
+
+# Root samples only for GlobalFungi dominant/other plant species fields.
+# n_hosts_in_record counts ALL candidate plants named for the sample, i.e. the
+# dominant_plant_species and other_plant_species fields added together. It is
+# the sample-level count, not the per-field count, and it is what the
+# confidence flag below keys on -- see the note in Step A2b.
 emf_gf_root <- dplyr::filter(emf,
                                source == "GlobalFungi",
-                               sample_type == "root")
+                               sample_type == "root") |>
+  dplyr::mutate(n_hosts_in_record = n_listed(dominant_plant_species) +
+                                    n_listed(other_plant_species))
 
-host_long <- dplyr::bind_rows(
+# host_long_all is the FULL inventory of host strings carried by the metadata:
+# every GlobalFungi root-sample plant field, and every GenBank host field
+# whatever the tissue. It is kept because the paper asks two different
+# questions of these strings:
+#
+#   * The host-NAME inventory -- how many distinct plant names appear at all,
+#     and how many are ornamentals, misspellings, or otherwise unusable -- is a
+#     statement about metadata quality, and should see every recorded name.
+#     Supplemental Tables S2 and S3 are built from this.
+#   * The host-ASSOCIATION analysis is a statement about evidence, and takes
+#     only root-derived records (the `root_evidence` flag below).
+#
+# Building one table and filtering it guarantees the two can never drift apart.
+host_long_all <- dplyr::bind_rows(
 
   # dominant_plant_species: root samples only
   emf_gf_root |>
     dplyr::filter(!is.na(dominant_plant_species)) |>
-    dplyr::select(sh_code, genus, species, dominant_plant_species) |>
+    dplyr::select(sh_code, genus, species, n_hosts_in_record,
+                  dominant_plant_species) |>
     dplyr::rename(host_raw = dominant_plant_species) |>
-    dplyr::mutate(host_field = "dominant_plant_species"),
+    dplyr::mutate(host_field = "dominant_plant_species",
+                  root_evidence = TRUE),
 
   # other_plant_species: root samples only
   emf_gf_root |>
     dplyr::filter(!is.na(other_plant_species)) |>
-    dplyr::select(sh_code, genus, species, other_plant_species) |>
+    dplyr::select(sh_code, genus, species, n_hosts_in_record,
+                  other_plant_species) |>
     dplyr::rename(host_raw = other_plant_species) |>
-    dplyr::mutate(host_field = "other_plant_species"),
+    dplyr::mutate(host_field = "other_plant_species",
+                  root_evidence = TRUE),
 
-  # host_taxon: GenBank field, usable unconditionally
+  # host_taxon: the GenBank host field, for every record that has one. The
+  # root-evidence test is RECORDED here rather than applied here, so that the
+  # descriptive inventory keeps the full set (see the note above). Only records
+  # whose isolation_source names root or ectomycorrhizal material carry
+  # root_evidence = TRUE and so reach the association analyses; the rest (soil,
+  # rhizosphere, habitat descriptions, non-root tissue, or a blank field) are
+  # excluded from every host-association result, though they remain in the
+  # taxonomic and geographic assessments elsewhere in the paper.
+  # A GenBank record has only one host field, so its candidate-plant count is
+  # simply the number of names in that field (almost always exactly one).
   emf |>
     dplyr::filter(source == "GenBank", !is.na(host_taxon)) |>
-    dplyr::select(sh_code, genus, species, host_taxon) |>
+    dplyr::mutate(n_hosts_in_record = n_listed(host_taxon),
+                  root_evidence = grepl(root_kw, isolation_src,
+                                        ignore.case = TRUE)) |>
+    dplyr::select(sh_code, genus, species, n_hosts_in_record, root_evidence,
+                  host_taxon) |>
     dplyr::rename(host_raw = host_taxon) |>
     dplyr::mutate(host_field = "host_taxon")
 )
 
-host_long <- host_long |>
+# ---- A2b. Split multi-species host labels ------------------------------------
+# Some metadata fields name several plants for a single sample, e.g.
+# "Picea mariana, Picea glauca, Pinus banksiana". canonicalize_host() keeps only
+# the first two words of a string, so before this revision every plant after the
+# first was silently discarded -- Picea glauca, for instance, was named in 36 of
+# the 44 Canadian root samples and captured from none of them.
+#
+# We now split each label on commas and semicolons and treat every named plant
+# as its own candidate host. Because a fungus found in a sample that listed
+# eight plants is much weaker evidence than one found where only a single plant
+# was named, we record how many plants were named and derive a confidence
+# label. Nothing is discarded; the weaker records are flagged so they can be
+# reported separately or excluded in a sensitivity check.
+#
+#   host_items / host_item  the individual plant names cut out of host_raw
+#   host_rank               position within this field's label (1 = first)
+#   n_hosts_in_field        how many plants THIS field named
+#   n_hosts_in_record       how many candidate plants the whole source record
+#                           named (see below)
+#   pair_confidence         "unambiguous" if the source record named exactly
+#                           one candidate plant, "ambiguous" if several
+#
+# WHY THE CONFIDENCE FLAG USES n_hosts_in_record, NOT n_hosts_in_field.
+# A GlobalFungi root sample carries two host fields. Reading them separately
+# would call a sample "unambiguous" whenever dominant_plant_species named a
+# single plant -- even when other_plant_species listed seven more at the same
+# sample. That is exactly the ambiguity the flag exists to record, so the count
+# is taken over the whole record. In this dataset 8 of the 44 Canadian root
+# samples name a single plant; 31 name eight and 5 name eleven.
+#
+# RECOVERING THE PRE-REVISION BEHAVIOUR: filter(host_rank == 1 &
+# n_hosts_in_field == 1) on host_long returns exactly the rows the script
+# produced before the splitting step was added.
+
+host_long_all <- host_long_all |>
   dplyr::mutate(
-    host_clean  = clean_host_name(host_raw),
-    host_genus  = sub("^(\\S+).*", "\\1", host_clean),
-    matched     = host_clean %in% host_tbl$species,
-    match_genus = host_genus %in% sub("^(\\S+).*", "\\1", host_tbl$species)
+    host_items       = strsplit(host_raw, "[,;]"),
+    n_hosts_in_field = lengths(host_items)
+  ) |>
+  tidyr::unnest_longer(host_items,
+                       values_to  = "host_item",
+                       indices_to = "host_rank") |>
+  dplyr::mutate(host_item = trimws(host_item)) |>
+  dplyr::filter(nzchar(host_item))
+
+host_long_all <- host_long_all |>
+  dplyr::mutate(
+    host_clean      = clean_host_name(host_item),
+    host_genus      = sub("^(\\S+).*", "\\1", host_clean),
+    matched         = host_clean %in% host_tbl$species,
+    match_genus     = host_genus %in% sub("^(\\S+).*", "\\1", host_tbl$species),
+    pair_confidence = dplyr::if_else(n_hosts_in_record == 1L,
+                                     "unambiguous", "ambiguous")
   )
+
+# The descriptive inventory: every host name the metadata carries, with the
+# root_evidence flag showing which ones reach the association analyses.
+# Supplemental Tables S2 and S3 are built from this file.
+readr::write_csv(host_long_all,
+                 file.path(paths$out_eltonian,
+                           "eltonian_host_names_metadata.csv"))
+
+# The analysis table: root-derived evidence only. Everything downstream of this
+# point uses host_long, so the root-evidence rule applies to every reported
+# association statistic, map, and matrix.
+host_long <- dplyr::filter(host_long_all, root_evidence)
 
 n_matched       <- sum(host_long$matched,     na.rm = TRUE)
 n_genus_matched <- sum(host_long$match_genus, na.rm = TRUE)
@@ -174,7 +332,7 @@ n_genus_matched <- sum(host_long$match_genus, na.rm = TRUE)
 readr::write_csv(host_long,
                  file.path(paths$out_eltonian, "eltonian_host_matching.csv"))
 
-# ---- A2b. Diagnostic: sample_type tally among Canadian GF samples with a -----
+# ---- A2c. Diagnostic: sample_type tally among Canadian GF samples with a -----
 #           dominant_plant_species entry
 # This does NOT change the root-only filtering used above (A2) or anywhere
 # else in the script -- it is purely descriptive, to quantify how much
@@ -206,36 +364,63 @@ sample_type_tally_canada <- emf |>
 readr::write_csv(sample_type_tally_canada,
                  file.path(paths$out_eltonian, "eltonian_sample_type_tally_canada.csv"))
 
-# ---- A2c. Diagnostic: tissue-type tally among Canadian GenBank records with -
+# Companion tally over ALL EcM-positive Canadian GlobalFungi samples, i.e.
+# without the "has a dominant_plant_species entry" restriction applied above.
+# Added 2026-08 so the manuscript can state what proportion of the Canadian
+# EcM-bearing samples are root samples (3%) against the worldwide GlobalFungi
+# figure (19%, tallied in 02_globalfungi.R) -- the point being that thin root
+# coverage is a Canadian sampling gap rather than a property of the database.
+sample_type_tally_canada_all <- emf |>
+  dplyr::filter(source == "GlobalFungi") |>
+  dplyr::distinct(sample_ID, sample_type) |>
+  dplyr::count(sample_type, name = "n_samples") |>
+  dplyr::mutate(pct = round(100 * n_samples / sum(n_samples), 1)) |>
+  dplyr::arrange(dplyr::desc(n_samples))
+
+readr::write_csv(sample_type_tally_canada_all,
+                 file.path(paths$out_eltonian,
+                           "eltonian_sample_type_tally_canada_all.csv"))
+
+# ---- A2d. Diagnostic: tissue-type tally among Canadian GenBank records with -
 #           host information (host_taxon)
-# Mirrors A2b above, but for GenBank. Unlike GlobalFungi, GenBank has no
+# Mirrors A2c above, but for GenBank. Unlike GlobalFungi, GenBank has no
 # controlled-vocabulary sample_type field -- the closest analogue is the
 # free-text 'isolation_src' field (NCBI /isolation_source qualifier), which is
-# heterogeneous (56 distinct strings in this dataset, e.g. "root system",
+# heterogeneous (65 distinct strings in this dataset, e.g. "root system",
 # "ectomycorrhiza", "soil adjacent to Pinus albicaulis", "40 year-old
-# Douglas-fir stand"). Per the note at the top of this script, host_taxon is
-# used UNCONDITIONALLY for GenBank host matching (no tissue-type filter,
-# unlike the root-only restriction applied to GlobalFungi). This diagnostic
-# quantifies what tissue type actually underlies that unconditional host
-# attribution, among records that have host information.
+# Douglas-fir stand").
+#
+# Since the 2026-08 revision this tally is no longer purely descriptive: Step
+# A2 applies exactly the same root_kw test to decide which GenBank records may
+# contribute a host association. The categories below therefore also document
+# what was kept and what was excluded. Records counted under "Root /
+# ectomycorrhizal tissue" and "Root and soil both mentioned" are the ones
+# retained (they match root_kw); the other three categories are excluded.
 #
 # Tissue categories are assigned by keyword search (case-insensitive) on
 # isolation_src, in this priority order:
-#   Root / ectomycorrhizal tissue  - matches root|mycorrhiz|ecm (whole word)
-#                                     and does NOT also match a soil keyword
-#   Soil / rhizosphere             - matches soil|rhizosphere, no root keyword
-#   Mixed root + soil              - matches BOTH a root and a soil keyword
-#                                     (e.g. "pine roots from urban soil" --
-#                                     note this mechanical rule will also tag
-#                                     some root-only collections that merely
-#                                     mention the soil habitat; treat as an
-#                                     approximate, documented limitation)
-#   Other / non-tissue description - text present but no root/soil keyword
-#                                     (e.g. stand age, forest type, locality)
+#   Root / ectomycorrhizal tissue  - matches root_kw and no soil keyword
+#   Root and soil both mentioned   - matches BOTH root_kw and soil_kw (e.g.
+#                                     "mycorrhizal root tips of Pinus
+#                                     albicaulis ... and soil adjacent to
+#                                     Pinus albicaulis"). Renamed in 2026-08
+#                                     from "Mixed root + soil", which implied
+#                                     a mixed sample; in this dataset all such
+#                                     strings describe root material collected
+#                                     from a site where soil was also sampled,
+#                                     so they are treated as root evidence.
+#   Soil / rhizosphere / duff      - matches soil_kw, no root keyword
+#   Non-root tissue                - plainly non-root fungal or plant tissue
+#                                     (sporocarp, leaf, needle, bark, stem,
+#                                     algal thallus); matches tiss_kw only
+#   Habitat description only       - text present but naming no material at
+#                                     all (stand age, forest type, locality),
+#                                     so the tissue sampled is unknown rather
+#                                     than known to be non-root
 #   Not recorded                   - isolation_src missing entirely
 #
 # Counted at the record level (one row = one GenBank accession; confirmed
-# 1:1 in this dataset, unlike the long-format GF rows in A2b).
+# 1:1 in this dataset, unlike the long-format GF rows in A2c).
 
 genbank_canada <- dplyr::filter(emf, source == "GenBank")
 n_gb_total <- nrow(genbank_canada)
@@ -243,21 +428,32 @@ n_gb_total <- nrow(genbank_canada)
 genbank_with_host <- dplyr::filter(genbank_canada, !is.na(host_taxon))
 n_gb_with_host <- nrow(genbank_with_host)
 
-root_kw <- "root|mycorrhiz|\\becm\\b"
-soil_kw <- "soil|rhizosphere"
-
 genbank_tissue <- genbank_with_host |>
   dplyr::mutate(
-    has_root = grepl(root_kw, isolation_src, ignore.case = TRUE),
-    has_soil = grepl(soil_kw, isolation_src, ignore.case = TRUE),
+    has_root   = grepl(root_kw, isolation_src, ignore.case = TRUE),
+    has_soil   = grepl(soil_kw, isolation_src, ignore.case = TRUE),
+    has_tissue = grepl(tiss_kw, isolation_src, ignore.case = TRUE),
     tissue_category = dplyr::case_when(
       is.na(isolation_src)        ~ "Not recorded",
-      has_root & has_soil         ~ "Mixed root + soil",
+      has_root & has_soil         ~ "Root and soil both mentioned",
       has_root                    ~ "Root / ectomycorrhizal tissue",
-      has_soil                    ~ "Soil / rhizosphere",
-      TRUE                        ~ "Other / non-tissue description"
+      has_soil                    ~ "Soil / rhizosphere / duff",
+      has_tissue                  ~ "Non-root tissue",
+      TRUE                        ~ "Habitat description only"
     )
   )
+
+# Three roll-up rows are appended so the manuscript can quote the grouped
+# figures without re-deriving them from the six categories:
+#   "Root-derived (retained ...)"  = the records that pass the root_kw test in
+#                                    Step A2 and so contribute host associations
+#   "Tissue provenance unknown"    = blank field + habitat-only descriptions;
+#                                    these say nothing about the material
+#   "Demonstrably non-root"        = soil / rhizosphere / duff + non-root tissue
+# The second and third are the correction to the submitted text, which lumped
+# them together as "likely derived from samples other than ectomycorrhiza or
+# host roots" -- a claim the habitat-only strings do not support.
+.tcat <- function(...) sum(genbank_tissue$tissue_category %in% c(...))
 
 genbank_tissue_tally_canada <- dplyr::bind_rows(
   tibble::tibble(category = "Total EcM fungal records",      n = n_gb_total),
@@ -265,7 +461,14 @@ genbank_tissue_tally_canada <- dplyr::bind_rows(
   genbank_tissue |>
     dplyr::count(tissue_category, name = "n") |>
     dplyr::rename(category = tissue_category) |>
-    dplyr::arrange(dplyr::desc(n))
+    dplyr::arrange(dplyr::desc(n)),
+  tibble::tibble(
+    category = c("Root-derived (retained for host associations)",
+                 "Tissue provenance unknown (blank or habitat only)",
+                 "Demonstrably non-root (soil, rhizosphere, duff, other tissue)"),
+    n = c(.tcat("Root / ectomycorrhizal tissue", "Root and soil both mentioned"),
+          .tcat("Not recorded", "Habitat description only"),
+          .tcat("Soil / rhizosphere / duff", "Non-root tissue")))
 )
 
 readr::write_csv(genbank_tissue_tally_canada,
@@ -286,10 +489,19 @@ genus_matrix <- genus_pairs |>
 readr::write_csv(genus_matrix,
                  file.path(paths$out_eltonian, "eltonian_matrix_genus.csv"))
 
+# A given host x fungus pair may be supported by several records of differing
+# quality (see the confidence flag added in Step A2b). We take the best
+# available evidence: if ANY supporting record came from a sample naming a
+# single plant, the pair is "unambiguous"; if the pair rests entirely on
+# samples that named several candidate plants, it is "ambiguous".
 sh_pairs <- matched_interactions |>
   dplyr::filter(!is.na(sh_code)) |>   # genus-resolved GenBank rows carry sh_code = NA
-  dplyr::distinct(host_clean, sh_code) |>
-  dplyr::rename(host_species = host_clean)
+  dplyr::group_by(host_species = host_clean, sh_code) |>
+  dplyr::summarise(
+    pair_confidence = dplyr::if_else(any(pair_confidence == "unambiguous"),
+                                     "unambiguous", "ambiguous"),
+    .groups = "drop"
+  )
 
 sh_matrix <- sh_pairs |>
   dplyr::mutate(present = 1L) |>
@@ -314,7 +526,15 @@ species_pairs_canada <- sh_pairs |>
     )
   ) |>
   dplyr::filter(!is.na(fungal_species)) |>
-  dplyr::distinct(host_species, fungal_species)
+  # Same best-available-evidence rule as sh_pairs above, applied one level up:
+  # several SH codes can resolve to the same named species, so a host x species
+  # pair is unambiguous if any of its supporting SH-level pairs was.
+  dplyr::group_by(host_species, fungal_species) |>
+  dplyr::summarise(
+    pair_confidence = dplyr::if_else(any(pair_confidence == "unambiguous"),
+                                     "unambiguous", "ambiguous"),
+    .groups = "drop"
+  )
 
 # ---- A3c. Species-level matrix, fill statistics, and occurrence counts -------
 # Trimmed host x named-EcM-species matrix, following the same convention as
@@ -368,7 +588,19 @@ species_occurrence_counts <- matched_interactions |>
   ) |>
   dplyr::filter(!is.na(fungal_species)) |>
   dplyr::rename(host_species = host_clean) |>
-  dplyr::count(host_species, fungal_species, name = "n_occurrences") |>
+  # Alongside the occurrence count we carry the confidence flag (added 2026-08),
+  # applying the same best-available-evidence rule used for sh_pairs and
+  # species_pairs_canada. n_records_unambiguous records how many of the
+  # supporting records came from a single-host sample, so a reader can see how
+  # thin the evidence is for a pair that is flagged unambiguous on one record.
+  dplyr::group_by(host_species, fungal_species) |>
+  dplyr::summarise(
+    n_occurrences        = dplyr::n(),
+    n_records_unambiguous = sum(pair_confidence == "unambiguous"),
+    pair_confidence      = dplyr::if_else(n_records_unambiguous > 0L,
+                                          "unambiguous", "ambiguous"),
+    .groups = "drop"
+  ) |>
   dplyr::arrange(dplyr::desc(n_occurrences))
 
 # Sanity check: this should resolve to exactly the same set of distinct pairs
@@ -388,6 +620,83 @@ readr::write_csv(species_occurrence_counts,
 n_pairs_total       <- nrow(species_occurrence_counts)
 n_pairs_singleton   <- sum(species_occurrence_counts$n_occurrences == 1L)
 pct_pairs_singleton <- round(100 * n_pairs_singleton / n_pairs_total, 1)
+
+# ---- A3c-bis. Confidence composition of the Canadian pair set ---------------
+# Reported in the manuscript so readers can see how much of the fungus-host
+# evidence rests on samples where several candidate plants were listed. Both
+# pair sets are tallied: the SH-code-level set (the finest fungal resolution)
+# and the named-species-level set (the one whose fill rate the manuscript
+# reports as the headline interaction matrix).
+pair_conf_tally <- dplyr::bind_rows(
+  sh_pairs |>
+    dplyr::count(pair_confidence, name = "n_pairs") |>
+    dplyr::mutate(pair_set = "host x SH code"),
+  species_occurrence_counts |>
+    dplyr::count(pair_confidence, name = "n_pairs") |>
+    dplyr::mutate(pair_set = "host x named fungal species")
+) |>
+  dplyr::group_by(pair_set) |>
+  dplyr::mutate(pct = round(100 * n_pairs / sum(n_pairs), 1)) |>
+  dplyr::ungroup() |>
+  dplyr::select(pair_set, pair_confidence, n_pairs, pct)
+
+readr::write_csv(pair_conf_tally,
+                 file.path(paths$out_eltonian, "eltonian_pair_confidence.csv"))
+
+# ---- A3c-ter. Sensitivity analysis: unambiguous evidence only ---------------
+# Reviewers will reasonably ask what happens if the associations that rest
+# entirely on multi-plant samples are simply dropped. This block recomputes the
+# headline Canadian numbers from single-host records only. It writes its own
+# small CSV and changes nothing above: the reported analysis remains the full
+# set, with this as the stated sensitivity check.
+#
+# "Unambiguous" here means the source record named exactly one candidate plant:
+# every retained GenBank root record, plus the 8 Canadian GlobalFungi root
+# samples whose two plant fields between them name a single species.
+sens_interactions <- matched_interactions |>
+  dplyr::filter(n_hosts_in_record == 1L)
+
+sens_species_pairs <- sens_interactions |>
+  dplyr::filter(!is.na(sh_code)) |>
+  dplyr::select(-species) |>
+  dplyr::left_join(sh_lookup |> dplyr::select(sh_code, species), by = "sh_code") |>
+  dplyr::mutate(
+    fungal_species = dplyr::if_else(
+      !is.na(species) & !grepl("_sp$", species),
+      trimws(gsub("_", " ", species)), NA_character_)
+  ) |>
+  dplyr::filter(!is.na(fungal_species)) |>
+  dplyr::distinct(host_species = host_clean, fungal_species)
+
+n_hosts_sens   <- dplyr::n_distinct(sens_interactions$host_clean)
+n_myco_sens    <- dplyr::n_distinct(sens_species_pairs$fungal_species)
+n_pairs_sens   <- nrow(sens_species_pairs)
+
+eltonian_sensitivity <- tibble::tibble(
+  metric = c(
+    "Canadian host species with >= 1 documented association (all evidence)",
+    "Canadian host species with >= 1 documented association (unambiguous evidence only)",
+    "Eltonian host shortfall, hosts lacking any association (all evidence)",
+    "Eltonian host shortfall, hosts lacking any association (unambiguous evidence only)",
+    "Named EcM fungal species with >= 1 documented host (all evidence)",
+    "Named EcM fungal species with >= 1 documented host (unambiguous evidence only)",
+    "Host x named-species pairs (all evidence)",
+    "Host x named-species pairs (unambiguous evidence only)"
+  ),
+  value = c(
+    dplyr::n_distinct(matched_interactions$host_clean),
+    n_hosts_sens,
+    n_host_species - dplyr::n_distinct(matched_interactions$host_clean),
+    n_host_species - n_hosts_sens,
+    dplyr::n_distinct(species_pairs_canada$fungal_species),
+    n_myco_sens,
+    n_pairs_total,
+    n_pairs_sens
+  )
+)
+
+readr::write_csv(eltonian_sensitivity,
+                 file.path(paths$out_eltonian, "eltonian_sensitivity_confidence.csv"))
 
 # ---- A3d. Genus-level matrix, fill statistics, and occurrence counts --------
 # Genus x genus analogue of the host x named-species block above (A3c).
@@ -1103,10 +1412,19 @@ if (nrow(gb_global_meta) > 0) {
       host_clean = clean_host_name(host_taxon_gb)
     )
 
-  n_gb_with_host <- sum(!is.na(gb_global_meta$host_clean))
+  # REVISION 2026-08 (root-evidence rule, global scope). The Canadian GenBank
+  # branch in Step A2 keeps only records whose isolation_source names root or
+  # ectomycorrhizal material. The same test is applied here, for the same
+  # reason and with the same keyword pattern. Without it the two scopes would
+  # be defined differently from one another -- the Canadian figures strict and
+  # the global ones mixed -- which is worse than applying no filter at all.
+  gb_global_root <- gb_global_meta |>
+    dplyr::filter(grepl(root_kw, isolation_src, ignore.case = TRUE))
+
+  n_gb_global_with_host <- sum(!is.na(gb_global_root$host_clean))
 
   # Q3 (GenBank): per fungal genus, which Canadian host species globally?
-  gb_q3 <- gb_global_meta |>
+  gb_q3 <- gb_global_root |>
     dplyr::filter(!is.na(host_clean),
                   host_clean %in% host_tbl$species) |>
     dplyr::distinct(genus_queried, host_clean) |>
@@ -1123,19 +1441,19 @@ if (nrow(gb_global_meta) > 0) {
                    file.path(paths$out_eltonian, "eltonian_global_gb_fungi_to_hosts.csv"))
 
   # Q1 (GenBank): which Canadian host species appear as hosts globally in GB?
-  gb_q1_hosts <- unique(gb_global_meta$host_clean[
-    !is.na(gb_global_meta$host_clean) &
-      gb_global_meta$host_clean %in% host_tbl$species
+  gb_q1_hosts <- unique(gb_global_root$host_clean[
+    !is.na(gb_global_root$host_clean) &
+      gb_global_root$host_clean %in% host_tbl$species
   ])
 
   # Long-form GenBank global pairs for the interactions Rds (Part C)
   # Host → genus (global, GenBank, from genus_queried field)
-  host_genus_global_gb <- gb_global_meta |>
+  host_genus_global_gb <- gb_global_root |>
     dplyr::filter(!is.na(host_clean), host_clean %in% host_tbl$species) |>
     dplyr::distinct(host_species = host_clean, fungal_genus = genus_queried)
 
   # Host → named EcM species (global, GenBank, from organism field)
-  host_species_global_gb <- gb_global_meta |>
+  host_species_global_gb <- gb_global_root |>
     dplyr::filter(!is.na(host_clean), host_clean %in% host_tbl$species,
                   !is.na(organism), nzchar(trimws(organism))) |>
     dplyr::mutate(fungal_species = trimws(organism)) |>
