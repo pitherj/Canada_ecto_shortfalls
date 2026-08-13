@@ -1116,15 +1116,43 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
 # Memory note: loading just our EcM SH codes (a few hundred columns) from a
 # very wide file is much more efficient than loading all 77k+ SH columns.
 
+# Identify our Canadian EcM SH codes (from emf dataset). Computed BEFORE the
+# cache is consulted, because it is the key the cache must be checked against.
+our_sh_codes <- unique(emf$sh_code[!is.na(emf$sh_code)])
+
+# ---- Staleness check on the cache ------------------------------------------
+# This cache is keyed to the EcM SH codes, but was guarded by file.exists()
+# alone, so it was reused indefinitely no matter how much the EcM dataset
+# changed underneath it. In practice the copy in use during 2026-07/08 dated
+# from 2026-07-01 and still carried 124 SH codes that the dataset no longer
+# contained, which quietly skewed the global host-association counts.
+#
+# Unlike the GenBank cache in Part B4, rebuilding this one costs nothing but
+# time: it is a local scan of the GlobalFungi matrix, deterministic, and
+# involves no external service whose contents could have moved on. So when it is
+# stale it is simply rebuilt, rather than topped up.
+gf_sh_cache_stale <- FALSE
+if (file.exists(global_sh_ckpt)) {
+  cached_sh <- unique(readRDS(global_sh_ckpt)$sh_code)
+  # Codes in the cache that are no longer ours: the cache is out of date.
+  # (The reverse — ours but absent from the cache — is expected and fine: a code
+  # with no non-zero global abundance never appears in the melted result.)
+  orphaned <- setdiff(cached_sh, our_sh_codes)
+  if (length(orphaned) > 0L) {
+    gf_sh_cache_stale <- TRUE
+    message("Part B2: global SH subset cache is stale — it holds ",
+            length(orphaned), " SH code(s) no longer in the EcM dataset. ",
+            "Rebuilding from the GlobalFungi matrix.")
+  }
+}
+
 if (!file.exists(gf_sh_path)) {
   gf_sh_ecm <- NULL
 
-} else if (file.exists(global_sh_ckpt)) {
+} else if (file.exists(global_sh_ckpt) && !gf_sh_cache_stale) {
   gf_sh_ecm <- readRDS(global_sh_ckpt)
 
 } else {
-  # Identify our Canadian EcM SH codes (from emf dataset)
-  our_sh_codes <- unique(emf$sh_code[!is.na(emf$sh_code)])
 
   # Always check the file header first to find the intersection of our SH codes
   # with the file's columns. Our codes use a specific UNITE version suffix
@@ -1163,7 +1191,8 @@ if (!file.exists(gf_sh_path)) {
     as.data.frame()
   rm(gf_sh_ecm_wide)
 
-  saveRDS(gf_sh_ecm, global_sh_ckpt)
+  write_checkpoint_atomically(global_sh_ckpt,
+                              function(tmp) saveRDS(gf_sh_ecm, tmp))
 }
 
 # ---- B3b. Diagnostic: sample_type tally among EcM-positive global GF -------
@@ -1311,15 +1340,48 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 # Each genus is searched separately and results are combined.
 # The search mirrors 03_genbank.R but removes AND "Canada"[Country].
 
-if (file.exists(global_gb_ckpt)) {
-  gb_global_meta <- readr::read_csv(global_gb_ckpt, show_col_types = FALSE)
+# ---- Staleness check on the cache ------------------------------------------
+# This cache is keyed to the EcM GENUS list, which comes from `emf`. It used to
+# be guarded by file.exists() alone, so once written it was reused forever — even
+# after the EcM dataset gained genera, which left those genera with no global
+# host associations at all and nothing to indicate it. The check below compares
+# what the cache covers against the genera currently in the dataset, and queries
+# only the difference.
+our_genera_list <- sort(unique(trimws(emf$genus[!is.na(emf$genus)])))
+
+gb_global_cached <- if (file.exists(global_gb_ckpt))
+  readr::read_csv(global_gb_ckpt, show_col_types = FALSE) else NULL
+
+# A genus with no GenBank records contributes no rows, so the cache's own
+# genus_queried column cannot show that it was asked about. Without the sidecar
+# below, such a genus would look "missing" and be re-queried on every single
+# run, forever. The sidecar records what was ASKED; the cache records what came
+# back. (Absent sidecar = pre-2026-08 cache; fall back to the cache's own
+# column, which is correct for every genus that returned at least one record.)
+global_gb_queried_ckpt <- file.path(paths$temp_dir,
+                                    "genbank_global_ecm_genera_queried.csv")
+genera_asked <- if (file.exists(global_gb_queried_ckpt))
+  readr::read_csv(global_gb_queried_ckpt, show_col_types = FALSE)$genus else
+  character(0L)
+
+genera_cached   <- union(
+  if (is.null(gb_global_cached)) character(0L) else unique(gb_global_cached$genus_queried),
+  genera_asked)
+genera_to_query <- setdiff(our_genera_list, genera_cached)
+
+if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
+  gb_global_meta <- gb_global_cached
 } else {
+
+  if (!is.null(gb_global_cached))
+    message("Part B4: global GenBank cache covers ", length(genera_cached),
+            " genera; ", length(genera_to_query),
+            " EcM genera are missing and will be queried and appended (",
+            paste(genera_to_query, collapse = ", "), ").")
 
   if (Sys.getenv("ENTREZ_KEY") == "")
     warning("ENTREZ_KEY not set in .Renviron — the GenBank global step will be ",
             "rate-limited. Set ENTREZ_KEY for faster fetching.", call. = FALSE)
-
-  our_genera_list <- unique(trimws(emf$genus))
 
   # Helper: query one genus globally, return host_taxon metadata
   query_genus_globally <- function(genus_name) {
@@ -1335,7 +1397,12 @@ if (file.exists(global_gb_ckpt)) {
         retmax      = 0L,
         use_history = TRUE
       )
-      if (search$count == 0L) return(NULL)
+      # A genus with no GenBank records at all is a legitimate, successful
+      # result -- some EcM genera in the dataset are taxonomic synonyms with
+      # nothing deposited under that name. Return an EMPTY TABLE, not NULL:
+      # NULL is reserved for "the query failed", and the completeness guard
+      # below must be able to tell the two apart.
+      if (search$count == 0L) return(tibble::tibble())
 
       # Retrieve metadata for ALL matching records (no per-genus cap). Pagination
       # goes through the NCBI history server (web_history), which — unlike a
@@ -1345,16 +1412,24 @@ if (file.exists(global_gb_ckpt)) {
       starts     <- seq(0L, search$count - 1L, by = batch_size)
       meta_list  <- vector("list", length(starts))
 
+      n_failed_pages <- 0L
       for (k in seq_along(starts)) {
-        summ <- tryCatch(
-          rentrez::entrez_summary(
+        # Retry rather than skip. This loop previously used
+        # error = function(e) NULL with NO warning at all, so a transient NCBI
+        # failure dropped up to 200 global host-association records for this
+        # genus completely silently — and the result is checkpointed, so the
+        # loss was permanent.
+        summ <- fetch_with_retry(
+          function() rentrez::entrez_summary(
             db          = "nuccore",
             web_history = search$web_history,
             retstart    = starts[k],
             retmax      = batch_size
           ),
-          error = function(e) NULL
+          what = sprintf("GenBank global summary for '%s'", genus_name),
+          batch_i = k, n_batches = length(starts)
         )
+        if (is.null(summ)) n_failed_pages <- n_failed_pages + 1L
         if (!is.null(summ)) {
           if (inherits(summ, "esummary")) summ <- list(summ)
           meta_list[[k]] <- dplyr::bind_rows(lapply(summ, function(s) {
@@ -1376,6 +1451,16 @@ if (file.exists(global_gb_ckpt)) {
         }
         Sys.sleep(0.15)
       }
+      # A page lost after all retries means this genus's global host
+      # associations are incomplete. Surface it to the caller rather than
+      # returning a quietly short table.
+      assert_fetch_complete(
+        n_returned       = length(starts) - n_failed_pages,
+        n_requested      = length(starts),
+        n_failed_batches = n_failed_pages,
+        what = sprintf("GenBank global query for genus '%s' (counted in pages)",
+                       genus_name)
+      )
       dplyr::bind_rows(meta_list)
     }, error = function(e) {
       warning(sprintf("  Genus '%s' query failed: %s", genus_name, conditionMessage(e)))
@@ -1383,15 +1468,71 @@ if (file.exists(global_gb_ckpt)) {
     })
   }
 
-  genus_results <- vector("list", length(our_genera_list))
-  for (i in seq_along(our_genera_list)) {
-    genus_results[[i]] <- query_genus_globally(our_genera_list[i])
+  # ---- Fetch only the genera the cache does not already cover ---------------
+  # `genera_to_query` is set by the staleness check above: on a first build it
+  # is every EcM genus; on a top-up it is only those missing from the cache.
+  # Genera already cached are NOT re-queried, so their retrieval date is
+  # preserved and the cache does not silently become a mixture of dates.
+  genus_results <- vector("list", length(genera_to_query))
+  n_failed_genera <- 0L
+  for (i in seq_along(genera_to_query)) {
+    res <- query_genus_globally(genera_to_query[i])
+    if (is.null(res)) {
+      n_failed_genera <- n_failed_genera + 1L
+    } else if (nrow(res) == 0L) {
+      message("  '", genera_to_query[i], "': no GenBank records worldwide ",
+              "(genus queried successfully, nothing deposited under this name).")
+    }
+    # Single-bracket assignment with list(): `genus_results[[i]] <- NULL` would
+    # DELETE element i rather than store a NULL in it, silently shortening the
+    # list and throwing the indices out of step for the rest of the loop.
+    genus_results[i] <- list(res)
     Sys.sleep(0.5)
   }
 
-  gb_global_meta <- dplyr::bind_rows(Filter(Negate(is.null), genus_results))
+  assert_fetch_complete(
+    n_returned       = length(genera_to_query) - n_failed_genera,
+    n_requested      = length(genera_to_query),
+    n_failed_batches = n_failed_genera,
+    what             = "GenBank global genus queries (counted in genera)"
+  )
 
-  readr::write_csv(gb_global_meta, global_gb_ckpt)
+  new_rows <- dplyr::bind_rows(Filter(Negate(is.null), genus_results))
+
+  if (nrow(new_rows) == 0L) {
+    # Every queried genus returned nothing. Leave the cache file completely
+    # alone -- there is nothing to add, and rewriting it would be pure risk.
+    message("  no new records to append; cache file left untouched.")
+
+  } else if (is.null(gb_global_cached)) {
+    write_checkpoint_atomically(global_gb_ckpt,
+                                function(tmp) readr::write_csv(new_rows, tmp))
+
+  } else {
+    # APPEND to a copy of the cache rather than rewriting it whole, so the rows
+    # already there keep their exact original bytes. Re-serializing them is not
+    # harmless: readr::read_csv trims leading whitespace from unquoted fields,
+    # so a read/write round-trip silently edits values (it altered 5 country_gb
+    # entries when this was first written). Topping up is supposed to leave
+    # cached records exactly as they were retrieved -- that includes their bytes.
+    write_checkpoint_atomically(global_gb_ckpt, function(tmp) {
+      if (!file.copy(global_gb_ckpt, tmp, overwrite = TRUE))
+        stop("Could not stage ", tmp, " for the global-GenBank top-up.",
+             call. = FALSE)
+      readr::write_csv(new_rows, tmp, append = TRUE)
+    })
+    message("  appended ", format(nrow(new_rows), big.mark = ","),
+            " global records for ", length(genera_to_query), " genera.")
+  }
+
+  gb_global_meta <- dplyr::bind_rows(gb_global_cached, new_rows)
+
+  # Record every genus now asked about, including any that returned nothing, so
+  # the next run does not re-query them.
+  write_checkpoint_atomically(
+    global_gb_queried_ckpt,
+    function(tmp) readr::write_csv(
+      data.frame(genus = sort(union(genera_cached, genera_to_query))), tmp))
 }
 
 # Extract host_taxon from GenBank global records

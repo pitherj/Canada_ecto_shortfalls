@@ -48,12 +48,29 @@
 # clean_fungalroot_species.csv).
 #
 # Checkpoint files (data_derived/checkpoints/):
-#   bien_nsr_native_species.csv     — all BIEN Canada species with NSR
-#                                      native_status == "N" (expensive;
-#                                      independent of FungalRoot)
+#   bien_nsr_native_species.csv     — EVERY BIEN Canada species queried, with
+#                                      the NSR native_status returned for it
+#                                      (expensive; independent of FungalRoot).
+#                                      Natives are derived on read. Files in the
+#                                      pre-2026-08 natives-only format are still
+#                                      accepted, with a warning.
 #   bien_ecm_growthforms.csv        — growth form trait data from BIEN
+#   bien_ecm_growthforms_queried.csv — the species actually SENT to BIEN for the
+#                                      file above. BIEN returns nothing for a
+#                                      species it has no data on, so this is the
+#                                      only way to tell "no data" from "never
+#                                      asked" or "batch lost".
 #   gift_growthforms.csv            — growth form trait data from GIFT
 #                                     (used only for species lacking BIEN data)
+#
+# Download completeness (Steps 3, 5, 7a)
+#   These steps used to skip a failed batch with only a warning, which cost
+#   ~500 species (NSR) or ~200 species (BIEN) each time and, because the step is
+#   checkpointed, made the loss permanent. They now retry a failed batch, stop
+#   the script if records are still missing afterwards, and write each
+#   checkpoint only once its check has passed. See fetch_with_retry(),
+#   assert_fetch_complete() and write_checkpoint_atomically() in 00_setup.R, and
+#   repro/genbank_fetch_gap_prefix_state.md for the incident that prompted this.
 #
 # Output:
 #   data_derived/ecm_native_canada_host_species.csv
@@ -84,6 +101,11 @@ sf::sf_use_s2(FALSE)
 native_ckpt     <- file.path(paths$temp_dir, "bien_nsr_native_species.csv")
 growthform_ckpt <- file.path(paths$temp_dir, "bien_ecm_growthforms.csv")
 gift_gf_ckpt    <- file.path(paths$temp_dir, "gift_growthforms.csv")
+# Companion to growthform_ckpt: the list of species actually SENT to BIEN. BIEN
+# returns nothing for a species it has no trait data for, so without this the
+# checkpoint cannot distinguish "no data" from "never asked" (or "batch lost").
+growthform_queried_ckpt <- file.path(paths$temp_dir,
+                                     "bien_ecm_growthforms_queried.csv")
 
 # ---- Step 1: FungalRoot species table (occurrence route) + Table S2 genus
 #              table (genus route) ---------------------------------------
@@ -100,7 +122,37 @@ genus_qualifying_s2 <- sort(unique(ft_genera$Genus))
 # because 05_prepare_fungalroot.R's outputs change.
 
 if (file.exists(native_ckpt)) {
-  native_species <- readr::read_csv(native_ckpt, show_col_types = FALSE)$species
+
+  native_ckpt_tbl <- readr::read_csv(native_ckpt, show_col_types = FALSE)
+
+  if ("native_status" %in% names(native_ckpt_tbl)) {
+    # Current format: EVERY species queried, with the status NSR returned. This
+    # is self-describing — the file itself records what was asked for, so its
+    # completeness can be checked later.
+    native_species <- native_ckpt_tbl$species[
+      !is.na(native_ckpt_tbl$native_status) & native_ckpt_tbl$native_status == "N"
+    ]
+  } else {
+    # Legacy format (pre-2026-08): natives ONLY, with no record of which species
+    # were queried. It is therefore impossible to tell from the file whether an
+    # NSR batch failed and its ~500 species were silently dropped. The file is
+    # still usable, so the pipeline is not blocked, but the limitation must not
+    # pass unremarked.
+    native_species <- native_ckpt_tbl$species
+    warning(
+      "bien_nsr_native_species.csv is in the legacy natives-only format.\n",
+      "  It records ", length(native_species), " native species but NOT which ",
+      "species were queried, so\n",
+      "  it cannot be checked for the silent batch loss described in ",
+      "repro/genbank_fetch_gap_prefix_state.md.\n",
+      "  To rebuild it with completeness checking (NSR query, ~5-15 min):\n",
+      "    file.remove(here::here('data_derived','checkpoints',",
+      "'bien_nsr_native_species.csv'))\n",
+      "  Note that rebuilding re-queries NSR today and may change the host ",
+      "list.", call. = FALSE
+    )
+  }
+
 } else {
 
   bien_canada <- BIEN::BIEN_list_country("Canada", new.world = TRUE,
@@ -111,24 +163,45 @@ if (file.exists(native_ckpt)) {
   nsr_batches <- split(bien_canada_species,
                        ceiling(seq_along(bien_canada_species) / NSR_BATCH))
   nsr_list <- vector("list", length(nsr_batches))
+  n_failed_batches <- 0L
+
   for (i in seq_along(nsr_batches)) {
     sp_batch <- nsr_batches[[i]]
-    nsr_list[[i]] <- tryCatch(
-      NSR::NSR_simple(species = sp_batch,
-                      country = rep("Canada", length(sp_batch))),
-      error = function(e) {
-        warning(sprintf("  NSR batch %d failed: %s", i, conditionMessage(e)))
-        NULL
-      }
+    # Retry rather than skip: a failed NSR batch used to drop ~500 species
+    # silently, and because this step is checkpointed the loss was permanent.
+    res <- fetch_with_retry(
+      function() NSR::NSR_simple(species = sp_batch,
+                                 country = rep("Canada", length(sp_batch))),
+      what = "NSR native status", batch_i = i, n_batches = length(nsr_batches)
     )
+    if (is.null(res)) n_failed_batches <- n_failed_batches + 1L
+    else               nsr_list[[i]] <- res
   }
+
   nsr_status <- dplyr::bind_rows(Filter(Negate(is.null), nsr_list))
 
-  native_species <- nsr_status$species[
-    !is.na(nsr_status$native_status) & nsr_status$native_status == "N"
-  ]
+  # NSR returns one row per species queried, so returned-vs-requested is a
+  # direct completeness test. Checked BEFORE the checkpoint is written.
+  assert_fetch_complete(
+    n_returned       = dplyr::n_distinct(nsr_status$species),
+    n_requested      = length(bien_canada_species),
+    n_failed_batches = n_failed_batches,
+    what             = "NSR native-status lookup"
+  )
 
-  readr::write_csv(data.frame(species = native_species), native_ckpt)
+  # Persist EVERY queried species with its status, not just the natives. The
+  # natives are derived on read (above). Storing the full result is what makes
+  # this checkpoint self-describing and auditable.
+  native_status_tbl <- nsr_status |>
+    dplyr::select(species, native_status) |>
+    dplyr::distinct(species, .keep_all = TRUE)
+
+  write_checkpoint_atomically(native_ckpt,
+                              function(tmp) readr::write_csv(native_status_tbl, tmp))
+
+  native_species <- native_status_tbl$species[
+    !is.na(native_status_tbl$native_status) & native_status_tbl$native_status == "N"
+  ]
 }
 
 # ---- Step 4: Select EcM hosts — species rule OR Table S2 genus rule --------
@@ -160,7 +233,35 @@ evidence_lookup <- data.frame(species = em_canada_species) |>
 # values may exist per species. We retain the modal value per species.
 
 if (file.exists(growthform_ckpt)) {
+
   growthforms_raw <- readr::read_csv(growthform_ckpt, show_col_types = FALSE)
+
+  # Unlike NSR, BIEN returns 0..n trait rows per species — a species with no
+  # trait data simply contributes nothing. "Rows returned" is therefore NOT a
+  # completeness test, and the checkpoint alone cannot say which species were
+  # asked about. That is what the companion "queried" file records. Its absence
+  # means this checkpoint predates completeness tracking.
+  if (file.exists(growthform_queried_ckpt)) {
+    queried_before <- readr::read_csv(growthform_queried_ckpt,
+                                      show_col_types = FALSE)$species
+    not_yet_queried <- setdiff(em_canada_species, queried_before)
+    if (length(not_yet_queried) > 0L)
+      warning(
+        length(not_yet_queried), " host species have never been queried for ",
+        "BIEN growth form\n  (the host list has grown since this checkpoint ",
+        "was built). Delete\n  ", basename(growthform_ckpt), " and ",
+        basename(growthform_queried_ckpt), " to refresh it.", call. = FALSE)
+  } else {
+    warning(
+      basename(growthform_ckpt), " predates completeness tracking: there is no ",
+      "record of which\n  species were queried, so a silently dropped BIEN ",
+      "batch (~200 species losing their\n  growth form) cannot be ruled out. ",
+      "Growth form is descriptive metadata only and\n  has documented ",
+      "fallbacks (Steps 7a-7c), so this is not fatal. To rebuild with ",
+      "checking:\n    file.remove(here::here('data_derived','checkpoints',",
+      "'bien_ecm_growthforms.csv'))", call. = FALSE)
+  }
+
 } else {
 
   # Batch to avoid timeouts; BIEN_trait_traitbyspecies handles a vector but
@@ -169,22 +270,43 @@ if (file.exists(growthform_ckpt)) {
   trait_batches <- split(em_canada_species,
                          ceiling(seq_along(em_canada_species) / TRAIT_BATCH))
   trait_list <- vector("list", length(trait_batches))
+  n_failed_batches <- 0L
+
   for (i in seq_along(trait_batches)) {
-    trait_list[[i]] <- tryCatch(
-      BIEN::BIEN_trait_traitbyspecies(
+    # Retry rather than skip: a failed batch used to cost ~200 species their
+    # growth form, permanently, with only a warning.
+    res <- fetch_with_retry(
+      function() BIEN::BIEN_trait_traitbyspecies(
         species = trait_batches[[i]],
         trait   = "whole plant growth form"
       ) |>
         dplyr::select(scrubbed_species_binomial, trait_value) |>
         dplyr::mutate(trait_value = tolower(trait_value)),
-      error = function(e) {
-        warning(sprintf("  Trait batch %d failed: %s", i, conditionMessage(e)))
-        NULL
-      }
+      what = "BIEN growth form", batch_i = i, n_batches = length(trait_batches)
     )
+    if (is.null(res)) n_failed_batches <- n_failed_batches + 1L
+    else               trait_list[[i]] <- res
   }
+
+  # Every batch must have come back. Because a species legitimately may have no
+  # trait data, the only meaningful test is that no BATCH was lost, so the
+  # requested/returned counts are expressed in batches.
+  assert_fetch_complete(
+    n_returned       = length(trait_batches) - n_failed_batches,
+    n_requested      = length(trait_batches),
+    n_failed_batches = n_failed_batches,
+    what             = "BIEN growth-form lookup (counted in batches)"
+  )
+
   growthforms_raw <- dplyr::bind_rows(Filter(Negate(is.null), trait_list))
-  readr::write_csv(growthforms_raw, growthform_ckpt)
+
+  write_checkpoint_atomically(growthform_ckpt,
+                              function(tmp) readr::write_csv(growthforms_raw, tmp))
+  # Record WHICH species were asked about, so a future run can tell "no trait
+  # data for this species" apart from "this species was never queried".
+  write_checkpoint_atomically(
+    growthform_queried_ckpt,
+    function(tmp) readr::write_csv(data.frame(species = em_canada_species), tmp))
 }
 
 # ---- Step 6: Summarise to one growth form per species -----------------------
@@ -225,29 +347,34 @@ if (n_na_gf > 0L) {
   if (file.exists(gift_gf_ckpt)) {
     gift_gf <- readr::read_csv(gift_gf_ckpt, show_col_types = FALSE)
   } else {
-    gift_raw <- tryCatch(
-      GIFT::GIFT_traits(trait_IDs  = "1.2.1",
-                        agreement  = 0.66,
-                        bias_ref   = FALSE,
-                        bias_deriv = FALSE),
-      error = function(e) {
-        warning("  GIFT query failed: ", conditionMessage(e))
-        NULL
-      }
+    # Retried rather than abandoned. A failed GIFT query used to warn and carry
+    # on, which quietly pushed every species GIFT would have resolved down to
+    # the coarser congener-modal fallback (Step 7b) — a silent change in
+    # growth_form provenance with nothing in the output to show it happened.
+    gift_raw <- fetch_with_retry(
+      function() GIFT::GIFT_traits(trait_IDs  = "1.2.1",
+                                   agreement  = 0.66,
+                                   bias_ref   = FALSE,
+                                   bias_deriv = FALSE),
+      what = "GIFT growth-form traits"
     )
 
-    if (!is.null(gift_raw)) {
-      # Column containing the trait value is named after the trait ID
-      gf_col <- grep("1\\.2\\.1", names(gift_raw), value = TRUE)[1L]
-      gift_gf <- gift_raw |>
-        dplyr::select(species = work_species,
-                      growth_form_gift = dplyr::all_of(gf_col)) |>
-        dplyr::filter(!is.na(growth_form_gift)) |>
-        dplyr::mutate(growth_form_gift = tolower(trimws(growth_form_gift)))
-      readr::write_csv(gift_gf, gift_gf_ckpt)
-    } else {
-      gift_gf <- NULL
-    }
+    if (is.null(gift_raw))
+      stop("GIFT growth-form query failed on every attempt.\n",
+           "  Continuing would silently demote species that GIFT can resolve ",
+           "to the\n  congener-modal fallback, so this stops instead. GIFT ",
+           "outages are usually brief:\n  wait and re-run. Nothing has been ",
+           "written.", call. = FALSE)
+
+    # Column containing the trait value is named after the trait ID
+    gf_col <- grep("1\\.2\\.1", names(gift_raw), value = TRUE)[1L]
+    gift_gf <- gift_raw |>
+      dplyr::select(species = work_species,
+                    growth_form_gift = dplyr::all_of(gf_col)) |>
+      dplyr::filter(!is.na(growth_form_gift)) |>
+      dplyr::mutate(growth_form_gift = tolower(trimws(growth_form_gift)))
+    write_checkpoint_atomically(gift_gf_ckpt,
+                                function(tmp) readr::write_csv(gift_gf, tmp))
   }
 
   if (!is.null(gift_gf) && nrow(gift_gf) > 0L) {
