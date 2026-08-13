@@ -182,22 +182,36 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 `genbank_itsx.{positions,problematic,summary,no_detections}.txt`,
 `genbank_itsx_no_detections.fasta` (ITSx sub-region extraction),
 `genbank_vsearch_query.fasta` (sanitized ITS2 queries ≥ 100 bp),
-`genbank_vsearch_hits.txt`, `genbank_global_ecm_meta.csv`,
+`genbank_vsearch_hits.txt`,
 `genbank_ambiguous_species_excluded.csv` (records dropped because tied top hits
 disagreed even at genus level), `genbank_its1_resolution_crosstab.csv`
 (reporting-only diagnostic: `taxonomic_resolution` outcome × standalone-ITS1
-presence), `genbank_fetch_log.txt` (`03_genbank.R`);
+presence), `genbank_no_sequence_available.csv` (UIDs individually confirmed to
+have no retrievable sequence — GenBank WGS/TLS "master" accessions, which index
+component sequences but hold none themselves — and therefore excluded from the
+Step 3b completeness check), `genbank_fetch_log.txt` (`03_genbank.R`);
 `fungalroot_dwca_extracted/` (fresh per-run extraction of the FungalRoot DwC-A
 zip: `occurrences.csv`, `measurements.csv`, `media.csv`, `eml.xml`, `meta.xml`,
 `dna_data.csv`), `fungalroot_species_raw.csv`, `fungalroot_species_backbone.csv`,
 `fungalroot_table_s2.csv` (`05_prepare_fungalroot.R`);
 `bien2_ecm_host_ranges.gpkg`, `bien_ecm_growthforms.csv`,
-`bien_nsr_native_species.csv`, `gift_growthforms.csv` (`06_host_species.R`);
+`bien_ecm_growthforms_queried.csv` (the species actually sent to BIEN for the
+file above — BIEN returns nothing for a species it holds no trait data on, so
+without this "no data" and "batch never completed" are indistinguishable),
+`bien_nsr_native_species.csv` (every species queried, with the NSR
+`native_status` returned for it; natives are derived on read),
+`gift_growthforms.csv` (`06_host_species.R`);
 `gbif_ecm_canada_raw.csv` (`09_linnean.R`);
-`gf_global_ecm_sample_ids.csv`, `gf_global_root_metadata.csv`
-(`12_wallacean_density_map.R`);
-`gf_global_comparator_cheap.csv`, `gf_global_comparator_volume.csv`,
-`gf_global_ecm_sh_subset.rds` (`13_wallacean_global_comparator.R`).
+`gf_global_ecm_sample_ids.csv` (`12_wallacean_density_map.R`);
+`gf_global_comparator_cheap.csv`, `gf_global_comparator_volume.csv`
+(`13_wallacean_global_comparator.R`);
+`gf_global_root_metadata.csv`, `gf_global_ecm_sh_subset.rds` (global GlobalFungi
+root metadata and the EcM SH-code subset, both keyed to the EcM dataset and
+rebuilt when it changes), `genbank_global_ecm_meta.csv` (worldwide GenBank
+records for each EcM genus, topped up genus by genus rather than re-pulled),
+`genbank_global_ecm_genera_queried.csv` (which genera have been asked about, as
+opposed to which returned records — a genus with no GenBank records contributes
+no rows, so without this it would be re-queried on every run) (`18_eltonian.R`).
 
 ---
 

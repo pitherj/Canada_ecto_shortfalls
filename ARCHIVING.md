@@ -15,8 +15,8 @@ Collection: **UBC BLERF** — <https://borealisdata.ca/dataverse/UBC_BLERF>
 |---|---|---|---|---|
 | `scripts/` | < 1 MB | ✅ | ✅ | Snapshot at submission fixes the analysis to a citable version |
 | `FACETS/` sources (`.qmd`, `.bib`, `.csl`) | < 1 MB | ✅ | ✅ | Same |
-| `figures/` PNG + JPG | 32 MB | ✅ | ✅ | Needed to render the manuscript from a clean clone |
-| `figures/` TIFF | 332 MB | ❌ | ✅ | FACETS submission deliverables; regenerable, and poorly suited to git |
+| `figures/` PNG + JPG | 34 MB | ✅ | ✅ | Needed to render the manuscript from a clean clone |
+| `figures/` TIFF | 333 MB | ❌ | ✅ | FACETS submission deliverables; regenerable, and poorly suited to git |
 | `data_derived/` | ~1.4 GB | ❌ | ✅ | The analysis outputs; too large for git, and the substance of the deposit |
 | `data_raw/` | ~16 GB | ❌ | ⚠️ selective | See below |
 | `repro/baseline_*` | < 1 MB | ✅ | ✅ | Evidence that the deposited code reproduces the deposited data |
@@ -39,8 +39,8 @@ Three categories are exceptions.
 
 | Input | Size | Why |
 |---|---|---|
-| GBIF occurrence download (`data_raw/gbif/*.zip`) | 89 MB | GBIF deletes download files six months after creation — this one on **6 September 2026**. The DOI then resolves to a record of the query, not the data. Re-running the query returns a different result set, because the GBIF index changes continuously. |
-| Live-query snapshots (`data_derived/checkpoints/`) | 921 MB | Results from BIEN, NSR, GIFT, MycoCosm and GenBank queries. These services have no versioned releases, so the exact result set cannot be re-obtained. Without them the pipeline is not reproducible. |
+| GBIF occurrence download (`data_raw/gbif/*.zip`) | 90 MB | GBIF deletes download files six months after creation — this one on **6 September 2026**. The DOI then resolves to a record of the query, not the data. Re-running the query returns a different result set, because the GBIF index changes continuously. |
+| Live-query snapshots (`data_derived/checkpoints/`) | 928 MB | Results from BIEN, NSR, GIFT, MycoCosm and GenBank queries. These services have no versioned releases, so the exact result set cannot be re-obtained. Without them the pipeline is not reproducible. |
 
 ### 2. Excluded, because their licences prohibit redistribution
 

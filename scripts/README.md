@@ -7,6 +7,25 @@ primary dataset `emf`. Run the scripts in numerical order; each is
 checkpoint-guarded, so re-running skips any step whose output already exists
 (delete an output to force regeneration).
 
+**Checkpoints that are checked rather than simply trusted.** For most steps
+"the output exists" is taken to mean "the step is done". Four are stricter,
+because a checkpoint built from a batched download or keyed to the EcM dataset
+can exist and still be wrong:
+
+| Step | What is checked | What happens if the check fails |
+|---|---|---|
+| `03_genbank.R` | Sequence and metadata checkpoints must account for every UID in the frozen search list | Only the missing records are fetched and appended (Steps 2, 3 and 3b) |
+| `06_host_species.R` | Whether the NSR and BIEN checkpoints record which species were queried | Older files without that record are used, with a warning that their completeness cannot be verified |
+| `18_eltonian.R` (B2) | Whether the cached global SH subset still matches the EcM dataset's SH codes | Rebuilt from the GlobalFungi matrix — local and deterministic, so rebuilding is safe |
+| `18_eltonian.R` (B4) | Whether the cached global GenBank metadata covers every EcM genus | Only the uncovered genera are queried and appended; cached genera keep their original retrieval date |
+
+So for these four, deleting an output is not the only way to force work: a
+checkpoint that is incomplete or out of date is repaired in place on the next
+run. A batch that fails every retry stops the script rather than being skipped,
+and no checkpoint is written until its check has passed. This behaviour was
+added in 2026-08 after a silent download fault cost 3,001 GenBank records — see
+`repro/silent_batch_loss_audit.md`.
+
 To run the whole pipeline, use the master runner, which sources `01`–`20` in
 order and records per-script status and timing to `data_derived/run_log.csv`:
 
@@ -22,7 +41,9 @@ on-demand steps that scan the ~13 GB GlobalFungi matrix
 aborts the run or is logged so the run continues.
 
 You can also run scripts individually in numeric order — each is
-checkpoint-guarded, so completed steps are skipped on re-run.
+checkpoint-guarded, so completed steps are skipped on re-run (with the four
+exceptions noted above, which verify their checkpoints and repair them if
+necessary).
 
 The manuscript and Supplemental Materials sources in `FACETS/` read from
 `data_derived/` to report in-text statistics and tables, so the pipeline must
