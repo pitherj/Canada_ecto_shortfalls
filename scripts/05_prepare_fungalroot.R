@@ -177,21 +177,36 @@ backbone_standardize <- function(names_vec, batch_size = 200L) {
   names_vec <- as.character(names_vec)
   n_batches <- ceiling(length(names_vec) / batch_size)
   results   <- vector("list", n_batches)
+  n_failed_batches <- 0L
   for (i in seq_len(n_batches)) {
     idx <- seq((i - 1L) * batch_size + 1L,
                min(i * batch_size, length(names_vec)))
-    results[[i]] <- tryCatch(
-      rgbif::name_backbone_checklist(name_data = data.frame(scientificName = names_vec[idx])),
-      error = function(e) {
-        warning("  Batch ", i, " failed: ", conditionMessage(e))
-        data.frame(verbatim_name = names_vec[idx],
-                   canonicalName  = NA_character_,
-                   matchType      = "NONE",
-                   stringsAsFactors = FALSE)
-      }
+    # Retry rather than fabricate. Previously a failed batch was replaced with
+    # matchType = "NONE" rows, so a transient GBIF outage was indistinguishable
+    # in the output from "GBIF does not recognize these names" — the affected
+    # species kept their unstandardized names and were silently excluded from
+    # any name-matched join downstream. Row counts stayed correct, which is
+    # precisely what made it invisible.
+    res <- fetch_with_retry(
+      function() rgbif::name_backbone_checklist(
+        name_data = data.frame(scientificName = names_vec[idx])),
+      what = "GBIF backbone lookup", batch_i = i, n_batches = n_batches
     )
+    if (is.null(res)) n_failed_batches <- n_failed_batches + 1L
+    else               results[[i]] <- res
     if (i < n_batches) Sys.sleep(2)
   }
+
+  # No batch may be lost. Counted in batches because name_backbone_checklist
+  # returns one row per name submitted, so a lost batch is a lost block of names
+  # rather than a partial result.
+  assert_fetch_complete(
+    n_returned       = n_batches - n_failed_batches,
+    n_requested      = n_batches,
+    n_failed_batches = n_failed_batches,
+    what             = "GBIF name-backbone standardization (counted in batches)"
+  )
+
   dplyr::bind_rows(results)
 }
 

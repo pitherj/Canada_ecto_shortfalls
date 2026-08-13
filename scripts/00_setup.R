@@ -177,6 +177,115 @@ canonicalize_host <- function(x) {
   out
 }
 
+# =============================================================================
+# Batch-download safety helpers
+# =============================================================================
+# Several scripts retrieve data from external services (NCBI, BIEN, NSR, GBIF,
+# GIFT) in batches, because a single request for thousands of records times out.
+# The original pattern was:
+#
+#     tryCatch(fetch(batch), error = function(e) { warning(...); NULL })
+#
+# which SKIPS a failed batch. Combined with a checkpoint written regardless and
+# an if (!file.exists(...)) guard on the step, that turns a transient network
+# error into permanent, invisible data loss: nothing compares what came back
+# against what was asked for, the truncated file looks complete, and every later
+# run reuses it. That is exactly how 3,001 of 60,911 GenBank records went missing
+# (see repro/genbank_fetch_gap_prefix_state.md).
+#
+# The two helpers below are the shared remedy. Scripts use them together:
+# fetch_with_retry() gives a flaky batch several chances, and
+# assert_fetch_complete() refuses to let the step continue if records are still
+# missing afterwards.
+
+# ---- fetch_with_retry(): run a fetch, retrying transient failures ------------
+# Calls fetch_fun() up to `max_attempts` times, pausing between tries (the pause
+# is multiplied by the attempt number, so it backs off politely if the server is
+# rate-limiting rather than merely glitching).
+#
+#   fetch_fun    : a zero-argument function that performs the request
+#   what         : short label for messages, e.g. "NSR native status"
+#   batch_i      : which batch this is (for messages); NULL if not batched
+#   n_batches    : how many batches in total (for messages)
+#
+# Returns whatever fetch_fun() returned on the first success, or NULL if every
+# attempt failed. NULL means "this batch is lost" — the CALLER must count those
+# and pass the count to assert_fetch_complete(). Never treat NULL as "no data".
+fetch_with_retry <- function(fetch_fun, what, batch_i = NULL, n_batches = NULL,
+                             max_attempts = 5L, pause = 3) {
+  label <- if (is.null(batch_i)) what else
+    sprintf("%s batch %d/%d", what, batch_i, n_batches)
+  for (attempt in seq_len(max_attempts)) {
+    result <- tryCatch(fetch_fun(), error = function(e) e)
+    if (!inherits(result, "error")) return(result)
+    if (attempt < max_attempts) {
+      message(sprintf("  %s failed (attempt %d of %d): %s\n    retrying in %g s",
+                      label, attempt, max_attempts,
+                      conditionMessage(result), pause * attempt))
+      Sys.sleep(pause * attempt)
+    } else {
+      warning(sprintf("%s failed on all %d attempts: %s", label, max_attempts,
+                      conditionMessage(result)), call. = FALSE)
+    }
+  }
+  NULL
+}
+
+# ---- assert_fetch_complete(): stop unless the step got what it asked for -----
+# Compares records actually returned against records requested and stops with an
+# informative error if the step came up short. Two independent trip conditions:
+#   (a) any batch exhausted its retries — a known, located loss;
+#   (b) the shortfall exceeds max_missing_frac — catches partial returns that
+#       raised no error at all.
+#
+# max_missing_frac is not zero because a few records can legitimately disappear
+# between listing and retrieval. Set it far below the size of one batch, so that
+# losing even a single whole batch trips the guard.
+#
+# Call this BEFORE writing the checkpoint, so a short result is never persisted.
+assert_fetch_complete <- function(n_returned, n_requested, n_failed_batches,
+                                  what, max_missing_frac = 0.001,
+                                  partial_path = NULL) {
+  shortfall <- n_requested - n_returned
+  frac      <- if (n_requested == 0L) 0 else shortfall / n_requested
+  if (n_failed_batches == 0L && frac <= max_missing_frac) {
+    return(invisible(TRUE))
+  }
+  stop(sprintf(
+    paste0(
+      "%s is incomplete: requested %s, received %s (shortfall %s, %.3f%%; ",
+      "tolerance %.3f%%). Batches that failed every retry: %d.\n",
+      "  Refusing to write a truncated checkpoint — a short file here would be ",
+      "reused by every later run and the loss would become permanent.\n",
+      "  This is usually a transient service outage: wait, then re-run.%s"
+    ),
+    what, format(n_requested, big.mark = ","), format(n_returned, big.mark = ","),
+    format(shortfall, big.mark = ","), 100 * frac, 100 * max_missing_frac,
+    n_failed_batches,
+    if (is.null(partial_path)) "" else
+      paste0("\n  Partial output left at: ", partial_path)
+  ), call. = FALSE)
+}
+
+# ---- write_checkpoint_atomically(): write, verify, then promote --------------
+# Writes to a ".partial" sibling and renames it over the target only after
+# `write_fun` has returned without error. A run that dies part-way therefore
+# leaves the ".partial" file (obviously not a checkpoint) rather than a
+# half-written file that the next run's file.exists() test accepts as complete.
+#   path      : final checkpoint path
+#   write_fun : function(tmp_path) that writes the content to tmp_path
+write_checkpoint_atomically <- function(path, write_fun) {
+  tmp <- paste0(path, ".partial")
+  write_fun(tmp)
+  if (!file.exists(tmp))
+    stop("write_checkpoint_atomically(): nothing was written to ", tmp,
+         call. = FALSE)
+  if (!file.rename(tmp, path))
+    stop("write_checkpoint_atomically(): could not move ", tmp, " to ", path,
+         call. = FALSE)
+  invisible(path)
+}
+
 # ---- read_big_tsv_subset(): read selected columns from a very large TSV -------
 # data.table::fread(..., select = ) still has to stream and tokenize the whole
 # file, which overruns R's 2^31-1-byte single-string limit on multi-GB inputs

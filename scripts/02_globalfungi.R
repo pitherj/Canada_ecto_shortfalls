@@ -196,17 +196,46 @@ if (!file.exists(paths$gf_sample_type_tally)) {
 
 if (!file.exists(paths$gf_sh_subset_out)) {
 
+  # The shell creates the output file the instant the redirection is set up, so
+  # writing straight to the checkpoint path means an awk that dies part-way
+  # (disk full, interrupt, OOM) leaves a truncated file behind. The stop() below
+  # halts THIS run, but the next run's if (!file.exists(...)) test would find
+  # that partial file and accept it as a complete extraction. Writing to a
+  # ".partial" sibling and renaming only on success removes that possibility.
+  subset_partial <- paste0(paths$gf_sh_subset_out, ".partial")
+
   cmd <- paste(
     "awk -F'\\t'",
     "'NR==FNR{ids[$1]=1; next} FNR==1{print; next} $1 in ids {print}'",
     shQuote(paths$gf_ids_out),
     shQuote(paths$gf_sh_abundance),
     ">",
-    shQuote(paths$gf_sh_subset_out)
+    shQuote(subset_partial)
   )
 
   ret <- system(cmd)
-  if (ret != 0L) stop("awk extraction failed with exit code ", ret)
+  if (ret != 0L)
+    stop("awk extraction failed with exit code ", ret,
+         ". Partial output left at ", subset_partial,
+         " and NOT promoted to a checkpoint.")
+
+  # Sanity-check the extraction before accepting it: one header row plus one row
+  # per Canadian sample ID is what a complete run produces. A short file means
+  # awk stopped early despite a zero exit status.
+  n_ids  <- length(readLines(paths$gf_ids_out))
+  n_rows <- as.integer(system(paste("wc -l <", shQuote(subset_partial)),
+                              intern = TRUE)) - 1L
+  if (n_rows < n_ids)
+    stop(sprintf(
+      paste0("GlobalFungi subset extraction is short: %s sample rows for %s ",
+             "Canadian sample IDs.\n  Partial output left at %s and NOT ",
+             "promoted to a checkpoint."),
+      format(n_rows, big.mark = ","), format(n_ids, big.mark = ","),
+      subset_partial))
+
+  if (!file.rename(subset_partial, paths$gf_sh_subset_out))
+    stop("Could not move ", subset_partial, " to ", paths$gf_sh_subset_out)
+
   sz <- round(file.info(paths$gf_sh_subset_out)$size / 1e6, 1)
 
 } else {
