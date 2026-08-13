@@ -1352,8 +1352,21 @@ our_genera_list <- sort(unique(trimws(emf$genus[!is.na(emf$genus)])))
 gb_global_cached <- if (file.exists(global_gb_ckpt))
   readr::read_csv(global_gb_ckpt, show_col_types = FALSE) else NULL
 
-genera_cached   <- if (is.null(gb_global_cached)) character(0L) else
-  unique(gb_global_cached$genus_queried)
+# A genus with no GenBank records contributes no rows, so the cache's own
+# genus_queried column cannot show that it was asked about. Without the sidecar
+# below, such a genus would look "missing" and be re-queried on every single
+# run, forever. The sidecar records what was ASKED; the cache records what came
+# back. (Absent sidecar = pre-2026-08 cache; fall back to the cache's own
+# column, which is correct for every genus that returned at least one record.)
+global_gb_queried_ckpt <- file.path(paths$temp_dir,
+                                    "genbank_global_ecm_genera_queried.csv")
+genera_asked <- if (file.exists(global_gb_queried_ckpt))
+  readr::read_csv(global_gb_queried_ckpt, show_col_types = FALSE)$genus else
+  character(0L)
+
+genera_cached   <- union(
+  if (is.null(gb_global_cached)) character(0L) else unique(gb_global_cached$genus_queried),
+  genera_asked)
 genera_to_query <- setdiff(our_genera_list, genera_cached)
 
 if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
@@ -1384,7 +1397,12 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
         retmax      = 0L,
         use_history = TRUE
       )
-      if (search$count == 0L) return(NULL)
+      # A genus with no GenBank records at all is a legitimate, successful
+      # result -- some EcM genera in the dataset are taxonomic synonyms with
+      # nothing deposited under that name. Return an EMPTY TABLE, not NULL:
+      # NULL is reserved for "the query failed", and the completeness guard
+      # below must be able to tell the two apart.
+      if (search$count == 0L) return(tibble::tibble())
 
       # Retrieve metadata for ALL matching records (no per-genus cap). Pagination
       # goes through the NCBI history server (web_history), which — unlike a
@@ -1458,8 +1476,17 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
   genus_results <- vector("list", length(genera_to_query))
   n_failed_genera <- 0L
   for (i in seq_along(genera_to_query)) {
-    genus_results[[i]] <- query_genus_globally(genera_to_query[i])
-    if (is.null(genus_results[[i]])) n_failed_genera <- n_failed_genera + 1L
+    res <- query_genus_globally(genera_to_query[i])
+    if (is.null(res)) {
+      n_failed_genera <- n_failed_genera + 1L
+    } else if (nrow(res) == 0L) {
+      message("  '", genera_to_query[i], "': no GenBank records worldwide ",
+              "(genus queried successfully, nothing deposited under this name).")
+    }
+    # Single-bracket assignment with list(): `genus_results[[i]] <- NULL` would
+    # DELETE element i rather than store a NULL in it, silently shortening the
+    # list and throwing the indices out of step for the rest of the loop.
+    genus_results[i] <- list(res)
     Sys.sleep(0.5)
   }
 
@@ -1470,13 +1497,42 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
     what             = "GenBank global genus queries (counted in genera)"
   )
 
-  gb_global_meta <- dplyr::bind_rows(
-    gb_global_cached,
-    dplyr::bind_rows(Filter(Negate(is.null), genus_results))
-  )
+  new_rows <- dplyr::bind_rows(Filter(Negate(is.null), genus_results))
 
-  write_checkpoint_atomically(global_gb_ckpt,
-                              function(tmp) readr::write_csv(gb_global_meta, tmp))
+  if (nrow(new_rows) == 0L) {
+    # Every queried genus returned nothing. Leave the cache file completely
+    # alone -- there is nothing to add, and rewriting it would be pure risk.
+    message("  no new records to append; cache file left untouched.")
+
+  } else if (is.null(gb_global_cached)) {
+    write_checkpoint_atomically(global_gb_ckpt,
+                                function(tmp) readr::write_csv(new_rows, tmp))
+
+  } else {
+    # APPEND to a copy of the cache rather than rewriting it whole, so the rows
+    # already there keep their exact original bytes. Re-serializing them is not
+    # harmless: readr::read_csv trims leading whitespace from unquoted fields,
+    # so a read/write round-trip silently edits values (it altered 5 country_gb
+    # entries when this was first written). Topping up is supposed to leave
+    # cached records exactly as they were retrieved -- that includes their bytes.
+    write_checkpoint_atomically(global_gb_ckpt, function(tmp) {
+      if (!file.copy(global_gb_ckpt, tmp, overwrite = TRUE))
+        stop("Could not stage ", tmp, " for the global-GenBank top-up.",
+             call. = FALSE)
+      readr::write_csv(new_rows, tmp, append = TRUE)
+    })
+    message("  appended ", format(nrow(new_rows), big.mark = ","),
+            " global records for ", length(genera_to_query), " genera.")
+  }
+
+  gb_global_meta <- dplyr::bind_rows(gb_global_cached, new_rows)
+
+  # Record every genus now asked about, including any that returned nothing, so
+  # the next run does not re-query them.
+  write_checkpoint_atomically(
+    global_gb_queried_ckpt,
+    function(tmp) readr::write_csv(
+      data.frame(genus = sort(union(genera_cached, genera_to_query))), tmp))
 }
 
 # Extract host_taxon from GenBank global records
