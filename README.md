@@ -4,6 +4,8 @@ This repo houses the reproducible analysis pipeline and manuscript sources for *
 
 **Manuscript authors**: Isaac Eckert, Clara Qin, Stephanie Kivlin, Bronte Shelton, Diego Yusta Belsham, Monika Fischer, Justine Karst, and Jason Pither
 
+**Acknowledgements**: This manuscript is the product of a working group that was generously supported by the [Canadian Institute for Ecology and Evolution](https://www.ciee-icee.ca).  Additional funding acknowledgements are provided in the manuscript. 
+
 **Script authors**: Jason Pither and Claude (Sonnet 4.6, 5, Opus 4.8)
 
 **Citation**: A preprint of this manuscript is available on EcoEvoRxiv: [https://ecoevorxiv.org/repository/view/14029/](https://ecoevorxiv.org/repository/view/14029/). A DOI for the data and code archive on Borealis will be provided when ready. 
