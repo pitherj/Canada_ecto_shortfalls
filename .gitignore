@@ -75,14 +75,14 @@ figures/*.tif
 *.utf8.md
 *.knit.md
 
-# ---- FACETS submission sources -----------------------------------------------
-# The Quarto sources in FACETS/ are tracked: they read from data_derived/ and
-# regenerate the manuscript and supplemental materials, so they are part of the
-# reproducible pipeline. Only their rendered outputs are excluded.
-FACETS/*.docx
-#FACETS/*.pdf
-FACETS/*.html
-FACETS/*.tex
+# ---- FACETS manuscript folder ------------------------------------------------
+# The whole FACETS/ folder (manuscript and Supplemental Materials sources, their
+# rendered PDFs, the bibliography and citation style) is kept out of git for now,
+# while the manuscript is under review. Quarto sources were previously tracked;
+# they were untracked on 2026-09-21. They remain in git HISTORY, and the version
+# that was submitted to FACETS is preserved by the tag facets-submission-2026-07
+# (commit c719d52): `git show facets-submission-2026-07:FACETS/manuscript_FACETS_final.qmd`.
+FACETS/
 
 # ---- Claude Code -------------------------------------------------------------
 .claude/
@@ -96,8 +96,7 @@ repro/verify_*
 temp/
 
 # working copies of the manuscript and supplemental sources for the first
-# revision (post-FACETS-submission). Untracked for now, in the same spirit as
-# the FACETS/ rendered outputs; the tracked sources remain in FACETS/.
+# revision (post-FACETS-submission). Untracked for now, like FACETS/ above.
 revision_01/
 
 # temporary staging area for the OSF deposit (mirrors ARCHIVING.md; not tracked)

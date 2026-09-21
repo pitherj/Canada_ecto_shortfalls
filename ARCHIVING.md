@@ -2,8 +2,8 @@
 
 The **Borealis** deposit (UBC's Dataverse instance) will be the citable archive of
 record for this project, with a minted DOI. A [GitHub repository](https://github.com/pitherj/Canada_ecto_shortfalls) is also available and is the
-working home for code and manuscript sources; the two are complementary, not
-duplicates.
+working home for the code (the manuscript sources are kept locally while the
+manuscript is under review); the two are complementary, not duplicates.
 
 Collection: **UBC BLERF** — <https://borealisdata.ca/dataverse/UBC_BLERF>
 
@@ -14,7 +14,7 @@ Collection: **UBC BLERF** — <https://borealisdata.ca/dataverse/UBC_BLERF>
 | Component | Size | GitHub | Borealis | Rationale |
 |---|---|---|---|---|
 | `scripts/` | < 1 MB | ✅ | ✅ | Snapshot at submission fixes the analysis to a citable version |
-| `FACETS/` sources (`.qmd`, `.bib`, `.csl`) | < 1 MB | ✅ | ✅ | Same |
+| `FACETS/` sources (`.qmd`, `.bib`, `.csl`) | < 1 MB | ❌ (for now) | ✅ | Not tracked in git while the manuscript is under review; the submitted version is preserved in git history (tag `facets-submission-2026-07`) |
 | `figures/` PNG + JPG | 34 MB | ✅ | ✅ | Needed to render the manuscript from a clean clone |
 | `figures/` TIFF | 333 MB | ❌ | ✅ | FACETS submission deliverables; regenerable, and poorly suited to git |
 | `data_derived/` | ~1.4 GB | ❌ | ✅ | The analysis outputs; too large for git, and the substance of the deposit |

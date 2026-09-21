@@ -174,6 +174,7 @@ ECM_manuscript/
 ├── figures/                      # tracked, except the high-resolution .tif versions
 ├── repro/                        # reproducibility baseline (99_verify_reproducibility.R)
 └── FACETS/                       # manuscript + Supplemental Materials sources
+                                  #   (kept locally; NOT tracked while under review)
     ├── manuscript_FACETS_final.qmd
     ├── supplemental_materials_SM1_FACETS.qmd
     ├── supplemental_materials_SM2_FACETS.qmd
@@ -226,6 +227,10 @@ Supplemental Materials documents.
 | `scripts/99_verify_reproducibility.R` | Fingerprints outputs and verifies a rerun reproduces them |
 | `ARCHIVING.md` | Borealis deposit plan: what is archived, licences, checklist |
 
+The three `FACETS/` documents listed above are kept locally and are not tracked in
+this repository while the manuscript is under review. The version submitted to
+FACETS can be retrieved with `git show facets-submission-2026-07:FACETS/manuscript_FACETS_final.qmd`.
+
 ## Archiving
 
 This GitHub repository is the working home for the code and manuscript
@@ -234,7 +239,8 @@ archive of record, with a minted DOI (being prepared currently).
 
 | Component | GitHub | Borealis |
 |---|---|---|
-| `scripts/`, `FACETS/` sources | ✅ tracked | ✅ snapshot at submission |
+| `scripts/` | ✅ tracked | ✅ snapshot at submission |
+| `FACETS/` sources | ❌ not tracked while the manuscript is under review (as-submitted version kept in git history, tag `facets-submission-2026-07`) | ✅ snapshot at submission |
 | `figures/` (PNG, JPG) | ✅ tracked | ✅ |
 | `figures/` (TIF, ~332 MB) | ❌ regenerable | ✅ |
 | `data_derived/` (~1.4 GB) | ❌ volume | ✅ |
