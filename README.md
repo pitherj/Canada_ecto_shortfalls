@@ -74,13 +74,17 @@ flowchart TD
     EMF --> S20["20_depth_discard.R"] --> FS3["Figure S3"]
     EMF --> S14["14_prestonian.R"]
     EMF --> S15["15_darwinian.R"]
+    EMF --> S15b["15b_darwinian_sh_match.R\nSH-level genome coverage"]
+    R2 --> S15b
+    R3 --> S15b
     EMF --> S16["16_raunkiaeran.R"] --> T4["Table 4"]
     EMF --> S17["17_hutchinsonian.R"] --> F3["Figure 3, S4, Table S1"]
     EMF --> S18["18_eltonian.R"] --> TS2["Figure 4, Table S2"]
     S08 --> S18
     HOST --> S18
     EMF --> S19["19_sampling_maps.R"] --> F1["Figure 1, S5"]
-    S09 --> S19
+    S09 --> S09b["09b_table_s4_check.R"] --> TS4["Table S4"]
+    S09b --> S19
 ```
 
 ## Prerequisites
@@ -90,13 +94,13 @@ flowchart TD
 - **R** (developed under v4.5.2).
 - **[Quarto](https://quarto.org)** — only needed to render the manuscript or
   Supplemental Materials documents; not required to run the `scripts/` pipeline.
-- **`ITSx`** (≥ 1.1; developed under v1.1.3) — required by `03_genbank.R` to detect and extract the
+- **`ITSx`** (≥ 1.1; developed under v1.1.3) — required by `03_genbank.R` and `15b_darwinian_sh_match.R` to detect and extract the
   ITS1/ITS2 sub-regions from GenBank sequences. Download from
   <https://microbiology.se/software/itsx/> and put the `ITSx` script *and its
   bundled HMM-profile directory* on `PATH`.
 - **`HMMER`** (3.x) — ITSx's backend; ITSx will not run without it.
   `brew install hmmer` (macOS) / `sudo apt install hmmer` (Ubuntu).
-- **`vsearch`** (≥ 2.x) — required by `03_genbank.R` for SH assignment.
+- **`vsearch`** (≥ 2.x) — required by `03_genbank.R` and `15b_darwinian_sh_match.R` for SH assignment.
   `brew install vsearch` (macOS) / `sudo apt install vsearch` (Ubuntu).
 - **`awk`** — used by a shared helper in `00_setup.R` and by
   `02_globalfungi.R`, `12_wallacean_density_map.R` and
@@ -148,7 +152,7 @@ Some acquisition steps call external services. Store keys in `~/.Renviron`
 
 | Key | Service | How to obtain | Needed for |
 |---|---|---|---|
-| `ENTREZ_KEY` | NCBI / Entrez | register at ncbi.nlm.nih.gov | `03_genbank.R`, `18_eltonian.R` (recommended; raises the rate limit) |
+| `ENTREZ_KEY` | NCBI / Entrez | register at ncbi.nlm.nih.gov | `03_genbank.R`, `15b_darwinian_sh_match.R`, `18_eltonian.R` (recommended; raises the rate limit) |
 | `GBIF_USER`, `GBIF_PWD`, `GBIF_EMAIL` | GBIF downloads | register at gbif.org | `09_linnean.R` — **only** if the provided GBIF specimen ZIP in `data_raw/gbif/` is absent |
 
 `07_bien2_ranges.R` (biendata.org) and `06_host_species.R` (BIEN) require
@@ -203,7 +207,7 @@ stored here.
 | Figure S4 | `figures/Figure-S4_ecozone_sampling_map.png` (+ grey variant, see below) | `17_hutchinsonian.R` |
 | Figure S5 | `figures/Figure-S5_gbif_specimens.png` (+ grey variant, see below) | `19_sampling_maps.R` |
 | Tables 1–4 | `data_derived/` CSVs, rendered into tables by `FACETS/manuscript_FACETS_final.qmd` | 09, 11, 16, 18 |
-| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` | 09, 17, 18 |
+| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` | 09b, 17, 18 |
 
 Figure 5 is a manually assembled schematic composite built from panels taken
 from Figures 1, 3, 4, S1, and S4. To support that, scripts `10`, `17`,

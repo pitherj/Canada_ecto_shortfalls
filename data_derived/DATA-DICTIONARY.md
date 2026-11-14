@@ -211,7 +211,15 @@ rebuilt when it changes), `genbank_global_ecm_meta.csv` (worldwide GenBank
 records for each EcM genus, topped up genus by genus rather than re-pulled),
 `genbank_global_ecm_genera_queried.csv` (which genera have been asked about, as
 opposed to which returned records — a genus with no GenBank records contributes
-no rows, so without this it would be re-queried on every run) (`18_eltonian.R`).
+no rows, so without this it would be re-queried on every run) (`18_eltonian.R`);
+`darwinian_its_input.fasta` (MycoCosm genome ITS sequences relabelled `g1`,
+`g2`, …), `darwinian_itsx.{ITS2,full}.fasta`,
+`darwinian_itsx.{positions,problematic,summary}.txt`,
+`darwinian_itsx_no_detections.fasta` (ITSx output),
+`darwinian_vsearch_query.fasta` (ITS2 queries ≥ 100 bp),
+`darwinian_vsearch_hits.txt` (`15b_darwinian_sh_match.R`). Unlike most
+checkpoints, these are **deleted and rebuilt on every run** of `15b` rather
+than reused, so they never hold results from an earlier lookup table.
 
 ---
 
@@ -222,8 +230,29 @@ no rows, so without this it would be re-queried on every run) (`18_eltonian.R`).
 | `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; GBIF specimen counts. Long-format `metric,value` table (36 metrics). Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
 | `linnean_genus_coverage.csv` | All FungalTraits EcM genera flagged for whether observed in Canada. |
 | `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S5. |
-| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for EcM genera **without** sequence data in Canada. Feeds Figure S5 and Table S4. |
+| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for FungalTraits EcM genera whose genus **name** matches no genus in our Canadian sequence dataset (32 genera). This is the starting list checked by `09b_table_s4_check.R`; it over-counts genuine gaps because of synonyms and UNITE relabelling. |
+| `linnean_table_s4_reconciliation.csv` | Produced by `09b_table_s4_check.R`. One row per genus in the file above, with the evidence for and against "no Canadian sequence data" and the resulting category. Feeds Table S4. |
+| `linnean_gbif_ecm_nosequence_confirmed_canada.csv` | Produced by `09b_table_s4_check.R`. The subset of `linnean_gbif_ecm_nosequence_canada.csv` for genera confirmed to lack Canadian ITS sequences (categories "ITS sequences exist, none from Canada" and "No ITS sequences found"). Same fields as that file. Feeds the orange points of Figure S5. |
 | `linnean_gbif_plotted_counts.csv` | Produced by `19_sampling_maps.R`. Counts of GBIF points actually drawn on Figure S5 (distinct georeferenced coordinates within the Canada boundary), one row per category. Used to caption Figure S5 dynamically in the Supplemental Information. |
+
+#### `linnean_table_s4_reconciliation.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `genus_gbif` | character | Genus name in the GBIF download |
+| `gbif_records` | integer | Number of GBIF specimen records for the genus |
+| `gbif_species` | integer | Number of distinct species names among those records |
+| `current_genus` | character | Index Fungorum current name (from `data_raw/table_s4_check/table_s4_genus_synonyms.csv`) |
+| `synonym_applied` | logical | `TRUE` if `current_genus` differs from `genus_gbif` |
+| `if_genus_record`, `if_current_record` | integer | Index Fungorum record numbers |
+| `source` | character | Source of the synonymy decision |
+| `n_own_genbank_canada` | integer | Records in our own GenBank download (`genbank_emf_canada_long.csv`) whose submitter-given name is in this genus and whose country field begins "Canada" |
+| `unite_labels_given` | character | Genus labels UNITE assigned to those records (shows why the genus looked absent); `NA` if none |
+| `n_genbank_its_canada_search` | integer | Records returned by the targeted GenBank query restricted to `"Canada"[Country]` |
+| `n_genbank_its_world` | integer | Records returned by the targeted worldwide GenBank query |
+| `n_genbank_its_canada_confirmed` | integer | Of the Canada-query records, those whose own country field begins "Canada" |
+| `current_genus_in_our_data` | logical | `TRUE` if `current_genus` is a genus in `emf_canada_em_only.csv` |
+| `category` | character | One of: "Synonym of a genus in our data"; "Canadian ITS sequences exist"; "ITS sequences exist, none from Canada"; "No ITS sequences found" (assigned in that order; first match wins) |
 
 #### `linnean_summary.csv` — structure
 
@@ -551,6 +580,24 @@ is not adopted are given in SM1 and in the script header.
 | `darwinian_mycocosm_matches.csv` | All MycoCosm records whose genus matches a Canadian EcM genus. |
 | `darwinian_species_matches.csv` | Canadian EcM species matched to a MycoCosm genome record. |
 | `darwinian_genus_summary.csv` | Per-genus MycoCosm genome-record counts. |
+| `darwinian_sh_summary.csv` | SH-level genome coverage, named and un-named SHs separately (`15b_darwinian_sh_match.R`). Long-format `metric,value` table (16 metrics). |
+| `darwinian_sh_coverage.csv` | One row per Canadian SH: named or un-named, and whether any genome falls in it (`15b`). |
+| `darwinian_genome_sh_assignments.csv` | One row per MycoCosm genome in a Canadian EcM genus: its ITS accession, outcome, and the SH(s) credited (`15b`). |
+| `darwinian_its_needs_review.csv` | The genomes in the file above that were not assigned to an SH, with the GenBank query used — the to-do list for manual checking (`15b`). |
+
+The first four files come from `15_darwinian.R`, which matches genomes to
+species **by name**. The last four come from `15b_darwinian_sh_match.R`, which
+matches **by sequence**: each genome's same-strain GenBank ITS sequence (see
+`data_raw/mycocosm_its/`) has its ITS2 region extracted with ITSx and is
+assigned to a UNITE SH with vsearch at 98.5% identity, against the same pinned
+UNITE file and with the same settings as `03_genbank.R`. A Canadian SH "has a
+genome" if at least one genome is credited to it. This rule treats named and
+un-named SHs identically, which name matching cannot do.
+
+**Licence inheritance** (`15b` files): derived from MycoCosm (no licence stated
+for the organism list), GenBank (no NCBI-imposed restrictions) and UNITE
+(CC BY 4.0). Redistribution is therefore permitted under this directory's
+CC BY-NC 4.0 licence.
 
 #### `darwinian_summary.csv` — structure
 
@@ -573,6 +620,56 @@ is not adopted are given in SM1 and in the script header.
 | `darwinian_genus_summary.csv` | `genus` | character | Canadian EcM genus |
 | | `n_genomes` | integer | Count of MycoCosm genome records for the genus |
 | | `record_ids` | character | Semicolon-separated MycoCosm record IDs |
+
+#### `darwinian_sh_summary.csv` — structure
+
+| Field | Type | Description |
+|---|---|---|
+| `metric` | character | One of 16 metrics, in this order: genomes in EcM genera present in Canada; genomes with a same-strain ITS accession; genomes assigned to a UNITE SH; genomes not assigned; Canadian SHs (all); SHs with ≥ 1 genome (count, %); named SHs (count, with ≥ 1 genome, %); un-named SHs (count, with ≥ 1 genome, %, % **without** a genome); un-named SHs in a genus with no MycoCosm genome (a lower bound on absence that needs no sequence matching); named species (UNITE label) with ≥ 1 genome via SH match (for comparison with the name-based count in `darwinian_summary.csv`) |
+| `value` | numeric | Count, or percentage rounded to one decimal place |
+
+**Record count**: 16 rows. Values on 14 November 2026: 186 genomes, 64 assigned
+to an SH; 38 of 2,822 Canadian SHs have a genome (37 of 1,629 named; 1 of
+1,193 un-named); 719 un-named SHs are in genera with no genome.
+
+#### `darwinian_sh_coverage.csv` — fields
+
+| Field | Type | Description | Nullable |
+|---|---|---|---|
+| `sh_code` | character | UNITE SH code (e.g. `SH0946445.10FU`) | No |
+| `genus` | character | Genus label of the SH in `emf` | Yes |
+| `species` | character | UNITE species label (e.g. `Suillus_sp`, `Inocybe_trochili`) | Yes |
+| `named` | logical | `TRUE` if the species label is present and does not end in a placeholder (`sp`, `spp`, `cf`, `aff`); the same rule as `15_darwinian.R` | No |
+| `n_genomes` | integer | Number of genomes credited to this SH (0 if none) | No |
+| `genomes` | character | Semicolon-separated MycoCosm names of those genomes | Yes |
+| `has_genome` | logical | `n_genomes > 0` | No |
+| `genus_has_genome` | logical | `TRUE` if any MycoCosm genome carries this SH's genus name (a name-based check, independent of sequence matching) | No |
+
+**Record count**: 2,822 rows (one per SH code in `emf_canada_em_only.csv`;
+matches the Linnean summary).
+
+#### `darwinian_genome_sh_assignments.csv` and `darwinian_its_needs_review.csv` — fields
+
+Both files share these fields. The review file holds only the rows whose
+`outcome` is not `sh_assigned`, and adds `query` and `n_hits` (as in
+`data_raw/mycocosm_its/mycocosm_its_lookup.csv`).
+
+| Field | Type | Description | Nullable |
+|---|---|---|---|
+| `taxon_name` | character | Full MycoCosm genome name | No |
+| `genus`, `epithet`, `strain` | character | Name parts, as in the lookup table | `epithet`, `strain`: yes |
+| `its_accession` | character | GenBank ITS accession used | Yes |
+| `source` | character | `auto` or `manual`, from the lookup table | No |
+| `outcome` | character | `sh_assigned` (all tied best UNITE hits share one identity); `ambiguous_tie` (tied hits belong to different species or different un-named SHs, so no SH is credited); `no_unite_hit_at_98.5` (ITS2 matches no UNITE reference at ≥ 98.5%); `no_its2_extracted` (ITSx found no ITS2 of ≥ 100 bp, e.g. an ITS1-only record); `no_its_accession (<status>)` (no accession; `<status>` is the lookup status) | No |
+| `credited_sh` | character | SH code(s) credited, semicolon-separated. More than one only when a named species is split across SHs and the genome ties equally with each. Empty unless `outcome = sh_assigned`. | Yes |
+| `unite_names` | character | UNITE species label(s) of the tied best hits | Yes |
+| `best_identity` | numeric (%) | Identity of the best UNITE hit | Yes |
+| `notes` | character | Carried from the lookup table | Yes |
+
+**Record count**: 186 rows in the assignments file; 122 in the review file
+(14 November 2026). Outcomes: 64 `sh_assigned`, 61 `no_unite_hit_at_98.5`,
+38 `no_its_accession (no_verified_hit)`, 20 `no_its_accession (no_strain_code)`,
+2 `ambiguous_tie`, 1 `no_its2_extracted`.
 
 ---
 

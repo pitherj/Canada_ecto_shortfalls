@@ -3,22 +3,23 @@
 All external input data for the ECM_manuscript pipeline. Everything the
 pipeline generates goes to `data_derived/` instead.
 
-> **Permissions — two subdirectories must stay writable.** The bulk of this
+> **Permissions — three subdirectories must stay writable.** The bulk of this
 > directory can safely be made read-only (`chmod -R a-w data_raw`) to protect
-> the inputs from accidental modification. Two subdirectories are exceptions,
+> the inputs from accidental modification. Three subdirectories are exceptions,
 > because scripts write into them:
 >
 > | Subdirectory | Written by | When |
 > |---|---|---|
 > | `bien2_ranges/` | `07_bien2_ranges.R` | **every run** — it rewrites `download_log.csv` even when all ranges are already present |
 > | `biotime/` | `14_prestonian.R` | only if the BioTIME `.rds` is absent |
+> | `mycocosm_its/` | `15b_darwinian_sh_match.R` | only when the MycoCosm list contains genomes not yet in the lookup table (always true on a first run, and after a MycoCosm refresh that adds genomes) |
 >
 > Locking those will abort the pipeline with a "Cannot open file for writing"
 > error. To protect the inputs while keeping the pipeline runnable:
 >
 > ```bash
 > chmod -R a-w data_raw
-> chmod -R u+w data_raw/bien2_ranges data_raw/biotime
+> chmod -R u+w data_raw/bien2_ranges data_raw/biotime data_raw/mycocosm_its
 > chmod u+w data_raw data_raw/DATA-DICTIONARY.md   # if editing this file
 > ```
 >
@@ -56,6 +57,7 @@ before any future release, since terms change.
 | BioTIME (study 460 only) | CC BY | ✅ Permitted | Yes |
 | Ecozones / ecoregions (AAFC) | Open Government Licence – Canada | ✅ Permitted incl. commercial | Yes |
 | GenBank / NCBI | No NCBI-imposed restrictions | ✅ Permitted | Yes |
+| Index Fungorum (32 genus records, Table S4 check) | Not verified | Not yet checked: verify before deposit | Yes |
 | **FungalRoot** | **CC BY-NC 4.0** | ⚠️ Non-commercial only | Yes |
 | **GBIF occurrence download** | **CC BY-NC 4.0** | ⚠️ Non-commercial only | Yes |
 | **GADM** | Academic / non-commercial | ❌ Not without prior permission | Yes |
@@ -101,6 +103,9 @@ data_raw/                                   # external inputs (see permissions n
 ├── biotime/
 ├── mycocosm/
 │   └── mycocosm_organism_list.csv
+├── mycocosm_its/                            # genome → GenBank ITS link (15b_darwinian_sh_match.R)
+│   ├── mycocosm_its_lookup.csv              # auto-built; rows may be hand-edited
+│   └── mycocosm_its_sequences.fasta         # cached ITS sequences
 ├── climate/                                 # WorldClim 2.1 (~1.3 GB)
 │   └── wc2.1_country/CAN_wc2.1_30s_bio.tif
 ├── bien2_ranges/                            # BIEN2 modelled ranges (07_bien2_ranges.R)
@@ -113,7 +118,13 @@ data_raw/                                   # external inputs (see permissions n
 ├── admin_boundaries/                        # GADM (auto via 01_spatial_data.R)
 ├── ecoregions/                              # auto via 01_spatial_data.R
 ├── natural_earth/                           # auto via 01_spatial_data.R
-└── gbif/                                     # GBIF specimen ZIP (09_linnean.R)
+├── gbif/                                     # GBIF specimen ZIP (09_linnean.R)
+└── table_s4_check/                           # Table S4 check (09b_table_s4_check.R)
+    ├── table_s4_genus_synonyms.csv           # hand-curated
+    ├── index_fungorum_2026-11-12/<Genus>.xml # raw Index Fungorum responses
+    └── ncbi_genus_queries/                   # cached GenBank queries
+        ├── ncbi_query_log.csv
+        └── ncbi_query_uids.csv
 ```
 
 ---
@@ -427,7 +438,14 @@ Read by `14_prestonian.R` for time-series records with Canadian locations.
 **Source**: https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
 **Licence**: Not indicated for the organism list itself. Under the JGI data policy, published data are unrestricted while use-restricted genomes require permission from the proposal PI; the list used here records genome availability rather than genome content.
 **Purpose**: cross-referenced by `15_darwinian.R` to assess genome availability
-for Canadian EcM genera.
+for Canadian EcM genera, and by `15b_darwinian_sh_match.R` as the list of
+genomes to link to GenBank ITS sequences (see the next entry).
+
+**The `id` column is not a stable identifier.** It is the row number from the
+manual copy-and-paste, so it changes whenever the list is refreshed.
+`15b_darwinian_sh_match.R` identifies genomes by `taxon_name` instead. The
+copied names also contain invisible "zero-width space" characters from the web
+page (e.g. before "CIRM-BRFM"); `15b` strips these before use.
 
 | Field | Type | Description |
 |---|---|---|
@@ -436,6 +454,80 @@ for Canadian EcM genera.
 | `assembly_length` | integer | Genome assembly length (bp) |
 | `num_genes` | integer | Number of predicted genes |
 | `publication` | character | Associated publication reference, if any |
+
+---
+
+## MycoCosm genome → GenBank ITS lookup (SH-level Darwinian shortfall)
+
+**Location**: `data_raw/mycocosm_its/`
+**Used by**: `15b_darwinian_sh_match.R` (which also writes both files)
+**Source**: NCBI GenBank nucleotide database, queried through Entrez (`rentrez`)
+**Licence**: No NCBI-imposed restrictions; submitters may retain rights (as for the other GenBank inputs)
+**Access date**: First built 14 November 2026; each row records its own `retrieved_on` date
+**Downloaded by**: Automatic, on the first run and whenever new genomes appear in the MycoCosm list. Needs `ENTREZ_KEY`.
+**Git-ignored**: Yes (all of `data_raw/`)
+
+**Why it exists.** `15_darwinian.R` matches genomes to species by name, which
+cannot assess UNITE Species Hypotheses (SHs) that have no species name. `15b`
+instead links each MycoCosm genome in a Canadian EcM genus to an ITS sequence
+deposited in GenBank **for the same strain**, then assigns that sequence to a
+UNITE SH. These two files hold the genome-to-sequence link and the sequences
+themselves, so later runs reuse them rather than searching again.
+
+**How a row is built (automatic search).** The MycoCosm name is split into
+genus, epithet and strain code (e.g. "Laccaria bicolor S238N v1.0" →
+*Laccaria* / *bicolor* / S238N). GenBank is searched for organism + strain code
++ ITS terms. A record is accepted only if its own `strain`, `isolate`,
+`specimen_voucher` or `culture_collection` field matches the strain code, after
+lower-casing and removing spaces and punctuation. Codes of 5 or more characters
+may also match when one contains the other (e.g. "S238N" in "S238N-H82").
+Among accepted records, those whose title says they include ITS2 are preferred,
+then the longest.
+
+**How the file is maintained.**
+- On each run, only genomes **not already in the lookup** are searched for.
+  Existing rows are reused unchanged, so results are stable between runs.
+- A row can be resolved by hand: enter the GenBank accession in
+  `its_accession`, set `status` to `matched` and `source` to `manual`, and say
+  how it was found in `notes`. Manual rows are never overwritten.
+- To force an automatic row to be searched again, delete that row.
+- Genomes that have dropped off the MycoCosm list keep their row but are not
+  counted.
+
+| File | Description |
+|---|---|
+| `mycocosm_its_lookup.csv` | One row per genome: the search sent, its outcome, and the chosen ITS accession. Written by `15b`; may be hand-edited as above. |
+| `mycocosm_its_sequences.fasta` | The ITS sequences for every accession in the lookup with `status = matched`, as downloaded from GenBank. Headers are GenBank's (`>ACCESSION.VERSION description`). Only missing accessions are downloaded on later runs; the download stops with an error, saving nothing, if any requested accession fails to arrive. |
+
+#### `mycocosm_its_lookup.csv` — fields
+
+| Field | Type | Description | Nullable |
+|---|---|---|---|
+| `taxon_name` | character | Full MycoCosm genome name, zero-width characters removed. The key for the row. | No |
+| `genus` | character | Genus parsed from `taxon_name` | No |
+| `epithet` | character | Species epithet, including qualifiers or ranks where present (e.g. "aff. grandis", "muscaria var. formosa"). Empty for "sp." genomes. | Yes |
+| `strain` | character | Strain code: the rest of the name after genus and epithet, with the assembly version ("v1.0") removed | Yes |
+| `query` | character | Exact Entrez search string sent. Empty when no search was possible (`no_strain_code`). | Yes |
+| `query_translation` | character | NCBI's interpretation of the query | Yes |
+| `n_hits` | integer | Number of GenBank records the query returned | Yes |
+| `its_accession` | character | Chosen GenBank accession, with version (e.g. `MZ570244.1`). Empty unless `status = matched`. | Yes |
+| `its_length` | integer | Length of that record, in base pairs | Yes |
+| `status` | character | `matched` (strain-verified record found); `no_strain_code` (name has no usable strain code, or one shorter than 3 characters); `no_verified_hit` (no hit, or no hit with a matching strain field); `too_many_hits` (over 500 hits, a sign that GenBank ignored the strain term) | No |
+| `source` | character | `auto` (written by the automatic search) or `manual` (hand-entered; never overwritten) | No |
+| `retrieved_on` | date | Date the automatic search ran (YYYY-MM-DD) | No |
+| `notes` | character | When several records passed the strain check, the other accessions; for manual rows, how the accession was found | Yes |
+
+**Integrity** (first build, 14 November 2026): 186 rows (one per MycoCosm
+genome in a Canadian EcM genus, the same set as `15_darwinian.R`). Statuses:
+128 `matched`, 38 `no_verified_hit`, 20 `no_strain_code`. The FASTA holds 127
+sequences, one fewer than the matched rows, because two *Laccaria bicolor*
+S238N genome versions share one accession.
+
+**Caveat on accessions starting "QB".** Many accepted records carry accessions
+beginning "QB". Going by their titles and strain names, these appear to be
+rDNA sequences deposited by the genome projects. This has not been confirmed.
+If they were assembled from genome reads, they may contain small sequence
+errors.
 
 ---
 
@@ -683,6 +775,60 @@ absent.
 
 ---
 
+## Table S4 check: genus synonymy and targeted GenBank queries
+
+**Location**: `data_raw/table_s4_check/`
+**Used by**: `09b_table_s4_check.R`
+**Why it exists**: Table S4 lists EcM genera with Canadian GBIF specimens whose
+genus name does not match any genus in our Canadian sequence dataset. Because
+that test compares names across GBIF, FungalTraits and UNITE, a reviewer
+pointed out that some listed genera are synonyms or do have Canadian sequences.
+These files hold the evidence used to check each of the 32 genera.
+
+| File | Description |
+|---|---|
+| `table_s4_genus_synonyms.csv` | **Hand-curated.** One row per genus under review, giving its Index Fungorum current name and record numbers. Built from the raw responses in `index_fungorum_2026-11-12/`. `09b_table_s4_check.R` stops if a genus under review has no row. |
+| `index_fungorum_2026-11-12/<Genus>.xml` | Raw responses from the Index Fungorum `NameSearch` web service (`https://www.indexfungorum.org/ixfwebservice/fungus.asmx/NameSearch`), one per genus plus `Boletinus_cavipes.xml`, retrieved 12 November 2026. Kept as the evidence behind the synonym table; not read by any script. |
+| `ncbi_genus_queries/ncbi_query_log.csv` | Written by `09b_table_s4_check.R` on its first run. One row per GenBank query (32 genera × Canada / worldwide). |
+| `ncbi_genus_queries/ncbi_query_uids.csv` | Written alongside the log. Every GenBank UID each query returned. |
+
+#### `table_s4_genus_synonyms.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `genus_gbif` | character | Genus name as it appears in the GBIF download |
+| `current_genus` | character | Current genus name per Index Fungorum (same as `genus_gbif` when the genus is accepted) |
+| `synonym_applied` | logical | `TRUE` if `current_genus` differs from `genus_gbif` |
+| `if_genus_record` | integer | Index Fungorum record number of the genus name |
+| `if_current_record` | integer | Index Fungorum record number of the current name |
+| `source` | character | Where the decision comes from (Index Fungorum; Reviewer 1) |
+| `note` | character | Plain-language justification, including homonyms set aside |
+
+#### `ncbi_query_log.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `genus_gbif` | character | Genus queried |
+| `scope` | character | `canada` or `world` |
+| `query` | character | Exact Entrez search string sent |
+| `query_translation` | character | NCBI's interpretation of the query (shows when NCBI mapped a name to another taxon, e.g. Bankera → Phellodon) |
+| `n_hits` | integer | Number of GenBank nucleotide records returned |
+| `retrieved_on` | date | Date of the query (YYYY-MM-DD) |
+
+#### `ncbi_query_uids.csv` — fields
+
+| Field | Type | Description |
+|---|---|---|
+| `genus_gbif` | character | Genus queried |
+| `scope` | character | `canada` or `world` |
+| `uid` | character | GenBank nucleotide UID |
+| `country` | character | For `canada` rows: the record's GenBank `country` qualifier (collection locality, e.g. "Canada: Quebec"); `NA` if absent. Always `NA` for `world` rows. Only rows beginning "Canada" are counted as Canadian. |
+
+To re-query GenBank, delete `ncbi_genus_queries/` and re-run `09b_table_s4_check.R`
+(needs `ENTREZ_KEY`); counts will then reflect the new retrieval date.
+
+---
+
 ## Live-query sources (no file in `data_raw/`)
 
 Five inputs are queried directly from web services rather than downloaded as
@@ -718,7 +864,14 @@ determinations that produce our host list, and both are separately licensed:
 NSR draws on twelve checklists in total (<https://nsr.biendata.org/sources/>);
 the other ten cover regions outside Canada and do not affect this analysis.
 
-**Access dates.** GenBank was queried 29 June 2026. The NSR checklist refresh
+**GenBank is also queried by `15b_darwinian_sh_match.R`**, for same-strain ITS
+sequences of MycoCosm genomes. Unlike the queries above, those results are
+cached in `data_raw/mycocosm_its/` rather than in `data_derived/checkpoints/`,
+because the lookup table can be hand-edited and must survive a clean rebuild of
+`data_derived/` (see the "MycoCosm genome → GenBank ITS lookup" entry).
+
+**Access dates.** GenBank was queried 29 June 2026 (`03_genbank.R`,
+`18_eltonian.R`) and 14 November 2026 (`15b_darwinian_sh_match.R`). The NSR checklist refresh
 dates above are properties of the service, not of our query.
 
 **API keys.** GenBank access benefits from an `ENTREZ_KEY` (see the root
