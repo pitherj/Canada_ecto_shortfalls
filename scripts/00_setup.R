@@ -286,6 +286,182 @@ write_checkpoint_atomically <- function(path, write_fun) {
   invisible(path)
 }
 
+# ---- EcM definition: classify_ecm() and its reference tables ---------------
+# One definition of "ectomycorrhizal" (EcM), used by 04_combine_ecm_dataset.R
+# for our sequence records and by 09_linnean.R for GBIF specimen genera.
+#   1. Genus rule: the genus is listed as EcM (primary_lifestyle) in
+#      FungalTraits v1.2.
+#   2. Family rule: if the genus is absent from FungalTraits, or there is no
+#      genus label, the record is EcM when at least FAMILY_ECM_MIN_FRAC (two
+#      thirds) of the genera FungalTraits lists in its family are EcM.
+# A genus that FungalTraits lists as NOT EcM is never admitted.
+FAMILY_ECM_MIN_FRAC <- 2 / 3
+
+# ecm_reference(): read FungalTraits once and return what classify_ecm() needs:
+# the EcM genera, all FungalTraits genera, and a per-family summary (number of
+# genera, number EcM, whether the family passes, and the shared EcM lineage
+# if all EcM genera in the family have the same one).
+ecm_reference <- function(ft_path = paths$fungaltraits) {
+  ft <- readr::read_csv(ft_path, show_col_types = FALSE) |>
+    dplyr::rename_with(tolower) |>
+    dplyr::mutate(genus_lower = tolower(trimws(genus)),
+                  is_ecm      = primary_lifestyle %in% "ectomycorrhizal")
+  family <- ft |>
+    dplyr::filter(!is.na(family)) |>
+    dplyr::group_by(family) |>
+    dplyr::summarise(
+      ft_genera      = dplyr::n_distinct(genus_lower),
+      ft_ecm_genera  = dplyr::n_distinct(genus_lower[is_ecm]),
+      family_lineage = {
+        l <- unique(stats::na.omit(ectomycorrhiza_lineage_template[is_ecm]))
+        if (length(l) == 1L) l else NA_character_
+      },
+      .groups = "drop") |>
+    dplyr::mutate(frac_ecm      = ft_ecm_genera / ft_genera,
+                  family_passes = frac_ecm >= FAMILY_ECM_MIN_FRAC)
+  list(ft = ft,
+       em_genera = unique(ft$genus_lower[ft$is_ecm]),
+       ft_genera = unique(ft$genus_lower),
+       family    = family)
+}
+
+# has_genus_label(): FALSE for a missing genus or a UNITE placeholder such as
+# "Boletaceae_gen_Incertae_sedis" (an SH placed only to family).
+has_genus_label <- function(genus) {
+  !is.na(genus) & nzchar(trimws(genus)) & !grepl("Incertae_sedis", genus)
+}
+
+# classify_ecm(): for vectors of genus and family names, return one of
+#   "genus"                  EcM by the genus rule
+#   "family"                 EcM by the family rule
+#   "FungalTraits: not EcM"  genus listed in FungalTraits, not as EcM
+#   "family rule: refused"   family rule applied, family below the threshold
+#                            or not in FungalTraits
+classify_ecm <- function(genus, family, ref) {
+  g   <- tolower(trimws(genus))
+  fam <- sub("_.*$", "", family)               # "Boletaceae_fam..." -> "Boletaceae"
+  lab <- has_genus_label(genus)
+  passes <- fam %in% ref$family$family[ref$family$family_passes]
+  dplyr::case_when(
+    lab & g %in% ref$em_genera ~ "genus",
+    lab & g %in% ref$ft_genera ~ "FungalTraits: not EcM",
+    passes                     ~ "family",
+    TRUE                       ~ "family rule: refused")
+}
+
+# ---- coords_in_canada(): is each point inside Canada? ------------------------
+# TRUE if the point lies inside the Canada boundary (paths$canada_bound, built
+# in 01_spatial_data.R and simplified at 1 km) buffered by 2 km; FALSE if
+# outside; NA if lat or lon is missing. The buffer is applied in the
+# equal-area projection, so it is 2 km everywhere. Used by
+# 04_combine_ecm_dataset.R (coord_in_canada) and 09_linnean.R (Table S4).
+coords_in_canada <- function(lat, lon, buffer_m = 2000) {
+  out <- rep(NA, length(lat))
+  ok  <- which(!is.na(lat) & !is.na(lon))
+  if (length(ok) == 0L) return(out)
+  boundary <- sf::st_read(paths$canada_bound, quiet = TRUE) |>
+    sf::st_transform(crs_albers) |>
+    sf::st_buffer(dist = buffer_m) |>
+    sf::st_transform(4326)
+  pts <- sf::st_as_sf(data.frame(lon = lon[ok], lat = lat[ok]),
+                      coords = c("lon", "lat"), crs = 4326)
+  old <- sf::sf_use_s2(FALSE)
+  on.exit(sf::sf_use_s2(old), add = TRUE)
+  out[ok] <- lengths(sf::st_intersects(pts, boundary)) > 0
+  out
+}
+
+# ---- read_fasta_tbl() / write_fasta_tbl(): FASTA <-> table --------------------
+# read: one row per sequence, `header` (without ">") and `seq` (joined across
+# wrapped lines); an empty table if the file is missing or has no sequences.
+read_fasta_tbl <- function(path) {
+  empty <- tibble::tibble(header = character(0), seq = character(0))
+  if (!file.exists(path)) return(empty)
+  lines <- readr::read_lines(path)
+  idx <- which(startsWith(lines, ">"))
+  if (length(idx) == 0L) return(empty)
+  ends <- c(idx[-1] - 1L, length(lines))
+  tibble::tibble(
+    header = sub("^>", "", lines[idx]),
+    seq    = vapply(seq_along(idx), function(i)
+      if (ends[i] > idx[i]) paste(lines[(idx[i] + 1L):ends[i]], collapse = "") else "",
+      character(1)))
+}
+write_fasta_tbl <- function(tbl, path) {
+  readr::write_lines(paste0(">", tbl$header, "\n", tbl$seq), path)
+}
+
+# ---- assign_its2_to_sh(): ITSx + vsearch SH assignment -------------------------
+# The rule used for our own GenBank data (03_genbank.R) and for the genome
+# sequences (15b): extract ITS2 with ITSx, drop fragments shorter than
+# `min_len`, match against the pinned UNITE FASTA with vsearch at `identity`,
+# and keep every reference tied for the best match.
+# Ties are resolved as in 03: each tied hit is reduced to a "tie identity" (the
+# species name for a named species, the SH code for an un-named "_sp" SH). If
+# all tied hits share one identity, the sequence is credited to every SH code
+# among them; otherwise it is credited to none ("ambiguous_tie").
+# `seqs` needs columns `key` (a short unique label) and `seq`. Returns one row
+# per key: outcome ("sh_assigned", "ambiguous_tie", "no_unite_hit",
+# "no_its2"), `sh_codes` ("; "-separated) and best identity.
+assign_its2_to_sh <- function(seqs, work_prefix, identity = 0.985,
+                              min_len = 100L, threads = 4L) {
+  itsx_bin    <- Sys.which("ITSx")
+  vsearch_bin <- Sys.which("vsearch")
+  if (!nzchar(itsx_bin))    stop("ITSx not found on PATH (see 03_genbank.R header).")
+  if (!nzchar(vsearch_bin)) stop("vsearch not found on PATH (see 03_genbank.R header).")
+  input  <- paste0(work_prefix, "_input.fasta")
+  prefix <- paste0(work_prefix, "_itsx")
+  query  <- paste0(work_prefix, "_vsearch_query.fasta")
+  hitsf  <- paste0(work_prefix, "_vsearch_hits.txt")
+  # remove outputs of any earlier run, so stale files are never read
+  unlink(c(input, Sys.glob(paste0(prefix, "*")), query, hitsf))
+
+  write_fasta_tbl(dplyr::transmute(seqs, header = key, seq), input)
+  ret <- system(paste(shQuote(itsx_bin), "-i", shQuote(input), "-o", shQuote(prefix),
+                      "-t F", "--save_regions ITS2", "--cpu", threads,
+                      "--graphical F", "--silent T"))
+  if (ret != 0L) stop("ITSx failed with exit code ", ret)
+  its2 <- read_fasta_tbl(paste0(prefix, ".ITS2.fasta")) |>
+    dplyr::transmute(key = sub("\\|.*$", "", header),
+                     seq = gsub("[^ACGTUNRYSWKMBDHV]", "N", toupper(seq))) |>
+    dplyr::filter(nchar(seq) >= min_len)
+
+  hits <- tibble::tibble(key = character(0), target_id = character(0),
+                         pident = numeric(0))
+  if (nrow(its2) > 0L) {
+    write_fasta_tbl(dplyr::rename(its2, header = key), query)
+    ret <- system(paste(shQuote(vsearch_bin), "--usearch_global", shQuote(query),
+                        "--db", shQuote(paths$unite_fasta), "--id", identity,
+                        "--strand both", "--maxaccepts 0", "--maxrejects 0",
+                        "--blast6out", shQuote(hitsf), "--top_hits_only",
+                        "--threads", threads, "--quiet"))
+    if (ret != 0L) stop("vsearch failed with exit code ", ret)
+    if (file.exists(hitsf) && file.size(hitsf) > 0)
+      hits <- readr::read_tsv(hitsf, col_names = FALSE, show_col_types = FALSE,
+                              col_types = readr::cols(.default = "c")) |>
+        dplyr::transmute(key = X1, target_id = X2, pident = as.numeric(X3))
+  }
+  per_key <- hits |>
+    dplyr::mutate(sh_code  = sub("^[^|]+\\|[^|]+\\|([^|]+)\\|.*$", "\\1", target_id),
+                  unite_sp = sub("\\|.*$", "", target_id),
+                  tie_id   = dplyr::if_else(grepl("_sp$", unite_sp), sh_code, unite_sp)) |>
+    dplyr::group_by(key) |>
+    dplyr::summarise(best_identity = max(pident),
+                     n_tie_ids     = dplyr::n_distinct(tie_id),
+                     sh_codes      = paste(sort(unique(sh_code)), collapse = "; "),
+                     .groups = "drop")
+  dplyr::select(seqs, key) |>
+    dplyr::left_join(per_key, by = "key") |>
+    dplyr::mutate(
+      outcome = dplyr::case_when(
+        !key %in% its2$key ~ "no_its2",
+        is.na(n_tie_ids)   ~ "no_unite_hit",
+        n_tie_ids > 1L     ~ "ambiguous_tie",
+        TRUE               ~ "sh_assigned"),
+      sh_codes = dplyr::if_else(outcome == "sh_assigned", sh_codes, NA_character_)) |>
+    dplyr::select(key, outcome, sh_codes, best_identity)
+}
+
 # ---- read_big_tsv_subset(): read selected columns from a very large TSV -------
 # data.table::fread(..., select = ) still has to stream and tokenize the whole
 # file, which overruns R's 2^31-1-byte single-string limit on multi-GB inputs
@@ -411,6 +587,8 @@ paths <- list(
   # GenBank records dropped by the location rule in 04_combine_ecm_dataset.R,
   # with the reason for each.
   genbank_excluded = here::here("data_derived", "genbank_excluded_non_canadian.csv"),
+  # Families considered by the EcM family rule in 04_combine_ecm_dataset.R.
+  ecm_family_rule_table = here::here("data_derived", "ecm_family_rule_table.csv"),
   emf_data         = here::here("data_derived", "emf_canada_em_only.csv"),
 
   # ---- derived: host reference (from 05_prepare_fungalroot.R) ----------------
@@ -429,6 +607,14 @@ paths <- list(
   gbif_ecm            = here::here("data_derived", "linnean", "linnean_gbif_ecm_canada.csv"),
   gbif_ecm_nosequence = here::here("data_derived", "linnean", "linnean_gbif_ecm_nosequence_canada.csv"),
   gbif_plotted_counts = here::here("data_derived", "linnean", "linnean_gbif_plotted_counts.csv"),
+  # Table S4 by sequence matching (09_linnean.R, Step 6b). Raw GenBank
+  # downloads for each candidate genus are cached in data_raw/ (they cannot be
+  # reproduced exactly later); the per-genus result table feeds Table S4.
+  table_s4_genbank_dir = here::here("data_raw", "genbank_genus_queries"),
+  table_s4             = here::here("data_derived", "linnean", "linnean_table_s4.csv"),
+  table_s4_sequences   = here::here("data_derived", "linnean", "linnean_table_s4_sequence_matches.csv"),
+  # SUPERSEDED (09b_table_s4_check.R, retired 2026-11-14); kept until the SM1
+  # Table S4 code is rewritten in Phase 5.
   # Table S4 check (09b_table_s4_check.R): hand-curated synonym table and the
   # cached GenBank query results (raw inputs), plus the per-genus result table
   # and the GBIF records of genera confirmed to lack Canadian ITS sequences.

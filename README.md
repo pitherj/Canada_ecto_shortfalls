@@ -83,8 +83,8 @@ flowchart TD
     S08 --> S18
     HOST --> S18
     EMF --> S19["19_sampling_maps.R"] --> F1["Figure 1, S5"]
-    S09 --> S09b["09b_table_s4_check.R"] --> TS4["Table S4"]
-    S09b --> S19
+    S09 --> TS4["Table S4"]
+    S09 --> S19
 ```
 
 ## Prerequisites
@@ -207,7 +207,7 @@ stored here.
 | Figure S4 | `figures/Figure-S4_ecozone_sampling_map.png` (+ grey variant, see below) | `17_hutchinsonian.R` |
 | Figure S5 | `figures/Figure-S5_gbif_specimens.png` (+ grey variant, see below) | `19_sampling_maps.R` |
 | Tables 1–4 | `data_derived/` CSVs, rendered into tables by `manuscript/manuscript.qmd` | 09, 11, 16, 18 |
-| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `manuscript/supplemental_SM1.qmd` | 09b, 17, 18 |
+| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `manuscript/supplemental_SM1.qmd` | 09, 17, 18 |
 
 Figure 5 is a manually assembled schematic composite built from panels taken
 from Figures 1, 3, 4, S1, and S4. To support that, scripts `10`, `17`,

@@ -39,8 +39,8 @@ HEAVY_SCRIPTS <- c("12_wallacean_density_map.R", "13_wallacean_global_comparator
 # by each of them, and run_all.R excludes itself).
 script_dir <- here::here("scripts")
 # The optional lower-case letter after the two digits allows a follow-on step
-# (e.g. 09b_table_s4_check.R runs right after 09_linnean.R). method = "radix"
-# sorts by character code, so "09_" always comes before "09b_" whatever the
+# (e.g. 15b_darwinian_sh_match.R runs right after 15_darwinian.R). method = "radix"
+# sorts by character code, so "15_" always comes before "15b_" whatever the
 # computer's language settings.
 scripts <- sort(list.files(script_dir, pattern = "^[0-9]{2}[a-z]?_.*\\.R$"),
                 method = "radix")

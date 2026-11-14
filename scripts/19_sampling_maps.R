@@ -11,11 +11,12 @@
 # INPUTS
 #   paths$emf_data              combined EcM dataset (04_combine_ecm_dataset.R)
 #   paths$gbif_ecm              GBIF EcM specimen records         (09_linnean.R)
-#   paths$gbif_ecm_nosequence   GBIF records for genera flagged by name as
-#                               lacking sequence data            (09_linnean.R)
+#   paths$gbif_ecm_nosequence   GBIF records of EcM genera whose name is
+#                               absent from our data (Table S4 candidates)
+#                                                                (09_linnean.R)
 #   paths$gbif_ecm_nosequence_confirmed
-#                               the subset confirmed to lack Canadian ITS
-#                               sequences                  (09b_table_s4_check.R)
+#                               the subset confirmed by sequence matching to
+#                               lack Canadian ITS sequences      (09_linnean.R)
 #   paths$canada_bound,
 #   paths$canada_bound_raw,
 #   paths$lakes_albers          spatial basemap layers            (01_spatial_data.R)
@@ -152,9 +153,9 @@ if (!(!need_g0)) {
 # Blue circles: genera that also have sequence data in Canada.
 # Orange triangles: genera without sequence data in Canada.
 #
-# Which genera are "without" comes from 09b_table_s4_check.R, not directly from
-# the name match in 09_linnean.R. Genera that the name match flagged but that
-# 09b found to be synonyms of genera in our data, or to have Canadian ITS
+# Which genera are "without" comes from the Table S4 sequence check in
+# 09_linnean.R (Step 6b), not from the genus name alone. Candidate genera whose
+# sequences fall in SHs already in our data, or that have Canadian ITS
 # sequences in GenBank, are plotted as "with sequence data".
 # =============================================================================
 if (!need_gbif) {
@@ -170,7 +171,8 @@ if (!need_gbif) {
   gbif_combined <- dplyr::bind_rows(
     readr::read_csv(paths$gbif_ecm,            show_col_types = FALSE) |>
       dplyr::mutate(category = gbif_labels[1]),
-    # name-flagged records NOT confirmed by 09b: they do have Canadian data
+    # candidate records NOT confirmed as gaps by Step 6b of 09: they do have
+    # Canadian sequence data
     dplyr::filter(gbif_noseq_all, !gbifID %in% gbif_noseq_confirmed$gbifID) |>
       dplyr::mutate(category = gbif_labels[1]),
     gbif_noseq_confirmed |>

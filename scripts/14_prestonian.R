@@ -175,7 +175,7 @@ our_species <- emf |>
   dplyr::distinct(species_clean) |>
   dplyr::pull(species_clean)
 
-our_genera <- unique(trimws(emf$genus))
+our_genera <- unique(trimws(emf$genus[!is.na(emf$genus)]))  # na.rm: records admitted by the family rule without a genus label have genus = NA (04)
 
 # Exact species-level match
 bt_ecm_sp <- dplyr::filter(bt_fungi_species, valid_name %in% our_species)
@@ -300,7 +300,7 @@ prestonian_summary <- tibble::tibble(
     "% of our EcM named taxa absent from BioTIME"
   ),
   value = c(
-    dplyr::n_distinct(emf$genus),
+    dplyr::n_distinct(emf$genus, na.rm = TRUE),
     length(our_species),
     nrow(fungi_studies),
     nrow(bt_fungi_species),
@@ -311,7 +311,7 @@ prestonian_summary <- tibble::tibble(
     n_repeat_taxa,
     n_locations_multiyear,
     length(our_genera_not_in_bt),
-    round(100 * length(our_genera_not_in_bt) / dplyr::n_distinct(emf$genus), 1),
+    round(100 * length(our_genera_not_in_bt) / dplyr::n_distinct(emf$genus, na.rm = TRUE), 1),
     length(our_species_not_in_bt),
     round(100 * length(our_species_not_in_bt) / length(our_species), 1)
   )

@@ -9,10 +9,12 @@
 #                  data_derived/genbank_excluded_non_canadian.csv (dropped
 #                  GenBank records, with the reason)
 #
-# Step 2: Filter combined dataset to ectomycorrhizal taxa only using
-#         FungalTraits v1.2 genus-level primary_lifestyle (pinned reference).
-#         Output: data_derived/emf_canada_em_only.csv  (primary dataset for all
-#                 downstream analyses)
+# Step 2: Keep ectomycorrhizal (EcM) records only: genera listed as EcM in
+#         FungalTraits v1.2, plus records FungalTraits cannot classify whose
+#         family is at least two-thirds EcM in FungalTraits (the family rule).
+#         Outputs: data_derived/emf_canada_em_only.csv (primary dataset for
+#                  all downstream analyses)
+#                  data_derived/ecm_family_rule_table.csv
 #
 # Prerequisites:
 #   02_globalfungi.R → data_derived/globalfungi_canada_long.csv
@@ -53,23 +55,11 @@ if (!(file.exists(paths$emf_combined))) {
   # Coordinates are always kept, so records stay traceable. Spatial analyses
   # downstream use only records with coord_in_canada == TRUE.
   #
-  # The boundary (paths$canada_bound, built in 01_spatial_data.R) is simplified
-  # at a 1 km tolerance. Buffering it by 2 km (in the equal-area projection
-  # `crs_albers`, so 2 km everywhere) absorbs that simplification and small
-  # coordinate imprecision at coastal and island sites.
-  canada_bound_buffered <- sf::st_read(paths$canada_bound, quiet = TRUE) |>
-    sf::st_transform(crs_albers) |>
-    sf::st_buffer(dist = 2000) |>   # 2 km, in metres
-    sf::st_transform(4326)
-  coord_idx <- which(!is.na(combined$lat) & !is.na(combined$lon))
-  combined$coord_in_canada <- NA
-  if (length(coord_idx) > 0) {
-    pts <- sf::st_as_sf(combined[coord_idx, ], coords = c("lon", "lat"), crs = 4326)
-    sf::sf_use_s2(FALSE)
-    combined$coord_in_canada[coord_idx] <-
-      lengths(sf::st_intersects(pts, canada_bound_buffered)) > 0
-    sf::sf_use_s2(TRUE)
-  }
+  # coords_in_canada() (00_setup.R) tests each point against the Canada
+  # boundary (simplified at 1 km in 01_spatial_data.R) buffered by 2 km. The
+  # buffer absorbs that simplification and small coordinate imprecision at
+  # coastal and island sites.
+  combined$coord_in_canada <- coords_in_canada(combined$lat, combined$lon)
 
   # ---- 1b. GenBank location rule: which GenBank records are Canadian? -------
   # The GenBank search matches "Canada" anywhere in a record (03_genbank.R), so
@@ -117,36 +107,98 @@ if (!(file.exists(paths$emf_combined))) {
 }
 
 # ---- Step 2: Filter for EcM using FungalTraits ------------------------------
+# A record is treated as ectomycorrhizal (EcM) in one of two ways.
+#
+#   1. Genus rule. Its UNITE genus is listed as EcM (primary_lifestyle) in
+#      FungalTraits v1.2 (Põlme et al. 2020). This covers almost all records.
+#
+#   2. Family rule. FungalTraits cannot classify two kinds of record:
+#        - records whose UNITE genus is absent from FungalTraits altogether,
+#          mostly genera named after FungalTraits was compiled (e.g. the
+#          genera split from Cortinarius in 2022, such as Phlegmacium);
+#        - records whose SH has no genus label in UNITE, only a family
+#          (e.g. "Boletaceae_gen_Incertae_sedis").
+#      Such a record is treated as EcM if at least FAMILY_ECM_MIN_FRAC (two
+#      thirds) of the genera FungalTraits lists in the record's UNITE family
+#      are EcM. Two thirds admits families that are EcM in practice, such as
+#      Cortinariaceae (8 of its 12 FungalTraits genera are EcM; the other four
+#      are saprotrophs), and refuses mixed families such as Thelephoraceae
+#      (8 of 14) and Pezizaceae (25 of 48).
+#
+# A record whose genus is in FungalTraits but NOT listed as EcM is never
+# admitted: FungalTraits has classified it. The rules are implemented in
+# ecm_reference() and classify_ecm() in 00_setup.R (FAMILY_ECM_MIN_FRAC is set
+# there), and shared with 09_linnean.R.
+#
+# Records admitted by the family rule have no genus-level traits. They get the
+# family's EcM lineage if every EcM genus in that family shares one lineage,
+# and no exploration type. For SHs with no genus label, `genus` is set to NA
+# (so they are never counted as a genus) and UNITE's label is kept in
+# `genus_label_unite`. Column `ecm_basis` records which rule admitted each
+# record ("genus" or "family").
+#
+# Output: paths$emf_data (the EcM dataset used by every later script), and
+# paths$ecm_family_rule_table: every family the family rule considered, with
+# its FungalTraits counts, whether it passed, and how many SHs and records it
+# admitted or refused.
 
 if (!(file.exists(paths$emf_data))) {
 
-  # FungalTraits v1.2 (Põlme et al. 2020): pinned reference file (see 00_setup.R
-  # and data_raw/fungaltraits/fungaltraits_version.txt for provenance).
-  ft <- readr::read_csv(paths$fungaltraits, show_col_types = FALSE) |>
-    dplyr::rename_with(tolower)
+  # FungalTraits v1.2: pinned reference file (see 00_setup.R and
+  # data_raw/fungaltraits/fungaltraits_version.txt for provenance).
+  # ecm_reference() and classify_ecm() are defined in 00_setup.R, so this
+  # script and 09_linnean.R use one identical EcM definition.
+  ref <- ecm_reference()
 
-  em_genera <- ft |>
-    dplyr::filter(primary_lifestyle == "ectomycorrhizal") |>
-    dplyr::mutate(genus_lower = tolower(trimws(genus))) |>
-    dplyr::distinct(genus_lower)
-
-  ft_join <- ft |>
-    dplyr::select(genus, primary_lifestyle, secondary_lifestyle,
+  # Genus-level traits joined to records admitted by the genus rule.
+  ft_join <- ref$ft |>
+    dplyr::select(genus_lower, primary_lifestyle, secondary_lifestyle,
                   dplyr::matches("lineage_template"),
                   dplyr::matches("exploration_type_template")) |>
     dplyr::rename_with(~ sub("_template$", "", .x)) |>
-    dplyr::mutate(genus_lower = tolower(trimws(genus))) |>
-    dplyr::select(-genus) |>
     dplyr::distinct(genus_lower, .keep_all = TRUE)
 
-  combined <- readr::read_csv(paths$emf_combined, show_col_types = FALSE) |>
-    dplyr::mutate(genus_lower = tolower(trimws(genus)))
-  combined  <- dplyr::left_join(combined, ft_join, by = "genus_lower")
+  combined <- readr::read_csv(paths$emf_combined, show_col_types = FALSE,
+                              guess_max = 1e6) |>
+    dplyr::mutate(genus_lower  = tolower(trimws(genus)),
+                  family_clean = sub("_.*$", "", family),
+                  no_genus_label = !has_genus_label(genus),
+                  ecm_basis    = classify_ecm(genus, family, ref))
 
-  em_only <- combined |>
-    dplyr::filter(genus_lower %in% em_genera$genus_lower) |>
-    dplyr::select(-genus_lower)
+  # Record of the family rule, for the supplement and for checking: every
+  # family the rule considered that has at least one EcM genus in FungalTraits.
+  combined |>
+    dplyr::filter(ecm_basis %in% c("family", "family rule: refused")) |>
+    dplyr::mutate(reason = dplyr::if_else(no_genus_label, "no genus label",
+                                          "genus not in FungalTraits")) |>
+    dplyr::inner_join(ref$family, by = c("family_clean" = "family")) |>
+    dplyr::filter(ft_ecm_genera > 0) |>
+    dplyr::group_by(family = family_clean, reason, ft_genera, ft_ecm_genera,
+                    frac_ecm, family_passes) |>
+    dplyr::summarise(n_sh = dplyr::n_distinct(sh_code, na.rm = TRUE),
+                     n_records = dplyr::n(),
+                     genus_labels = paste(sort(unique(genus)), collapse = "; "),
+                     .groups = "drop") |>
+    dplyr::arrange(dplyr::desc(family_passes), dplyr::desc(frac_ecm), dplyr::desc(n_sh)) |>
+    readr::write_csv(paths$ecm_family_rule_table)
+
+  admitted_genus <- combined |>
+    dplyr::filter(ecm_basis == "genus") |>
+    dplyr::left_join(ft_join, by = "genus_lower") |>
+    dplyr::mutate(genus_label_unite = genus)
+
+  admitted_family <- combined |>
+    dplyr::filter(ecm_basis == "family") |>
+    dplyr::left_join(dplyr::select(ref$family, family, family_lineage),
+                     by = c("family_clean" = "family")) |>
+    dplyr::mutate(genus_label_unite = genus,
+                  genus = dplyr::if_else(no_genus_label, NA_character_, genus),
+                  primary_lifestyle = "ectomycorrhizal",
+                  ectomycorrhiza_lineage = family_lineage) |>
+    dplyr::select(-family_lineage)
+
+  em_only <- dplyr::bind_rows(admitted_genus, admitted_family) |>
+    dplyr::select(-genus_lower, -family_clean, -no_genus_label)
 
   readr::write_csv(em_only, paths$emf_data)
 }
-

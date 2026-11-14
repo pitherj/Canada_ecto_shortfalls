@@ -113,14 +113,14 @@ our_species_lower <- tolower(gsub("_", " ", unique(emf$species[!is.na(emf$specie
 our_species_lower <- our_species_lower[
   !grepl("\\b(sp\\.?|spp\\.?|cf\\.?|aff\\.?)$", our_species_lower)
 ]
-our_genera_lower  <- tolower(trimws(unique(emf$genus)))
+our_genera_lower  <- tolower(trimws(unique(emf$genus[!is.na(emf$genus)])))  # na.rm: records admitted by the family rule without a genus label have genus = NA (04)
 # Denominator must match the universe actually searched for matches above:
 # our_species_lower already excludes NA and genus-level placeholders
 # (sp/spp/cf/aff). Using raw dplyr::n_distinct(emf$species) here would
 # inflate the denominator and make the with/absent percentages fail to sum to
 # 100 (see Prestonian script's analogous, correctly-filtered species count).
 n_our_species     <- length(our_species_lower)
-n_our_genera      <- dplyr::n_distinct(emf$genus)
+n_our_genera      <- dplyr::n_distinct(emf$genus, na.rm = TRUE)
 
 all_mc_genera  <- unique(mc_fungi$genus_lower[!is.na(mc_fungi$genus_lower)])
 all_mc_species <- unique(mc_fungi$species_lower[!is.na(mc_fungi$species_lower)])

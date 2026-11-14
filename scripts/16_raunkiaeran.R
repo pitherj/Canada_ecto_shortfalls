@@ -92,6 +92,7 @@ ft_ecm <- ft_raw |>
 # ---- 4. Our Canadian EcM genera ---------------------------------------------
 
 our_genera <- emf |>
+  dplyr::filter(!is.na(genus)) |>  # na.rm: records admitted by the family rule without a genus label have genus = NA (04)
   dplyr::distinct(genus) |>
   dplyr::mutate(genus_lower = tolower(trimws(genus)))
 

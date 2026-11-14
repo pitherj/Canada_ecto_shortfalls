@@ -61,7 +61,7 @@ and invoked directly.
 | `HMMER` (3.x) | `03_genbank.R`, `15b_darwinian_sh_match.R` | ITSx's backend — ITSx will not run without it |
 | `vsearch` (≥ 2.x) | `03_genbank.R`, `15b_darwinian_sh_match.R` | SH assignment of GenBank sequences and of MycoCosm genome ITS sequences |
 | `awk` | `00_setup.R` helper, `02_globalfungi.R`, `12_wallacean_density_map.R`, `13_wallacean_global_comparator.R` | column/row subsetting of the multi-gigabyte GlobalFungi matrices |
-| Internet + NCBI Entrez | `03_genbank.R`, `09b_table_s4_check.R` (first run only), `15b_darwinian_sh_match.R` (only when the MycoCosm list has genomes not yet in its lookup table), `18_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
+| Internet + NCBI Entrez | `03_genbank.R`, `09_linnean.R` (only for Table S4 candidate genera not yet downloaded), `15b_darwinian_sh_match.R` (only when the MycoCosm list has genomes not yet in its lookup table), `18_eltonian.R` | GenBank fetches (an NCBI API key is recommended) |
 | Internet + GBIF credentials | `09_linnean.R` | only if the archived GBIF ZIP in `data_raw/gbif/` is absent (see root `README.md`) |
 | Internet (biendata.org) | `07_bien2_ranges.R` | BIEN2 range downloads |
 | Internet (BIEN) | `06_host_species.R` | native-flora query |
@@ -81,8 +81,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 06 | `06_host_species.R` | Native Canadian EcM host species list | 05 output, BIEN native flora | `ecm_native_canada_host_species.csv` | Eltonian denominator |
 | 07 | `07_bien2_ranges.R` | Download BIEN2 modelled host ranges | 06 output, biendata.org | `data_raw/bien2_ranges/*` | host rasters input |
 | 08 | `08_host_rasters.R` | Rasterize host richness + data coverage | 06 + 07 outputs, `emf` | `bien_host_*` rasters | Figure 4, Eltonian |
-| 09 | `09_linnean.R` | Taxonomic accounting, dark fraction, GBIF specimens | `emf`, FungalTraits, UNITE, GBIF, van Galen CSV | `linnean_*` outputs (incl. `linnean_gbif_ecm_nosequence_canada.csv`) | Table 1, Table 2, in-text Linnean |
-| 09b | `09b_table_s4_check.R` | Checks each genus that 09 flagged as lacking Canadian sequence data, against Index Fungorum synonymy and targeted GenBank queries | 09 output, `genbank_emf_canada_long.csv`, `emf`, `data_raw/table_s4_check/` | `linnean_table_s4_reconciliation.csv`, `linnean_gbif_ecm_nosequence_confirmed_canada.csv` | Table S4, Figure S5 |
+| 09 | `09_linnean.R` | Taxonomic accounting, dark fraction, GBIF specimens; Table S4: EcM genera with Canadian specimens but absent from our data, checked by sequence (their GenBank ITS sequences are assigned to UNITE SHs and compared with ours) | `emf`, FungalTraits, UNITE, GBIF, van Galen CSV, NCBI GenBank (new candidate genera only) | `linnean_*` outputs (incl. `linnean_table_s4.csv`, `linnean_table_s4_sequence_matches.csv`, `linnean_gbif_ecm_nosequence_confirmed_canada.csv`); `data_raw/genbank_genus_queries/` | Table 1, Table 2, Table S4, Figure S5, in-text Linnean |
 | 10 | `10_dark_diversity.R` | Dark ("undescribed") EcM taxa map | van Galen raster, Canada boundary | `Figure-S1_dark_diversity.png` (+ `..._grey.png`) | Figure S1 |
 | 11 | `11_wallacean.R` | Occurrence/occupancy + SDM sufficiency | `emf`, global GF SH matrix | `wallacean_*` | Table 3, Figure 2 |
 | 12 | `12_wallacean_density_map.R` | Global GF EcM sampling-density map | global GF matrix + metadata | `Figure-S2_gf_sampling_density_world.png` | Figure S2 |
@@ -93,7 +92,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 16 | `16_raunkiaeran.R` | Trait coverage from FungalTraits | FungalTraits, `emf` | `raunkiaeran_*` | Table 4 |
 | 17 | `17_hutchinsonian.R` | Climate-space coverage, per-ecozone coverage, ecozone sampling map | `emf`, WorldClim, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-03_climate_gap.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 3, Figure S4, Table S1 |
 | 18 | `18_eltonian.R` | Host–fungus interaction coverage (Canada + global; root-derived evidence only), host habitat coverage, host bivariate map | `emf`, host list, host rasters (08), global GF/GenBank | `eltonian_*` (incl. `eltonian_host_raster_summary.csv`, `eltonian_pair_confidence.csv`, `eltonian_sensitivity_confidence.csv`, `eltonian_sample_type_tally_canada_all.csv`), `bien_host_data_richness_0.5deg.tif`, `bien_host_data_proportion_0.5deg.tif`, `Figure-04_host_bivariate_map.png` (+ `..._grey.png`) | Figure 4, Tables S2 and S3, in-text Eltonian |
-| 19 | `19_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09, 09b) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
+| 19 | `19_sampling_maps.R` | Whole-Canada sampling maps | `emf`, GBIF specimens (09) | `Figure-01_sampling_map.png` (+ `..._grey.png`), `Figure-S5_gbif_specimens.png` (+ `..._grey.png`), `linnean_gbif_plotted_counts.csv` | Figure 1, Figure S5 |
 | 20 | `20_depth_discard.R` | % sequencing depth discarded by EcM-genus filtering | GF metadata (02), `emf` | `Figure-S3_depth_discard.png` | Figure S3 |
 | 21 | `21_geographic_possibility.R` | Sensitivity check on the Eltonian matrix denominator: how much of the host × fungus grid is geographically possible, at six spatial grains | `emf`, host list, BIEN ranges (07/08), ecoregions (01), Eltonian outputs (18) | `geo_possibility/output1`–`output5*`, `run_log.txt` | in-text Eltonian sensitivity sentence, SM1 |
 
@@ -103,13 +102,11 @@ shortfall analyses (in manuscript order) and the sampling maps.
   order across the block is `05 → 06 → 07 → 08`.
 - `12`/`13` (global GlobalFungi comparators) require a full scan of the ~13 GB
   SH matrix and are the most compute-intensive steps; run them deliberately.
-- `19_sampling_maps.R` reads the GBIF specimen tables written by `09_linnean.R`
-  and `09b_table_s4_check.R`. Delete the Figure S5 files and
-  `linnean_gbif_plotted_counts.csv` to force Figure S5 to rebuild after
-  either script changes.
-- `run_all.R` picks up `09b_table_s4_check.R` automatically and runs it
-  straight after `09_linnean.R`; likewise `15b_darwinian_sh_match.R` runs
-  straight after `15_darwinian.R`.
+- `19_sampling_maps.R` reads the GBIF specimen tables written by `09_linnean.R`.
+  Delete the Figure S5 files and `linnean_gbif_plotted_counts.csv` to force
+  Figure S5 to rebuild after `09` changes.
+- `run_all.R` picks up lettered follow-on scripts automatically:
+  `15b_darwinian_sh_match.R` runs straight after `15_darwinian.R`.
 - `15b_darwinian_sh_match.R` does not read any output of `15_darwinian.R`,
   but both start from the same MycoCosm list. After refreshing
   `data_raw/mycocosm/mycocosm_organism_list.csv`, re-run both. `15b` then

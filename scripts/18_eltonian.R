@@ -479,6 +479,7 @@ readr::write_csv(genbank_tissue_tally_canada,
 matched_interactions <- dplyr::filter(host_long, matched)
 
 genus_pairs <- matched_interactions |>
+  dplyr::filter(!is.na(genus)) |>  # na.rm: records admitted by the family rule without a genus label have genus = NA (04)
   dplyr::distinct(host_clean, genus) |>
   dplyr::rename(host_species = host_clean, fungal_genus = genus)
 
@@ -733,7 +734,7 @@ readr::write_csv(genus_genus_matrix,
 # x all EcM fungal genera detected anywhere in the Canadian dataset
 # (n_fungal_genera_total), regardless of whether a given fungal genus has
 # any host information at all.
-n_fungal_genera_total <- dplyr::n_distinct(emf$genus)
+n_fungal_genera_total <- dplyr::n_distinct(emf$genus, na.rm = TRUE)
 
 n_matrix_cells_genus   <- n_host_genera * n_fungal_genera_total
 n_cells_filled_genus   <- nrow(genus_genus_pairs_canada)
@@ -764,7 +765,7 @@ n_hosts_with_genus_data <- dplyr::n_distinct(genus_pairs$host_species)
 n_hosts_with_sh_data    <- dplyr::n_distinct(sh_pairs$host_species)
 n_genera_with_host      <- dplyr::n_distinct(genus_pairs$fungal_genus)
 n_sh_with_host          <- dplyr::n_distinct(sh_pairs$sh_code, na.rm = TRUE)
-n_potential_genus       <- n_host_species * dplyr::n_distinct(emf$genus)
+n_potential_genus       <- n_host_species * dplyr::n_distinct(emf$genus, na.rm = TRUE)
 genus_per_host          <- dplyr::count(genus_pairs, host_species, name = "n_genera")
 host_per_genus          <- dplyr::count(genus_pairs, fungal_genus, name = "n_hosts")
 
