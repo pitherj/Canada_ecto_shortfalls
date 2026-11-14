@@ -14,7 +14,7 @@ Collection: **UBC BLERF** — <https://borealisdata.ca/dataverse/UBC_BLERF>
 | Component | Size | GitHub | Borealis | Rationale |
 |---|---|---|---|---|
 | `scripts/` | < 1 MB | ✅ | ✅ | Snapshot at submission fixes the analysis to a citable version |
-| `FACETS/` sources (`.qmd`, `.bib`, `.csl`) | < 1 MB | ❌ (for now) | ✅ | Not tracked in git while the manuscript is under review; the submitted version is preserved in git history (tag `facets-submission-2026-07`) |
+| `manuscript/` sources (`.qmd`, `.bib`, `.csl`) | < 1 MB | ❌ (for now) | ✅ | Not tracked in git while the manuscript is under review; the submitted version is preserved in git history (tag `facets-submission-2026-07`) |
 | `figures/` PNG + JPG | 34 MB | ✅ | ✅ | Needed to render the manuscript from a clean clone |
 | `figures/` TIFF | 333 MB | ❌ | ✅ | FACETS submission deliverables; regenerable, and poorly suited to git |
 | `data_derived/` | ~1.4 GB | ❌ | ✅ | The analysis outputs; too large for git, and the substance of the deposit |
@@ -64,7 +64,7 @@ different kinds of work and software licences map poorly onto datasets.
 
 | Component | Licence |
 |---|---|
-| Code (`scripts/`, `FACETS/` sources) | MIT |
+| Code (`scripts/`, `manuscript/` sources) | MIT |
 | Data (`data_derived/`, `figures/`) | CC BY-NC 4.0 |
 
 **The NonCommercial term is inherited, not chosen.** FungalRoot and the GBIF
@@ -106,7 +106,7 @@ derived files can be withdrawn from the deposit without disturbing the rest.
 **After the DOI is minted**
 
 - [ ] Replace the `XXX` (code) and `YYY` (data) placeholders in
-      `FACETS/manuscript_FACETS_final.qmd`
+      `manuscript/manuscript.qmd`
 - [ ] Add the DOI to `README.md` > How to cite
 - [ ] Tag the matching GitHub release so the two archives correspond
 
@@ -120,7 +120,7 @@ derived files can be withdrawn from the deposit without disturbing the rest.
 ├── ARCHIVING.md                   # this file
 ├── code/
 │   ├── scripts/                   # the full pipeline, incl. 99_verify_reproducibility.R
-│   └── FACETS/                    # manuscript + supplement sources, references.bib, facets.csl
+│   └── manuscript/                # manuscript + supplement sources, references.bib, facets.csl
 ├── data_derived/
 │   ├── DATA-DICTIONARY.md
 │   ├── <analysis outputs>

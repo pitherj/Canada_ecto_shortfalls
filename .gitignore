@@ -84,6 +84,17 @@ figures/*.tif
 # (commit c719d52): `git show facets-submission-2026-07:FACETS/manuscript_FACETS_final.qmd`.
 FACETS/
 
+# ---- manuscript/ folder ------------------------------------------------------
+# The single home for the manuscript and Supplemental Materials sources since
+# 2026-11-14 (built from FACETS/, which moved to ../ECM_manuscript_attic/).
+# Kept out of git, like FACETS/, until the paper is accepted.
+manuscript/
+
+# GenBank location audit (2026-11-12). Discusses changes to the submitted
+# methods, so it stays out of the public repository until the paper is accepted.
+repro/2026-11-12_genbank_search_only_check.md
+repro/2026-11-12_genbank_search_only_check/
+
 # ---- Claude Code -------------------------------------------------------------
 .claude/
 

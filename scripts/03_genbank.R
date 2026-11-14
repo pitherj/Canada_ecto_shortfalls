@@ -8,7 +8,7 @@
 # BLASTn SH-assignment criterion). Ties are resolved with dark-taxa awareness
 # and a genus-level fallback (Step 6). Each step is checkpointed — safe to
 # re-run; skips completed steps. See the GenBank methods in
-# FACETS/supplemental_materials_SM1_FACETS.qmd for the full rationale and
+# manuscript/supplemental_SM1.qmd for the full rationale and
 # citations.
 #
 # Download completeness (Steps 1-3b)
@@ -804,7 +804,7 @@ gb_meta <- readr::read_csv(gb_meta_path, show_col_types = FALSE)
 # sub-region directly (Fungi HMM profiles) — the GenBank-side analogue of
 # GlobalFungi's ITS2/ITSboth restriction. ITSx is run once against the whole
 # FASTA (faster than looping in R). See the GenBank methods in
-# FACETS/supplemental_materials_SM1_FACETS.qmd ("GenBank records") for the full
+# manuscript/supplemental_SM1.qmd ("GenBank records") for the full
 # rationale and citations.
 
 if (!file.exists(gb_itsx_its2) || !file.exists(gb_itsx_its1)) {
@@ -851,7 +851,7 @@ if (!file.exists(gb_itsx_its2) || !file.exists(gb_itsx_its1)) {
 # are matched alone rather than concatenated with ITS1. Note that ITS1
 # fragments are NOT independently classified here — a documented simplification
 # relative to GlobalFungi (see the GenBank methods in
-# FACETS/supplemental_materials_SM1_FACETS.qmd).
+# manuscript/supplemental_SM1.qmd).
 
 if (!file.exists(gb_vsearch_query)) {
 
@@ -988,7 +988,7 @@ if (!file.exists(paths$gb_long_out)) {
   # 2019). Records ambiguous even at genus level are excluded and logged to
   # gb_ambiguous_path. taxonomic_resolution ("sh"/"genus") records which case
   # applies. See the GenBank methods in
-  # FACETS/supplemental_materials_SM1_FACETS.qmd for the full rationale.
+  # manuscript/supplemental_SM1.qmd for the full rationale.
   tie_summary <- hits |>
     dplyr::mutate(
       is_dark      = grepl("_sp$", species) | is.na(species),

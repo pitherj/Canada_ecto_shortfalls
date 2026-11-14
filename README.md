@@ -37,9 +37,9 @@ source(here::here("scripts", "run_all.R"))
 ```
 
 This regenerates every file in `data_derived/` and `figures/` from the raw
-inputs. The manuscript (`FACETS/manuscript_FACETS_final.qmd`) and Supplemental
-Materials documents (`FACETS/supplemental_materials_SM1_FACETS.qmd`,
-`FACETS/supplemental_materials_SM2_FACETS.qmd`)
+inputs. The manuscript (`manuscript/manuscript.qmd`) and Supplemental
+Materials documents (`manuscript/supplemental_SM1.qmd`,
+`manuscript/supplemental_SM2.qmd`)
 read from these `data_derived/` outputs to report in-text statistics and
 supplemental tables/figures. Rendering them therefore requires either running
 the pipeline first or obtaining `data_derived/` from the Borealis archive.
@@ -177,11 +177,11 @@ ECM_manuscript/
 │   └── DATA-DICTIONARY.md        #   (the dictionary IS tracked)
 ├── figures/                      # tracked, except the high-resolution .tif versions
 ├── repro/                        # reproducibility baseline (99_verify_reproducibility.R)
-└── FACETS/                       # manuscript + Supplemental Materials sources
+└── manuscript/                   # manuscript + Supplemental Materials sources
                                   #   (kept locally; NOT tracked while under review)
-    ├── manuscript_FACETS_final.qmd
-    ├── supplemental_materials_SM1_FACETS.qmd
-    ├── supplemental_materials_SM2_FACETS.qmd
+    ├── manuscript.qmd
+    ├── supplemental_SM1.qmd
+    ├── supplemental_SM2.qmd
     ├── references.bib            # shared bibliography
     └── facets.csl                # FACETS citation style
 ```
@@ -206,8 +206,8 @@ stored here.
 | Figure S3 | `figures/Figure-S3_depth_discard.png` | `20_depth_discard.R` |
 | Figure S4 | `figures/Figure-S4_ecozone_sampling_map.png` (+ grey variant, see below) | `17_hutchinsonian.R` |
 | Figure S5 | `figures/Figure-S5_gbif_specimens.png` (+ grey variant, see below) | `19_sampling_maps.R` |
-| Tables 1–4 | `data_derived/` CSVs, rendered into tables by `FACETS/manuscript_FACETS_final.qmd` | 09, 11, 16, 18 |
-| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `FACETS/supplemental_materials_SM1_FACETS.qmd` | 09b, 17, 18 |
+| Tables 1–4 | `data_derived/` CSVs, rendered into tables by `manuscript/manuscript.qmd` | 09, 11, 16, 18 |
+| Tables S1–S4 | `data_derived/` CSVs, rendered into tables by `manuscript/supplemental_SM1.qmd` | 09b, 17, 18 |
 
 Figure 5 is a manually assembled schematic composite built from panels taken
 from Figures 1, 3, 4, S1, and S4. To support that, scripts `10`, `17`,
@@ -225,13 +225,13 @@ Supplemental Materials documents.
 | `scripts/README.md` | Pipeline order, per-script inputs/outputs, external tools |
 | `data_raw/DATA-DICTIONARY.md` | Every raw input: source, DOI, filters, sizes |
 | `data_derived/DATA-DICTIONARY.md` | Every generated file and its producing script |
-| `FACETS/manuscript_FACETS_final.qmd` | Manuscript source |
-| `FACETS/supplemental_materials_SM1_FACETS.qmd` | SM1: detailed methods |
-| `FACETS/supplemental_materials_SM2_FACETS.qmd` | SM2: decisions log |
+| `manuscript/manuscript.qmd` | Manuscript source |
+| `manuscript/supplemental_SM1.qmd` | SM1: detailed methods |
+| `manuscript/supplemental_SM2.qmd` | SM2: decisions log |
 | `scripts/99_verify_reproducibility.R` | Fingerprints outputs and verifies a rerun reproduces them |
 | `ARCHIVING.md` | Borealis deposit plan: what is archived, licences, checklist |
 
-The three `FACETS/` documents listed above are kept locally and are not tracked in
+The three `manuscript/` documents listed above are kept locally and are not tracked in
 this repository while the manuscript is under review. The version submitted to
 FACETS can be retrieved with `git show facets-submission-2026-07:FACETS/manuscript_FACETS_final.qmd`.
 
@@ -244,7 +244,7 @@ archive of record, with a minted DOI (being prepared currently).
 | Component | GitHub | Borealis |
 |---|---|---|
 | `scripts/` | ✅ tracked | ✅ snapshot at submission |
-| `FACETS/` sources | ❌ not tracked while the manuscript is under review (as-submitted version kept in git history, tag `facets-submission-2026-07`) | ✅ snapshot at submission |
+| `manuscript/` sources | ❌ not tracked while the manuscript is under review (as-submitted version kept in git history, tag `facets-submission-2026-07`) | ✅ snapshot at submission |
 | `figures/` (PNG, JPG) | ✅ tracked | ✅ |
 | `figures/` (TIF, ~332 MB) | ❌ regenerable | ✅ |
 | `data_derived/` (~1.4 GB) | ❌ volume | ✅ |
@@ -282,7 +282,7 @@ Code and data are licensed separately, as they are different kinds of work:
 
 | Component | Licence |
 |---|---|
-| **Code** — `scripts/`, `FACETS/` sources | [MIT](LICENSE) |
+| **Code** — `scripts/`, `manuscript/` sources | [MIT](LICENSE) |
 | **Derived data** — `data_derived/`, `figures/` | [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) |
 
 The NonCommercial condition on the data is inherited from two inputs

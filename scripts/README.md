@@ -45,9 +45,9 @@ checkpoint-guarded, so completed steps are skipped on re-run (with the four
 exceptions noted above, which verify their checkpoints and repair them if
 necessary).
 
-The manuscript and Supplemental Materials sources in `FACETS/` read from
+The manuscript and Supplemental Materials sources in `manuscript/` read from
 `data_derived/` to report in-text statistics and tables, so the pipeline must
-run before they can be rendered (see `FACETS/README.md`).
+run before they can be rendered (see `manuscript/README.md`).
 
 After a run, `scripts/99_verify_reproducibility.R` fingerprints the outputs and
 compares a later rerun against that baseline; it is excluded from `run_all.R`
