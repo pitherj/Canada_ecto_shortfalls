@@ -15,7 +15,8 @@
 #   natural_earth/). If those files are already present, download is skipped.
 #
 # OUTPUTS (data_derived/spatial/)
-#   canada_simple.gpkg          dissolved, simplified Canada boundary (WGS84)
+#   canada_simple.gpkg          dissolved Canada boundary, simplified at a 1 km
+#                               tolerance (WGS84); see 2a
 #   ecoregions_processed.gpkg   Canadian ecoregions, reprojected to WGS84
 #   ecozone_names.csv           ecozone ID -> English/French name lookup
 #   lakes_canada_albers.gpkg    major lakes clipped to Canada (Albers)
@@ -86,19 +87,31 @@ if (!(all(file.exists(paths$ne_canada_raw, paths$ne_lakes_raw)))) {
 # PART 2 — Process layers into the derived forms the pipeline consumes
 # =============================================================================
 
-# ---- 2a. Dissolve + simplify the Canada boundary ----------------------------
-# The provincial/territorial polygons are dissolved into a single national
-# outline, then simplified (0.1-degree tolerance) to keep file size and
-# plotting cost down. This boundary sets `coord_in_canada` in
-# 04_combine_ecm_dataset.R and is the basemap for every map in the pipeline.
+# ---- 2a. Simplify + dissolve the Canada boundary ----------------------------
+# The detailed GADM provincial/territorial polygons (about 4 million vertices)
+# are simplified, then dissolved into a single national outline, to keep file
+# size and processing cost down.
+#
+# This outline is not only a basemap. It also decides what counts as "in
+# Canada": it sets `coord_in_canada` in 04_combine_ecm_dataset.R, masks the
+# host rasters (08, 18), defines Canada's climate space (17) and filters the
+# GBIF specimens plotted in Figure S5 (19). So the simplification must be
+# small. The tolerance is 1 km, applied in the equal-area Albers projection
+# (`crs_albers`, units metres) so it is the same distance everywhere. That
+# moves the outline by at most about 1 km, which the 2 km buffer used in 04
+# absorbs.
+SIMPLIFY_TOLERANCE_M <- 1000
 
 if (!(file.exists(paths$canada_bound))) {
-  canada <- terra::vect(paths$canada_bound_raw)
+  canada_simple <- sf::st_read(paths$canada_bound_raw, quiet = TRUE) |>
+    sf::st_transform(crs_albers) |>
+    sf::st_simplify(dTolerance = SIMPLIFY_TOLERANCE_M, preserveTopology = TRUE) |>
+    sf::st_make_valid() |>
+    sf::st_union() |>
+    sf::st_transform(4326)
 
-  canada_union  <- terra::aggregate(canada, dissolve = TRUE)
-  canada_simple <- terra::simplifyGeom(canada_union, tolerance = 0.1)
-
-  terra::writeVector(canada_simple, paths$canada_bound, overwrite = TRUE)
+  sf::st_write(sf::st_sf(geometry = canada_simple), paths$canada_bound,
+               delete_dsn = TRUE, quiet = TRUE)
 }
 
 # ---- 2b. Ecoregions (reproject to WGS84) + ecozone name lookup --------------

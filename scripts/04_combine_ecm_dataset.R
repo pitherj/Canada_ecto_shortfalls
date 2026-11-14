@@ -2,9 +2,12 @@
 # Combine Sources and Filter for EcM Fungi
 # =============================================================================
 # Step 1: Stack GlobalFungi and GenBank long-format tables, harmonise columns,
-#         validate ALL coordinates against the GADM Canada boundary (nullifying
-#         out-of-Canada lat/lon so downstream scripts need no spatial filtering).
-#         Output: data_derived/emf_canada_combined.csv
+#         check ALL coordinates against the Canada boundary (coord_in_canada),
+#         and keep only GenBank records whose own location evidence places
+#         them in Canada (the GenBank location rule, 1b).
+#         Outputs: data_derived/emf_canada_combined.csv
+#                  data_derived/genbank_excluded_non_canadian.csv (dropped
+#                  GenBank records, with the reason)
 #
 # Step 2: Filter combined dataset to ectomycorrhizal taxa only using
 #         FungalTraits v1.2 genus-level primary_lifestyle (pinned reference).
@@ -41,59 +44,74 @@ if (!(file.exists(paths$emf_combined))) {
 
   combined <- dplyr::bind_rows(gf, gb)
 
-  # SH overlap summary
-
-  # Spatial containment check — applied to ALL records (GlobalFungi + GenBank)
-  # with parsed coordinates. A logical column `coord_in_canada` is added:
-  #   TRUE  — coordinates present and within the (buffered) GADM Canada boundary
-  #   FALSE — coordinates present but outside the buffered boundary
-  #   NA    — no coordinates in the source data
+  # ---- 1a. Coordinate check: is each point inside Canada? -------------------
+  # Applied to ALL records (GlobalFungi + GenBank) that have coordinates. Adds
+  # a logical column `coord_in_canada`:
+  #   TRUE  - coordinates inside the Canada boundary (buffered by 2 km)
+  #   FALSE - coordinates outside it
+  #   NA    - no coordinates in the source data
+  # Coordinates are always kept, so records stay traceable. Spatial analyses
+  # downstream use only records with coord_in_canada == TRUE.
   #
-  # Original lat/lon values are preserved in all cases. Downstream spatial
-  # analyses filter on coord_in_canada == TRUE rather than !is.na(lat), so
-  # records with out-of-boundary coordinates are excluded from spatial work
-  # but retain their coordinates for enumeration and traceability.
-  #
-  # The boundary is buffered by 2 km (in the equal-area CRS `crs_albers`, so
-  # the buffer distance is a true 2,000 m regardless of latitude) before the
-  # containment test. This absorbs GADM coastline simplification / topology
-  # artefacts: a handful of GlobalFungi records with country == "Canada"
-  # metadata but coordinates on the coast or on small islands (e.g. Gulf of
-  # St. Lawrence) fell just outside the unbuffered polygon, which silently
-  # dropped them from every downstream analysis gated on
-  # coord_in_canada == TRUE (this caused the Table 1 vs Table 3 discrepancy
-  # in the manuscript: 2 named species / 4 SH codes; see Supp. Methods,
-  # Decisions Log E2/E3). Any records still flagged coord_in_canada == FALSE
-  # after the 2 km buffer are far enough outside the boundary that their
-  # country == "Canada" metadata (if present) should be treated as
-  # authoritative only for non-spatial enumeration, not spatial analyses.
-  # For GenBank records, canada_basis is also updated to
-  # "coordinates_outside_canada" for traceability.
-  canada_bound_sf <- sf::st_read(paths$canada_bound, quiet = TRUE)
-  canada_bound_buffered <- canada_bound_sf |>
+  # The boundary (paths$canada_bound, built in 01_spatial_data.R) is simplified
+  # at a 1 km tolerance. Buffering it by 2 km (in the equal-area projection
+  # `crs_albers`, so 2 km everywhere) absorbs that simplification and small
+  # coordinate imprecision at coastal and island sites.
+  canada_bound_buffered <- sf::st_read(paths$canada_bound, quiet = TRUE) |>
     sf::st_transform(crs_albers) |>
-    sf::st_buffer(dist = 2000) |>   # 2 km, in metres (crs_albers is equal-area, units = m)
+    sf::st_buffer(dist = 2000) |>   # 2 km, in metres
     sf::st_transform(4326)
   coord_idx <- which(!is.na(combined$lat) & !is.na(combined$lon))
-
-  # Initialise flag: NA for records with no coordinates
   combined$coord_in_canada <- NA
-
   if (length(coord_idx) > 0) {
     pts <- sf::st_as_sf(combined[coord_idx, ], coords = c("lon", "lat"), crs = 4326)
     sf::sf_use_s2(FALSE)
-    in_can <- lengths(sf::st_intersects(pts, canada_bound_buffered)) > 0
+    combined$coord_in_canada[coord_idx] <-
+      lengths(sf::st_intersects(pts, canada_bound_buffered)) > 0
     sf::sf_use_s2(TRUE)
-    n_outside <- sum(!in_can)
-    combined$coord_in_canada[coord_idx] <- in_can
-    # Update canada_basis for GenBank records whose coordinates fall outside Canada
-    if (n_outside > 0) {
-      outside_idx <- coord_idx[!in_can]
-      gb_outside <- outside_idx[combined$source[outside_idx] == "GenBank"]
-      if (length(gb_outside) > 0)
-        combined$canada_basis[gb_outside] <- "coordinates_outside_canada"
-    }
   }
+
+  # ---- 1b. GenBank location rule: which GenBank records are Canadian? -------
+  # The GenBank search matches "Canada" anywhere in a record (03_genbank.R), so
+  # each record's own location evidence decides whether it is kept:
+  #   - its location field (country_gb, GenBank's /geo_loc_name) begins with
+  #     "Canada"                                           -> kept;
+  #   - its location field names another country           -> dropped;
+  #   - it has no location field, and its coordinates are
+  #     inside Canada                                      -> kept;
+  #   - it has no location field, and its coordinates are
+  #     outside Canada                                     -> dropped;
+  #   - it has neither a location field nor coordinates    -> dropped.
+  # Where the field and the coordinates disagree, the field decides. Such a
+  # record is kept, but its coordinates fail the check in 1a, so it is left out
+  # of spatial analyses. GlobalFungi records were already restricted to
+  # Canada by their own country field in 02_globalfungi.R.
+  #
+  # `location_evidence` records which case applies to each GenBank record.
+  # Dropped records are written, with the reason, to paths$genbank_excluded,
+  # so the exclusion can be audited.
+  combined <- combined |>
+    dplyr::select(-dplyr::any_of("canada_basis")) |>   # older label from 03
+    dplyr::mutate(location_evidence = dplyr::case_when(
+      source != "GenBank"                                 ~ NA_character_,
+      grepl("^Canada", country_gb)                        ~ "location field: Canada",
+      !is.na(country_gb)                                  ~ "location field: another country",
+      coord_in_canada %in% TRUE                           ~ "no location field; coordinates inside Canada",
+      coord_in_canada %in% FALSE                          ~ "no location field; coordinates outside Canada",
+      TRUE                                                ~ "no location field or coordinates"))
+
+  kept_evidence <- c("location field: Canada",
+                     "no location field; coordinates inside Canada")
+  is_excluded <- combined$source == "GenBank" &
+                 !combined$location_evidence %in% kept_evidence
+
+  combined |>
+    dplyr::filter(is_excluded) |>
+    dplyr::select(accession, organism, sh_code, genus, species, country_gb,
+                  lat_lon_gb, coord_in_canada, location_evidence) |>
+    readr::write_csv(paths$genbank_excluded)
+
+  combined <- dplyr::filter(combined, !is_excluded)
 
   readr::write_csv(combined, paths$emf_combined)
 }

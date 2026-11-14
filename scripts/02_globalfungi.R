@@ -29,6 +29,8 @@
 #   globalfungi_sample_type_tally.csv       — sample_type composition of
 #                                             GlobalFungi v5, worldwide and
 #                                             Canada-wide (Step 2b)
+#   globalfungi_canada_sample_type_filter.csv — Canadian samples per sample
+#                                             type, kept or dropped (Step 2)
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -120,19 +122,44 @@ if (!file.exists(paths$unite_taxonomy)) {
 }
 
 # ---- Step 2: Filter GlobalFungi metadata for Canada samples -----------------
+# Keeps Canadian samples that carry an ITS2 read (ITS2 or ITSboth), were not
+# experimentally manipulated, and come from a sample type on the inclusion list
+# below. EcM fungi live in soil and in roots, so only those two sample types
+# are kept. An inclusion list (rather than a list of types to drop) states
+# exactly what was kept, and means a sample type added in a future GlobalFungi
+# release is left out unless it is deliberately added here.
+#
+# So that a new or dropped sample type is never missed, this step also writes
+# a table of every sample type among the Canadian samples that pass the other
+# filters, with the number kept and dropped (paths$gf_sample_type_filter).
+#
+# NOTE: this step is skipped when paths$gf_meta_out already exists. After
+# changing the filter, delete paths$gf_meta_out, paths$gf_ids_out,
+# paths$gf_sh_subset_out and paths$gf_long_out so that Steps 2-4 rebuild.
+
+GF_SAMPLE_TYPES_KEPT <- c("soil", "root")
 
 if (!file.exists(paths$gf_meta_out)) {
 
   meta <- data.table::fread(paths$gf_metadata, sep = "\t", quote = "")
 
-  canada_meta <- dplyr::filter(
+  # Canadian samples passing every filter except the sample-type one.
+  canada_candidates <- dplyr::filter(
     as.data.frame(meta),
     country          == "Canada",
     barcoding_region %in% c("ITS2", "ITSboth"),
-    manipulated      == "NO",
-    !sample_type     %in% c("shoot", "air", "water", "sediment")
+    manipulated      == "NO"
   )
 
+  canada_meta <- dplyr::filter(canada_candidates,
+                               sample_type %in% GF_SAMPLE_TYPES_KEPT)
+
+  sample_type_filter <- canada_candidates |>
+    dplyr::count(sample_type, name = "n_samples") |>
+    dplyr::mutate(kept = sample_type %in% GF_SAMPLE_TYPES_KEPT) |>
+    dplyr::arrange(dplyr::desc(kept), dplyr::desc(n_samples))
+
+  readr::write_csv(sample_type_filter, paths$gf_sample_type_filter)
   readr::write_csv(canada_meta, paths$gf_meta_out)
   writeLines(canada_meta$sample_ID, paths$gf_ids_out)
 
@@ -153,7 +180,7 @@ if (!file.exists(paths$gf_meta_out)) {
 #                        country filter ONLY -- deliberately NOT the fuller
 #                        Canadian filter used in Step 2 above (which also
 #                        requires an ITS2/ITSboth barcode, unmanipulated
-#                        samples, and drops shoot/air/water/sediment). The
+#                        samples, and keeps soil and root samples only). The
 #                        point of this tally is to describe the database as
 #                        deposited, so the two scopes must be comparable to
 #                        each other.

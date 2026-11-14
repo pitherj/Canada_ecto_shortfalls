@@ -401,10 +401,16 @@ paths <- list(
   # Sample-type composition of GlobalFungi v5, worldwide and Canada-wide
   # (02_globalfungi.R, Step 2b). Read by the manuscript Methods.
   gf_sample_type_tally = here::here("data_derived", "globalfungi_sample_type_tally.csv"),
-  gb_fasta_out     = here::here("data_derived", "checkpoints", "genbank_emf_canada.fasta"),
+  # Canadian samples by sample type, kept or dropped by the sample-type
+  # inclusion list (02_globalfungi.R, Step 2).
+  gf_sample_type_filter = here::here("data_derived", "globalfungi_canada_sample_type_filter.csv"),
+  gb_fasta_out    = here::here("data_derived", "checkpoints", "genbank_emf_canada.fasta"),
   gf_long_out      = here::here("data_derived", "globalfungi_canada_long.csv"),
   gb_long_out      = here::here("data_derived", "genbank_emf_canada_long.csv"),
   emf_combined     = here::here("data_derived", "emf_canada_combined.csv"),
+  # GenBank records dropped by the location rule in 04_combine_ecm_dataset.R,
+  # with the reason for each.
+  genbank_excluded = here::here("data_derived", "genbank_excluded_non_canadian.csv"),
   emf_data         = here::here("data_derived", "emf_canada_em_only.csv"),
 
   # ---- derived: host reference (from 05_prepare_fungalroot.R) ----------------

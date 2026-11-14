@@ -37,8 +37,13 @@
 #     Free key: https://www.ncbi.nlm.nih.gov/account/
 #
 # Search strategy:
-#   "Canada[Country] AND Fungi[Organism]
-#    AND (internal transcribed spacer OR ITS)"
+#   "Canada"[All Fields] AND "Fungi"[Organism]
+#    AND ("internal transcribed spacer"[All Fields] OR "ITS"[All Fields])
+#   NCBI has no search field for a record's collection country, so "Canada" is
+#   matched anywhere in the record (including submitter addresses). Which
+#   records are actually Canadian is decided afterwards, in
+#   04_combine_ecm_dataset.R, from each record's own location field and
+#   coordinates.
 #
 # Outputs (all in data_derived/ or data_derived/temp/):
 #   temp/genbank_emf_canada_ids.txt          — GenBank UIDs
@@ -398,10 +403,12 @@ if (file.exists(gb_fetch_log)) {
 
 # ---- Step 1: Search GenBank and save UIDs -----------------------------------
 
+# NCBI's nuccore database has no field for collection country: a [Country]
+# tag is silently run as [All Fields]. The query therefore says [All Fields]
+# explicitly. It returns the same records as the former "Canada"[Country]
+# query, so the saved UID list (gb_ids_path) is still valid.
 search_query <- paste(
-  #  'ectomyco*[All Fields]',
-  #  'AND "Canada"[Country]',
-  '"Canada"[Country]',
+  '"Canada"[All Fields]',
   'AND "Fungi"[Organism]',
   'AND ("internal transcribed spacer"[All Fields] OR "ITS"[All Fields])'
 )
@@ -1066,15 +1073,9 @@ if (!file.exists(paths$gb_long_out)) {
     its_region = dplyr::if_else(accession %in% its1_accessions, "ITSboth", "ITS2")
   )
 
-  # Provenance column
-  hits <- dplyr::mutate(hits,
-    canada_basis = dplyr::case_when(
-      !is.na(country_gb) & !is.na(lat_lon_gb) ~ "both",
-      !is.na(country_gb) &  is.na(lat_lon_gb) ~ "country_only",
-       is.na(country_gb) & !is.na(lat_lon_gb) ~ "coordinates_only",
-      TRUE                                     ~ "search_only"
-    )
-  )
+  # Whether each record is Canadian is decided in 04_combine_ecm_dataset.R,
+  # which has both the record's location field (country_gb) and the
+  # coordinate test against the Canada boundary.
 
   # Host taxon (structured field first, then regex on isolation_src).
   # The raw extracted value is preserved as `host_taxon_raw` for traceability;
