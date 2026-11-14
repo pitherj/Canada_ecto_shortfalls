@@ -38,7 +38,12 @@ HEAVY_SCRIPTS <- c("12_wallacean_density_map.R", "13_wallacean_global_comparator
 # directory. We match only the NN_*.R analysis scripts (00_setup.R is sourced
 # by each of them, and run_all.R excludes itself).
 script_dir <- here::here("scripts")
-scripts <- sort(list.files(script_dir, pattern = "^[0-9]{2}_.*\\.R$"))
+# The optional lower-case letter after the two digits allows a follow-on step
+# (e.g. 09b_table_s4_check.R runs right after 09_linnean.R). method = "radix"
+# sorts by character code, so "09_" always comes before "09b_" whatever the
+# computer's language settings.
+scripts <- sort(list.files(script_dir, pattern = "^[0-9]{2}[a-z]?_.*\\.R$"),
+                method = "radix")
 # 00_setup.R is not an analysis step — it is sourced by each numbered script
 # itself, so exclude it from the run list (it would otherwise appear as a
 # no-op "[1/N]" step). 99_verify_reproducibility.R is a stand-alone verification

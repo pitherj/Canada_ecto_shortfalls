@@ -11,7 +11,11 @@
 # INPUTS
 #   paths$emf_data              combined EcM dataset (04_combine_ecm_dataset.R)
 #   paths$gbif_ecm              GBIF EcM specimen records         (09_linnean.R)
-#   paths$gbif_ecm_nosequence   GBIF records for genera lacking sequence data
+#   paths$gbif_ecm_nosequence   GBIF records for genera flagged by name as
+#                               lacking sequence data            (09_linnean.R)
+#   paths$gbif_ecm_nosequence_confirmed
+#                               the subset confirmed to lack Canadian ITS
+#                               sequences                  (09b_table_s4_check.R)
 #   paths$canada_bound,
 #   paths$canada_bound_raw,
 #   paths$lakes_albers          spatial basemap layers            (01_spatial_data.R)
@@ -147,16 +151,29 @@ if (!(!need_g0)) {
 # =============================================================================
 # Blue circles: genera that also have sequence data in Canada.
 # Orange triangles: genera without sequence data in Canada.
+#
+# Which genera are "without" comes from 09b_table_s4_check.R, not directly from
+# the name match in 09_linnean.R. Genera that the name match flagged but that
+# 09b found to be synonyms of genera in our data, or to have Canadian ITS
+# sequences in GenBank, are plotted as "with sequence data".
 # =============================================================================
 if (!need_gbif) {
-} else if (!(!file.exists(paths$gbif_ecm) || !file.exists(paths$gbif_ecm_nosequence))) {
+} else if (all(file.exists(c(paths$gbif_ecm, paths$gbif_ecm_nosequence,
+                             paths$gbif_ecm_nosequence_confirmed)))) {
   gbif_labels <- c("Genera with sequence data in Canada",
                    "Genera without sequence data in Canada")
+
+  gbif_noseq_all       <- readr::read_csv(paths$gbif_ecm_nosequence, show_col_types = FALSE)
+  gbif_noseq_confirmed <- readr::read_csv(paths$gbif_ecm_nosequence_confirmed,
+                                          show_col_types = FALSE)
 
   gbif_combined <- dplyr::bind_rows(
     readr::read_csv(paths$gbif_ecm,            show_col_types = FALSE) |>
       dplyr::mutate(category = gbif_labels[1]),
-    readr::read_csv(paths$gbif_ecm_nosequence, show_col_types = FALSE) |>
+    # name-flagged records NOT confirmed by 09b: they do have Canadian data
+    dplyr::filter(gbif_noseq_all, !gbifID %in% gbif_noseq_confirmed$gbifID) |>
+      dplyr::mutate(category = gbif_labels[1]),
+    gbif_noseq_confirmed |>
       dplyr::mutate(category = gbif_labels[2])
   ) |>
     dplyr::filter(!is.na(decimalLatitude), !is.na(decimalLongitude)) |>

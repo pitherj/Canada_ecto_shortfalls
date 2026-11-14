@@ -423,6 +423,13 @@ paths <- list(
   gbif_ecm            = here::here("data_derived", "linnean", "linnean_gbif_ecm_canada.csv"),
   gbif_ecm_nosequence = here::here("data_derived", "linnean", "linnean_gbif_ecm_nosequence_canada.csv"),
   gbif_plotted_counts = here::here("data_derived", "linnean", "linnean_gbif_plotted_counts.csv"),
+  # Table S4 check (09b_table_s4_check.R): hand-curated synonym table and the
+  # cached GenBank query results (raw inputs), plus the per-genus result table
+  # and the GBIF records of genera confirmed to lack Canadian ITS sequences.
+  table_s4_synonyms       = here::here("data_raw", "table_s4_check", "table_s4_genus_synonyms.csv"),
+  table_s4_ncbi_dir       = here::here("data_raw", "table_s4_check", "ncbi_genus_queries"),
+  table_s4_reconciliation = here::here("data_derived", "linnean", "linnean_table_s4_reconciliation.csv"),
+  gbif_ecm_nosequence_confirmed = here::here("data_derived", "linnean", "linnean_gbif_ecm_nosequence_confirmed_canada.csv"),
   eltonian_global        = here::here("data_derived", "eltonian", "eltonian_global_host_associations.csv"),
   eltonian_host_matching = here::here("data_derived", "eltonian", "eltonian_host_matching.csv"),
   prestonian_out      = here::here("data_derived", "prestonian", "prestonian_biotime_matches.csv"),
