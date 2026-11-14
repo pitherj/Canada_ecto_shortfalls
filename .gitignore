@@ -99,5 +99,9 @@ temp/
 # revision (post-FACETS-submission). Untracked for now, like FACETS/ above.
 revision_01/
 
+# second-revision working folder: the confidential peer reviews, response
+# letters, in-progress Word manuscripts and the clean-up plan. Never tracked.
+2026-10_revisions/
+
 # temporary staging area for the OSF deposit (mirrors ARCHIVING.md; not tracked)
 for_OSF/
