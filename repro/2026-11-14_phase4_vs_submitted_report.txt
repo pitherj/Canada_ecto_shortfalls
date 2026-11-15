@@ -1,0 +1,261 @@
+Reproducibility verification — 2026-11-14 23:44:31
+
+== METRICS (headline numbers) ==
+  tracked: 165 | unchanged: 44 | changed: 96 | new: 25 | missing: 0
+
+  --- differences ---
+  [NEW] darwinian_sh_summary::% of Canadian SHs with >= 1 genome: baseline=NA  now=1.2
+  [NEW] darwinian_sh_summary::% of named SHs with >= 1 genome: baseline=NA  now=2.1
+  [NEW] darwinian_sh_summary::% of un-named SHs with >= 1 genome: baseline=NA  now=0.1
+  [NEW] darwinian_sh_summary::% of un-named SHs WITHOUT a genome: baseline=NA  now=99.9
+  [NEW] darwinian_sh_summary::Canadian SHs (all): baseline=NA  now=2719
+  [NEW] darwinian_sh_summary::Canadian SHs with >= 1 genome: baseline=NA  now=33
+  [NEW] darwinian_sh_summary::Genomes assigned to a UNITE SH (98.5% ITS2): baseline=NA  now=64
+  [NEW] darwinian_sh_summary::Genomes not assigned to an SH (see genomes_not_assessed file): baseline=NA  now=123
+  [NEW] darwinian_sh_summary::Genomes with a same-strain ITS accession: baseline=NA  now=129
+  [NEW] darwinian_sh_summary::MycoCosm genomes in EcM genera present in Canada: baseline=NA  now=187
+  [NEW] darwinian_sh_summary::Named Canadian SHs: baseline=NA  now=1535
+  [NEW] darwinian_sh_summary::Named SHs with >= 1 genome: baseline=NA  now=32
+  [NEW] darwinian_sh_summary::Named species (UNITE label) with >= 1 genome via SH match: baseline=NA  now=32
+  [NEW] darwinian_sh_summary::Un-named Canadian SHs: baseline=NA  now=1184
+  [NEW] darwinian_sh_summary::Un-named SHs in a genus with no MycoCosm genome (lower bound on absence): baseline=NA  now=708
+  [NEW] darwinian_sh_summary::Un-named SHs with >= 1 genome: baseline=NA  now=1
+  [CHANGED] darwinian_summary::% of our EcM genera absent from MycoCosm: baseline=67.7  now=66.9
+  [CHANGED] darwinian_summary::% of our EcM genera with genome data: baseline=32.3  now=33.1
+  [CHANGED] darwinian_summary::% of our EcM species absent from MycoCosm: baseline=95.3  now=95.7
+  [CHANGED] darwinian_summary::% of our EcM species with genome data: baseline=4.7  now=4.3
+  [CHANGED] darwinian_summary::EcM genera absent from MycoCosm: baseline=84  now=83
+  [CHANGED] darwinian_summary::EcM genera with genome data in MycoCosm: baseline=40  now=41
+  [CHANGED] darwinian_summary::EcM species (UNITE, named) in our Canadian dataset: baseline=1411  now=1350
+  [CHANGED] darwinian_summary::EcM species absent from MycoCosm: baseline=1344  now=1292
+  [CHANGED] darwinian_summary::EcM species with genome data in MycoCosm: baseline=67  now=58
+  [CHANGED] darwinian_summary::MycoCosm records matching our EcM genera: baseline=186  now=187
+  [CHANGED] eltonian_host_raster_summary::Cells with EcM host habitat and >=1 sequence record: baseline=6730  now=6675
+  [CHANGED] eltonian_host_raster_summary::Cells with EcM host habitat but no sequence records: baseline=311  now=372
+  [CHANGED] eltonian_host_raster_summary::Grid cells (0.5°) with EcM host habitat: baseline=7041  now=7047
+  [CHANGED] eltonian_host_raster_summary::Mean proportion of host spp. with sequence data (per cell): baseline=0.116  now=0.11
+  [CHANGED] eltonian_host_raster_summary::Median proportion of host spp. with sequence data (per cell): baseline=0.111  now=0.1
+  [CHANGED] eltonian_summary::% of Canadian EcM host species with any documented fungal association in Canada (paired with fungal genus): baseline=7.4  now=6.6
+  [CHANGED] eltonian_summary::% of Canadian EcM host species with any documented fungal association in Canada (paired with fungal SH code): baseline=7.4  now=6.6
+  [CHANGED] eltonian_summary::% of full host x named-species matrix cells empty: baseline=99.712  now=99.699
+  [CHANGED] eltonian_summary::% of full host x named-species matrix cells filled: baseline=0.288  now=0.301
+  [CHANGED] eltonian_summary::% of full host-genus x fungal-genus matrix cells empty: baseline=96.52  now=96.36
+  [CHANGED] eltonian_summary::% of full host-genus x fungal-genus matrix cells filled: baseline=3.48  now=3.64
+  [CHANGED] eltonian_summary::% of observed host x named-species pairs supported by exactly 1 occurrence: baseline=47  now=48.1
+  [CHANGED] eltonian_summary::% of observed host-genus x fungal-genus pairs supported by exactly 1 occurrence: baseline=18.9  now=18.1
+  [CHANGED] eltonian_summary::% of potential host x EcM-genus interaction pairs observed (Canadian scope): baseline=1.15  now=1.16
+  [CHANGED] eltonian_summary::Canadian EcM fungal genera with >= 1 documented host species in Canada: baseline=62  now=63
+  [CHANGED] eltonian_summary::Canadian EcM SH codes with >= 1 documented host species in Canada: baseline=503  now=498
+  [CHANGED] eltonian_summary::Canadian EcM species with documented global host associations (GlobalFungi root samples): baseline=487  now=485
+  [CHANGED] eltonian_summary::Canadian host species recorded as hosts in GenBank EcM records anywhere in the world: baseline=36  now=35
+  [CHANGED] eltonian_summary::Canadian host species with >= 1 observed EcM-fungus association in Canada (paired with fungal genus): baseline=20  now=18
+  [CHANGED] eltonian_summary::Canadian host species with >= 1 observed EcM-fungus association in Canada (paired with fungal SH code): baseline=20  now=18
+  [CHANGED] eltonian_summary::Empty cells in full host x named-species matrix (no observed pair): baseline=382687  now=366095
+  [CHANGED] eltonian_summary::Empty cells in full host-genus x fungal-genus matrix (no observed pair): baseline=7181  now=7169
+  [CHANGED] eltonian_summary::Filled cells in full host-genus x fungal-genus matrix (observed host-genus x fungal-genus pairs): baseline=259  now=271
+  [CHANGED] eltonian_summary::Full host x named-species matrix size (n_host_species x n_named_fungal_species): baseline=383792  now=367200
+  [CHANGED] eltonian_summary::GlobalFungi samples in Canada with >= 1 EcM fungal SH code detected: baseline=1469  now=1432
+  [CHANGED] eltonian_summary::Max Canadian host species for any EcM genus: baseline=16  now=15
+  [CHANGED] eltonian_summary::Max EcM genera documented for any Canadian host species: baseline=47  now=48
+  [CHANGED] eltonian_summary::Mean Canadian host species per EcM genus (averaged over genera with >= 1 host): baseline=6.3  now=6.2
+  [CHANGED] eltonian_summary::Mean EcM genera documented per Canadian host species (averaged over hosts with >= 1 association): baseline=19.4  now=21.8
+  [CHANGED] eltonian_summary::Named EcM fungal species detected anywhere in the Canadian dataset (full column denominator): baseline=1411  now=1350
+  [CHANGED] eltonian_summary::Named EcM fungal species with >= 1 documented host species (Canada scope): baseline=295  now=291
+  [CHANGED] eltonian_summary::Observed host x EcM-genus interaction pairs (Canadian scope): baseline=388  now=392
+  [CHANGED] eltonian_summary::Observed host x named-species pairs supported by exactly 1 occurrence (sample/record): baseline=519  now=532
+  [NEW] genbank_location_summary::EcM genera carried only by dropped records: baseline=NA  now=8
+  [NEW] genbank_location_summary::EcM named species carried only by dropped records: baseline=NA  now=128
+  [NEW] genbank_location_summary::EcM SH codes carried only by dropped records: baseline=NA  now=248
+  [NEW] genbank_location_summary::GenBank records dropped: location field: another country: baseline=NA  now=6429
+  [NEW] genbank_location_summary::GenBank records dropped: no location field or coordinates: baseline=NA  now=8163
+  [NEW] genbank_location_summary::GenBank records dropped: no location field; coordinates outside Canada: baseline=NA  now=152
+  [NEW] genbank_location_summary::GenBank records kept: location field: Canada: baseline=NA  now=17780
+  [NEW] genbank_location_summary::GenBank records kept: no location field; coordinates inside Canada: baseline=NA  now=88
+  [NEW] genbank_location_summary::Kept records whose coordinates fall outside Canada (field says Canada): baseline=NA  now=47
+  [CHANGED] linnean_summary::% of global EcM genera observed in Canada: baseline=37.9  now=35.5
+  [CHANGED] linnean_summary::All SH codes: GenBank only (not in GlobalFungi): baseline=760  now=560
+  [CHANGED] linnean_summary::All SH codes: GlobalFungi only (not in GenBank): baseline=1178  now=1308
+  [CHANGED] linnean_summary::All SH codes: shared between GlobalFungi and GenBank: baseline=884  now=851
+  [CHANGED] linnean_summary::Canadian EcM genera absent from FungalTraits EcM list: baseline=0  now=8
+  [CHANGED] linnean_summary::EcM genera observed in Canada: baseline=124  now=116
+  [CHANGED] linnean_summary::GBIF: EcM genera represented (genera with sequence data): baseline=110  now=112
+  [CHANGED] linnean_summary::GBIF: EcM genera represented (genera without sequence data): baseline=32  now=38
+  [CHANGED] linnean_summary::GBIF: EcM species represented (genera with sequence data): baseline=2317  now=2432
+  [CHANGED] linnean_summary::GBIF: EcM species represented (genera without sequence data): baseline=56  now=72
+  [CHANGED] linnean_summary::GBIF: physical EcM specimen records — genera WITH sequence data (Canada): baseline=51206  now=52138
+  [CHANGED] linnean_summary::GBIF: physical EcM specimen records — genera WITHOUT sequence data (Canada): baseline=1174  now=1400
+  [CHANGED] linnean_summary::GenBank: SH codes with species-level name (% of GenBank Canadian SHs): baseline=72.6  now=72.4
+  [CHANGED] linnean_summary::GenBank: SH codes with species-level UNITE name: baseline=1193  now=1022
+  [CHANGED] linnean_summary::GenBank: total EcM sequence records: baseline=9403  now=6263
+  [CHANGED] linnean_summary::GenBank: unique SH codes (Canadian dataset): baseline=1644  now=1411
+  [CHANGED] linnean_summary::GlobalFungi: non-singleton SH codes: baseline=1869  now=1952
+  [CHANGED] linnean_summary::GlobalFungi: SH codes with species-level name (% of GF Canadian SHs): baseline=54.5  now=54.3
+  [CHANGED] linnean_summary::GlobalFungi: SH codes with species-level UNITE name: baseline=1123  now=1173
+  [CHANGED] linnean_summary::GlobalFungi: singleton SH codes (% of GF Canadian SHs): baseline=9.4  now=9.6
+  [CHANGED] linnean_summary::GlobalFungi: singleton SH codes (total abundance = 1 across Canadian samples): baseline=193  now=207
+  [CHANGED] linnean_summary::GlobalFungi: unique SH codes (Canadian dataset): baseline=2062  now=2159
+  [CHANGED] linnean_summary::Named-species SH codes (records with coordinates only): baseline=1327  now=1391
+  [CHANGED] linnean_summary::Named-species SH codes: GenBank only: baseline=506  now=362
+  [CHANGED] linnean_summary::Named-species SH codes: GlobalFungi only: baseline=436  now=513
+  [CHANGED] linnean_summary::Named-species SH codes: shared between GlobalFungi and GenBank: baseline=687  now=660
+  [CHANGED] linnean_summary::Named-species SH codes: total unique across GF + GenBank (regardless of coords): baseline=1629  now=1535
+  [CHANGED] linnean_summary::Unique EcM genera (records with coordinates only): baseline=107  now=115
+  [CHANGED] linnean_summary::Unique named species (records with coordinates only): baseline=1168  now=1230
+  [CHANGED] linnean_summary::Unique named species (UNITE taxonomy, excl. _sp; combined dataset): baseline=1411  now=1350
+  [CHANGED] linnean_summary::Unique named species: GenBank only: baseline=409  now=298
+  [CHANGED] linnean_summary::Unique named species: GlobalFungi only: baseline=344  now=408
+  [CHANGED] linnean_summary::Unique named species: shared between GlobalFungi and GenBank: baseline=658  now=644
+  [CHANGED] linnean_summary::Unique UNITE v10 SH codes (combined dataset, all records): baseline=2822  now=2719
+  [CHANGED] linnean_summary::Unique UNITE v10 SH codes (records with coordinates only): baseline=2388  now=2524
+  [CHANGED] nrow::emf_canada_combined.csv: baseline=365880  now=349025
+  [CHANGED] nrow::emf_canada_em_only.csv: baseline=49270  now=47193
+  [CHANGED] nrow::globalfungi_canada_long.csv: baseline=333268  now=331157
+  [CHANGED] output6_summary::% of named fungal species with no georeferenced Canadian record: baseline=17.2  now=8.9
+  [CHANGED] output6_summary::% of removed cells attributable to structurally empty rows/columns: baseline=43.1  now=34.7
+  [CHANGED] output6_summary::% of testable observed pairs flagged geographically impossible: baseline=2.6  now=2.7
+  [CHANGED] output6_summary::Cells removed solely because a row or column is structurally empty: baseline=118656  now=87990
+  [CHANGED] output6_summary::Matrix cells removed by the finest-grain filter: baseline=275455  now=253598
+  [CHANGED] output6_summary::Named fungal species with no georeferenced Canadian record: baseline=243  now=120
+  [CHANGED] output6_summary::Observed pairs flagged geographically impossible at the finest grain: baseline=36  now=35
+  [CHANGED] output6_summary::Rarefaction: % gain in possible hosts from k = 10 to k = 20 records: baseline=12.7  now=12.3
+  [CHANGED] output6_summary::Spearman rho, possible hosts vs number of distinct locations: baseline=0.867  now=0.866
+  [CHANGED] output6_summary::Spearman rho, possible hosts vs number of occurrence records: baseline=0.848  now=0.846
+  [CHANGED] prestonian_summary::EcM named taxa (species) with NO BioTIME record: baseline=1409  now=1348
+  [CHANGED] prestonian_summary::EcM species (UNITE, named) in our Canadian dataset: baseline=1411  now=1350
+  [CHANGED] unique_locations::Combined: baseline=1666  now=1728
+  [CHANGED] unique_locations::GenBank: baseline=1180  now=1251
+  [CHANGED] unique_locations::GlobalFungi: baseline=486  now=477
+
+== FILES ==
+  tracked: 127 | identical: 13 | text differs: 54 | binary differs: 44 | new/missing: 16
+
+  --- text outputs whose CONTENT changed (investigate) ---
+  data_derived/darwinian/darwinian_genus_summary.csv  (1587 -> 1603 bytes)
+  data_derived/darwinian/darwinian_mycocosm_matches.csv  (21285 -> 21406 bytes)
+  data_derived/darwinian/darwinian_species_matches.csv  (6976 -> 5919 bytes)
+  data_derived/darwinian/darwinian_summary.csv  (529 -> 529 bytes)
+  data_derived/DATA-DICTIONARY.md  (42980 -> 53978 bytes)
+  data_derived/eltonian/eltonian_genbank_tissue_tally_canada.csv  (410 -> 406 bytes)
+  data_derived/eltonian/eltonian_genus_occurrence_counts.csv  (5089 -> 5270 bytes)
+  data_derived/eltonian/eltonian_global_fungi_to_hosts.csv  (51492 -> 51591 bytes)
+  data_derived/eltonian/eltonian_global_gb_fungi_to_hosts.csv  (3164 -> 3054 bytes)
+  data_derived/eltonian/eltonian_global_host_to_fungi.csv  (51308 -> 51509 bytes)
+  data_derived/eltonian/eltonian_host_matching.csv  (1696886 -> 1659005 bytes)
+  data_derived/eltonian/eltonian_host_names_metadata.csv  (1806378 -> 1742443 bytes)
+  data_derived/eltonian/eltonian_host_raster_summary.csv  (364 -> 361 bytes)
+  data_derived/eltonian/eltonian_matrix_genus_genus.csv  (2111 -> 2032 bytes)
+  data_derived/eltonian/eltonian_matrix_genus.csv  (3481 -> 3246 bytes)
+  data_derived/eltonian/eltonian_matrix_sh.csv  (28007 -> 25709 bytes)
+  data_derived/eltonian/eltonian_matrix_species.csv  (17197 -> 16394 bytes)
+  data_derived/eltonian/eltonian_pair_confidence.csv  (204 -> 200 bytes)
+  data_derived/eltonian/eltonian_sample_type_tally_canada_all.csv  (65 -> 53 bytes)
+  data_derived/eltonian/eltonian_sample_type_tally_canada.csv  (49 -> 39 bytes)
+  data_derived/eltonian/eltonian_sample_type_tally_global.csv  (196 -> 196 bytes)
+  data_derived/eltonian/eltonian_sensitivity_confidence.csv  (596 -> 596 bytes)
+  data_derived/eltonian/eltonian_species_occurrence_counts.csv  (57308 -> 57386 bytes)
+  data_derived/eltonian/eltonian_summary.csv  (3449 -> 3451 bytes)
+  data_derived/emf_canada_combined.csv  (232373532 -> 220397040 bytes)
+  data_derived/emf_canada_em_only.csv  (34203901 -> 33307558 bytes)
+  data_derived/genbank_emf_canada_long.csv  (23014750 -> 22663316 bytes)
+  data_derived/geo_possibility/output1_possible_pairs_grain_a.csv  (4649521 -> 4885918 bytes)
+  data_derived/geo_possibility/output2_grain_sensitivity.csv  (714 -> 711 bytes)
+  data_derived/geo_possibility/output3_effort_by_species.csv  (34577 -> 36514 bytes)
+  data_derived/geo_possibility/output3_rarefaction.csv  (895 -> 848 bytes)
+  data_derived/geo_possibility/output4_observed_but_impossible.csv  (3346 -> 3265 bytes)
+  data_derived/geo_possibility/output5_fill_statistics.csv  (1051 -> 1069 bytes)
+  data_derived/geo_possibility/output6_summary.csv  (740 -> 738 bytes)
+  data_derived/geo_possibility/run_log.txt  (5053 -> 5052 bytes)
+  data_derived/globalfungi_canada_long.csv  (173897327 -> 172890637 bytes)
+  data_derived/hutchinsonian/hutchinsonian_ecozone_sample_counts.csv  (1348 -> 1351 bytes)
+  data_derived/linnean/linnean_gbif_ecm_canada.csv  (33070121 -> 33437687 bytes)
+  data_derived/linnean/linnean_gbif_ecm_nosequence_canada.csv  (768577 -> 916580 bytes)
+  data_derived/linnean/linnean_gbif_plotted_counts.csv  (103 -> 102 bytes)
+  data_derived/linnean/linnean_genus_coverage.csv  (19169 -> 19177 bytes)
+  data_derived/linnean/linnean_summary.csv  (2263 -> 2263 bytes)
+  data_derived/prestonian/prestonian_summary.csv  (699 -> 699 bytes)
+  data_derived/raunkiaeran/raunkiaeran_absent_genera.csv  (6 -> 98 bytes)
+  data_derived/raunkiaeran/raunkiaeran_genus_summary.csv  (3072 -> 2860 bytes)
+  data_derived/raunkiaeran/raunkiaeran_trait_coverage.csv  (567 -> 569 bytes)
+  data_derived/raunkiaeran/raunkiaeran_trait_distributions.csv  (1635 -> 1641 bytes)
+  data_derived/wallacean/wallacean_global_gf_locs_per_sh.csv  (42887 -> 45221 bytes)
+  data_derived/wallacean/wallacean_global_gf_locs_per_species.csv  (34250 -> 32932 bytes)
+  data_derived/wallacean/wallacean_location_summary.csv  (109 -> 109 bytes)
+  data_derived/wallacean/wallacean_locs_per_genus.csv  (6726 -> 7271 bytes)
+  data_derived/wallacean/wallacean_locs_per_sh.csv  (146522 -> 154847 bytes)
+  data_derived/wallacean/wallacean_locs_per_species.csv  (94152 -> 99405 bytes)
+  data_derived/wallacean/wallacean_sampling_intensity.csv  (503 -> 495 bytes)
+
+  --- binary/image outputs: byte differences are EXPECTED
+      (embedded timestamps). Size change is the signal worth checking. ---
+  data_derived/eltonian/eltonian_interactions.rds  (-38 bytes)
+  data_derived/geo_possibility/output3_effort_limitation.png  (+5378 bytes)
+  data_derived/spatial/bien_host_data_proportion_0.5deg.tif  (-308 bytes)
+  data_derived/spatial/bien_host_data_richness_0.5deg.tif  (-318 bytes)
+  data_derived/spatial/bien_host_richness_0.5deg.tif  (+12 bytes)
+  data_derived/spatial/bien_host_species_stack.tif  (-260 bytes)
+  data_derived/spatial/canada_simple.gpkg  (+532480 bytes)
+  data_derived/spatial/ecoregions_processed.gpkg  (+0 bytes — size identical, almost certainly fine)
+  data_derived/spatial/lakes_canada_albers.gpkg  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-01_sampling_map_grey.png  (+6848 bytes)
+  figures/Figure-01_sampling_map.jpg  (+701 bytes)
+  figures/Figure-01_sampling_map.png  (+7564 bytes)
+  figures/Figure-01_sampling_map.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-02_wallacean_occupancy.jpg  (-19403 bytes)
+  figures/Figure-02_wallacean_occupancy.png  (-10122 bytes)
+  figures/Figure-02_wallacean_occupancy.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-03_climate_gap_grey.png  (+35883 bytes)
+  figures/Figure-03_climate_gap.jpg  (+22854 bytes)
+  figures/Figure-03_climate_gap.png  (+35429 bytes)
+  figures/Figure-03_climate_gap.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-04_host_bivariate_map_grey.png  (+15487 bytes)
+  figures/Figure-04_host_bivariate_map.jpg  (+25503 bytes)
+  figures/Figure-04_host_bivariate_map.png  (+17231 bytes)
+  figures/Figure-04_host_bivariate_map.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-05_shortfalls_summary.jpg  (-455706 bytes)
+  figures/Figure-05_shortfalls_summary.png  (+2855089 bytes)
+  figures/Figure-S1_dark_diversity_grey.png  (+24671 bytes)
+  figures/Figure-S1_dark_diversity.jpg  (+21397 bytes)
+  figures/Figure-S1_dark_diversity.png  (+24590 bytes)
+  figures/Figure-S1_dark_diversity.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-S2_gf_sampling_density_world.jpg  (-5649 bytes)
+  figures/Figure-S2_gf_sampling_density_world.png  (-2481 bytes)
+  figures/Figure-S2_gf_sampling_density_world.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-S3_depth_discard.jpg  (-10242 bytes)
+  figures/Figure-S3_depth_discard.png  (-650 bytes)
+  figures/Figure-S3_depth_discard.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-S4_ecozone_sampling_map_grey.png  (+46918 bytes)
+  figures/Figure-S4_ecozone_sampling_map.jpg  (+20423 bytes)
+  figures/Figure-S4_ecozone_sampling_map.png  (+45517 bytes)
+  figures/Figure-S4_ecozone_sampling_map.tif  (+0 bytes — size identical, almost certainly fine)
+  figures/Figure-S5_gbif_specimens_grey.png  (-11040 bytes)
+  figures/Figure-S5_gbif_specimens.jpg  (+5604 bytes)
+  figures/Figure-S5_gbif_specimens.png  (-11075 bytes)
+  figures/Figure-S5_gbif_specimens.tif  (+0 bytes — size identical, almost certainly fine)
+
+  --- new / missing outputs ---
+  [NEW] data_derived/darwinian/darwinian_genome_sh_assignments.csv
+  [NEW] data_derived/darwinian/darwinian_genomes_not_assessed.csv
+  [NEW] data_derived/darwinian/darwinian_sh_coverage.csv
+  [NEW] data_derived/darwinian/darwinian_sh_summary.csv
+  [NEW] data_derived/diagnostics/genbank_excluded_countries.csv
+  [NEW] data_derived/diagnostics/genbank_kept_coordinate_conflicts.csv
+  [NEW] data_derived/diagnostics/genbank_location_summary.csv
+  [NEW] data_derived/diagnostics/its1_exclusion_check.csv
+  [NEW] data_derived/diagnostics/its1_only_added_taxa.csv
+  [NEW] data_derived/ecm_family_rule_table.csv
+  [NEW] data_derived/eltonian/eltonian_host_names_unmatched.csv
+  [NEW] data_derived/genbank_excluded_non_canadian.csv
+  [NEW] data_derived/globalfungi_canada_sample_type_filter.csv
+  [NEW] data_derived/linnean/linnean_gbif_ecm_nosequence_confirmed_canada.csv
+  [NEW] data_derived/linnean/linnean_table_s4_sequence_matches.csv
+  [NEW] data_derived/linnean/linnean_table_s4.csv
+
+== ENVIRONMENT ==
+  identical to baseline
+
+== VERDICT ==
+  FAIL — see differences above
+
+  Note: this does not check the manuscript itself. Re-render it and
+  diff the text against the submitted .docx to confirm the reported
+  numbers are unchanged (see the README note).

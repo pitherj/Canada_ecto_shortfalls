@@ -1545,7 +1545,9 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
     # so a read/write round-trip silently edits values. Topping up is supposed to leave
     # cached records exactly as they were retrieved -- that includes their bytes.
     write_checkpoint_atomically(global_gb_ckpt, function(tmp) {
-      if (!file.copy(global_gb_ckpt, tmp, overwrite = TRUE))
+      # copy.mode = FALSE: the snapshot is read-only, and a copy keeping that
+      # setting could not be appended to.
+      if (!file.copy(global_gb_ckpt, tmp, overwrite = TRUE, copy.mode = FALSE))
         stop("Could not stage ", tmp, " for the global-GenBank top-up.",
              call. = FALSE)
       readr::write_csv(new_rows, tmp, append = TRUE)
@@ -1562,6 +1564,9 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
     global_gb_queried_ckpt,
     function(tmp) readr::write_csv(
       data.frame(genus = sort(union(genera_cached, genera_to_query))), tmp))
+
+  # Both files are raw snapshots: set them back to read-only.
+  Sys.chmod(c(global_gb_ckpt, global_gb_queried_ckpt), mode = "0444")
 }
 
 # Extract host_taxon from GenBank global records

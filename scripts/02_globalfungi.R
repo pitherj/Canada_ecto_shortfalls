@@ -322,7 +322,10 @@ if (!file.exists(paths$gf_long_out)) {
     ))
   }
 
-  canada_meta <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE)
+  # guess_max = Inf: some columns (e.g. organic_matter_content) are empty for
+  # the first 1,000+ samples, so a type guessed from the first 1,000 rows fails.
+  canada_meta <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE,
+                                 guess_max = Inf)
   meta_cols <- c(
     "sample_ID", "latitude", "longitude", "country",
     "barcoding_region", "sample_type", "environment_type",

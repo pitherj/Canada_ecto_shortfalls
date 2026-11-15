@@ -33,7 +33,8 @@ if (file.exists(paths$fig_depth_discard)) {
 } else if (!(!file.exists(paths$gf_meta_out))) {
 
   # ---- 1. Canadian soil-sample total sequencing depth (ITS_total) ------------
-  soil_meta <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE) |>
+  soil_meta <- readr::read_csv(paths$gf_meta_out, show_col_types = FALSE,
+                               guess_max = Inf) |>
     dplyr::filter(sample_type == "soil") |>
     dplyr::distinct(sample_ID, ITS_total)
 

@@ -1,0 +1,68 @@
+here() starts at /Users/jpither/Documents/claude_code/research/ECM_manuscript
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+
+Attaching package: ‘data.table’
+
+The following objects are masked from ‘package:dplyr’:
+
+    between, first, last
+
+Linking to GEOS 3.13.0, GDAL 3.8.5, PROJ 9.5.1; sf_use_s2() is TRUE
+terra 1.9.1
+
+Attaching package: ‘terra’
+
+The following object is masked from ‘package:data.table’:
+
+    shift
+
+The following object is masked from ‘package:tidyr’:
+
+    extract
+
+
+Attaching package: ‘tidyterra’
+
+The following object is masked from ‘package:stats’:
+
+    filter
+
+
+Attaching package: ‘patchwork’
+
+The following object is masked from ‘package:terra’:
+
+    area
+
+Spherical geometry (s2) switched off
+Part B4: global GenBank cache covers 124 genera; 8 EcM genera are missing and will be queried and appended (Aureonarius, Calonarius, Cystinarius, Dissingia, Hygronarius, Inosperma, Phlegmacium, Pseudosperma).
+  appended 7,400 global records for 8 genera.
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+although coordinates are longitude/latitude, st_intersects assumes that they
+are planar
+Warning message:
+One or more parsing issues, call `problems()` on your data frame for details,
+e.g.:
+  dat <- vroom(...)
+  problems(dat) 

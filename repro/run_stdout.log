@@ -1,0 +1,18 @@
+  Fetch timestamp : 2026-06-30 23:48:30 PDT
+  Search query    : "Canada"[Country] AND "Fungi"[Organism] AND ("internal transcribed spacer"[All Fields] OR "ITS"[All Fields])
+  Total hits      : 60911
+  Unique UIDs     : 60911
+# A tibble: 4 × 2
+  category                                              n_genera
+  <fct>                                                    <int>
+1 In our data under another name                              15
+2 Canadian ITS sequences in GenBank, not in our dataset        6
+3 ITS sequences exist, none from Canada                       14
+4 No ITS sequences found                                       3
+
+                     ambiguous_tie  no_its_accession (no_strain_code) 
+                                 2                                 20 
+no_its_accession (no_verified_hit)                  no_its2_extracted 
+                                38                                  1 
+              no_unite_hit_at_98.5                        sh_assigned 
+                                62                                 64 

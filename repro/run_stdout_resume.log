@@ -1,0 +1,84 @@
+21_geographic_possibility.R  |  run 2026-11-14 23:33:20
+random seed = 20260805
+==============================================================================
+
+[1] Loading inputs
+    host species (matrix rows)      : 272
+    named fungal species (columns)  : 1350
+    full matrix cells               : 367,200
+    observed (filled) cells         : 1105
+    denominator matches 18_eltonian.R section A3c: TRUE
+    host species with a BIEN range  : 227 of 272  (45 have no range and are
+                                      structurally impossible for every fungus)
+
+[2] Assembling fungal occurrence points
+    georeferenced Canadian records  : 31,168
+    distinct locations              : 1582
+    named fungal species with >=1 georeferenced Canadian record: 1230 of 1350
+    named fungal species with NO georeferenced record          : 120  (8.9% of columns are structurally zero)
+
+[3] Computing point x host possibility at each grain
+    (a) point in BIEN range ...
+    (b) point within 25 km of BIEN range ...
+    (b) point within 100 km of BIEN range ...
+    (c) shared 0.5-degree grid cell ...
+    (d,e) shared ecoregion / ecozone ...
+
+[4] Rolling locations up to fungal species
+
+[5] Output 1: geographic-possibility matrix at grain (a)
+    possible cells at grain (a): 113,602 of 367,200  (30.94%)
+
+[6] Output 2: grain sensitivity
+    (a) point inside BIEN range                113,602 cells possible (30.94% of matrix)
+    (b) point within 25 km of BIEN range       131,386 cells possible (35.78% of matrix)
+    (b) point within 100 km of BIEN range      154,703 cells possible (42.13% of matrix)
+    (c) shared 0.5-degree grid cell            112,025 cells possible (30.51% of matrix)
+    (d) shared ecoregion                       162,422 cells possible (44.23% of matrix)
+    (e) shared ecozone                         201,577 cells possible (54.90% of matrix)
+
+[7] Output 3: effort-limitation diagnostic
+    Spearman rho (possible hosts vs n records)   : 0.846
+    Spearman rho (possible hosts vs n locations) : 0.866
+    rarefaction (species with >= 20 records, n = 365):
+        k =  1  mean possible hosts =  53.8
+        k =  2  mean possible hosts =  68.0
+        k =  3  mean possible hosts =  76.2
+        k =  5  mean possible hosts =  86.4
+        k = 10  mean possible hosts = 100.0
+        k = 20  mean possible hosts = 112.3
+        gain from k=10 to k=20: 12.3%
+        mean at FULL sampling for the same species: 128.1
+
+[8] Output 4: observed pairs that are flagged impossible
+    observed pairs                              : 1105
+    observed but flagged impossible at grain (a): 35  (3.2%)
+        fungus_no_georef          5  (0.5% of all observed pairs)
+        range_or_coord_error     30  (2.7% of all observed pairs)
+    testable pairs (host has a range AND fungus has coordinates): 1100
+    of those, geographically impossible: 30  (2.7% -- the BIEN range-map / coordinate failure rate)
+
+[9] Output 5: recomputed fill statistics
+    Full matrix (as submitted)               denom   367,200   % empty (all obs)  99.699   % empty (possible obs only)  99.699
+    (a) point inside BIEN range              denom   113,602   % empty (all obs)  99.027   % empty (possible obs only)  99.058
+    (b) point within 25 km of BIEN range     denom   131,386   % empty (all obs)  99.159   % empty (possible obs only)  99.179
+    (b) point within 100 km of BIEN range    denom   154,703   % empty (all obs)  99.286   % empty (possible obs only)  99.299
+    (c) shared 0.5-degree grid cell          denom   112,025   % empty (all obs)  99.014   % empty (possible obs only)  99.047
+    (d) shared ecoregion                     denom   162,422   % empty (all obs)  99.320   % empty (possible obs only)  99.332
+    (e) shared ecozone                       denom   201,577   % empty (all obs)  99.452   % empty (possible obs only)  99.459
+
+[10] Output 6: headline numbers for the manuscript and SM1
+    Named fungal species with no georeferenced Canadian record                    120
+    % of named fungal species with no georeferenced Canadian record               8.9
+    Host species with no BIEN modelled range                                       45
+    Matrix cells removed by the finest-grain filter                            253598
+    Cells removed solely because a row or column is structurally empty          87990
+    % of removed cells attributable to structurally empty rows/columns           34.7
+    Spearman rho, possible hosts vs number of occurrence records                0.846
+    Spearman rho, possible hosts vs number of distinct locations                0.866
+    Rarefaction: % gain in possible hosts from k = 10 to k = 20 records          12.3
+    Observed pairs flagged geographically impossible at the finest grain           35
+    % of testable observed pairs flagged geographically impossible                2.7
+
+==============================================================================
+Done. Outputs written to /Users/jpither/Documents/claude_code/research/ECM_manuscript/data_derived/geo_possibility

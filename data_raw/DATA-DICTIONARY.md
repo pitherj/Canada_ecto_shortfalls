@@ -26,8 +26,10 @@ pipeline generates goes to `data_derived/` instead.
 >
 > `01_spatial_data.R` also downloads into `admin_boundaries/`, `ecoregions/`
 > and `natural_earth/`, but each download is guarded by an existence check, so
-> those stay read-only once populated. Likewise `snapshots/` is written only
-> when a snapshot file is absent (see "Live-query snapshots" below).
+> those stay read-only once populated. In `snapshots/` the files are
+> read-only but the folder itself stays writable: scripts add a snapshot when
+> it is absent, and `18_eltonian.R` replaces its global GenBank snapshot when
+> new EcM genera enter the dataset (see "Live-query snapshots" below).
 
 Most files were obtained from external sources and copied into this directory.
 A few small base layers (administrative boundaries, ecoregions, Natural Earth,
@@ -813,8 +815,12 @@ responses, synonym table, `09b` query cache) are in
 
 Five inputs come from web services rather than downloadable files. Each
 script writes its query results here on a first run (when the file is absent)
-and only reads them afterwards. The files are set read-only; to refresh one,
-make it writable, delete it and re-run the script that writes it.
+and only reads them afterwards. One exception: `18_eltonian.R` keeps global
+GenBank records for every EcM genus in the dataset, so when the genus list
+grows it queries only the new genera, appends their records (the existing rows
+keep their exact bytes), and sets the file read-only again. The files are set
+read-only; to refresh one, delete it (the folder is writable) and re-run the
+script that writes it.
 
 **These services have no versioned releases.** A query re-run later will not
 return the same result: taxonomies are revised, records are added, and native-
