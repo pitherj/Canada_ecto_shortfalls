@@ -62,12 +62,10 @@ identify_ecm_columns <- function() {
   unite_tax <- readr::read_csv(paths$unite_taxonomy, show_col_types = FALSE) |>
     dplyr::mutate(genus_clean = tolower(sub("^g__", "", genus)))
 
-  ft <- data.table::fread(paths$fungaltraits, select = c("GENUS", "primary_lifestyle"))
-  ft[, genus_lower := tolower(GENUS)]
-  ecm_genera_lower <- ft[primary_lifestyle == "ectomycorrhizal", tolower(GENUS)]
-
+  # Same EcM definition as the Canadian dataset (classify_ecm(), 00_setup.R).
+  ecm_ref <- ecm_reference()
   ecm_sh_codes <- unite_tax |>
-    dplyr::filter(genus_clean %in% ecm_genera_lower) |>
+    dplyr::filter(classify_ecm(genus, family, ecm_ref) %in% c("genus", "family")) |>
     dplyr::pull(sh_code) |>
     unique()
 
@@ -84,7 +82,7 @@ identify_ecm_columns <- function() {
     ecm_cols_present <- unique(gf_header_cols[matched_idx[!is.na(matched_idx)]])
   }
 
-  list(unite_tax = unite_tax, ecm_genera_lower = ecm_genera_lower,
+  list(unite_tax = unite_tax,
        ecm_cols_present = ecm_cols_present)
 }
 
@@ -101,7 +99,7 @@ quality_filtered_sample_ids <- function() {
     filtered_ids = gf_meta[
       barcoding_region %in% c("ITS2", "ITSboth") &
       manipulated == "NO" &
-      !sample_type %in% c("shoot", "air", "water", "sediment") &
+      sample_type %in% GF_SAMPLE_TYPES_KEPT &
       !is.na(latitude) & !is.na(longitude) &
       latitude  >= -90  & latitude  <= 90 &
       longitude >= -180 & longitude <= 180,
@@ -120,7 +118,9 @@ if (!(file.exists(out_cheap))) {
 
   ecm_tax <- dplyr::filter(ecm$unite_tax, sh_code %in% ecm$ecm_cols_present)
   n_ecm_sh_global    <- length(ecm$ecm_cols_present)
-  n_ecm_genus_global <- dplyr::n_distinct(ecm_tax$genus_clean)
+  # Genera: SHs with no genus label (e.g. "Boletaceae_gen_Incertae_sedis")
+  # are not counted as genera.
+  n_ecm_genus_global <- dplyr::n_distinct(ecm_tax$genus_clean[has_genus_label(ecm_tax$genus)])
   n_ecm_sp_global    <- dplyr::n_distinct(
     ecm_tax$species[!is.na(ecm_tax$species) & !grepl("_sp$", ecm_tax$species)]
   )

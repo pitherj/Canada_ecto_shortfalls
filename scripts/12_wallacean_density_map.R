@@ -11,8 +11,9 @@
 # EcM sample identification (Option C — SH-presence filter):
 #   1. Load UNITE SH taxonomy (data_derived/checkpoints/unite_sh_taxonomy.csv)
 #      to obtain genus labels for every SH code in GlobalFungi v5.
-#   2. Cross-reference with FungalTraits (data_raw/fungaltraits/FungalTraits_1-2.csv)
-#      to flag genera with primary_lifestyle == "ectomycorrhizal".
+#   2. Flag EcM SH codes with the same definition as the Canadian dataset
+#      (classify_ecm() in 00_setup.R: FungalTraits EcM genus, or the
+#      two-thirds family rule).
 #   3. Read only those EcM-genus SH columns from the 13 GB abundance matrix
 #      (data_raw/GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt).
 #   4. Retain any sample with at least one EcM SH read (row sum > 0).
@@ -20,7 +21,7 @@
 #      used for the Canadian dataset in 02_globalfungi.R:
 #        - barcoding_region %in% c("ITS2", "ITSboth")
 #        - manipulated == "NO"
-#        - !sample_type %in% c("shoot", "air", "water", "sediment")
+#        - sample_type %in% GF_SAMPLE_TYPES_KEPT (soil, root)
 #        - valid (non-NA, in-range) latitude and longitude
 #
 # Outputs (figures/):
@@ -70,18 +71,7 @@ CELL_M <- 100000L   # 100 km in metres (both projections use metres)
 # Columns: sh_code, kingdom, phylum, class, order, family, genus, species
 unite_tax <- readr::read_csv(paths$unite_taxonomy, show_col_types = FALSE)
 
-# 1b. Load FungalTraits; keep only the genus and primary_lifestyle columns
-ft <- data.table::fread(
-  paths$fungaltraits,
-  select = c("GENUS", "primary_lifestyle")
-)
-# Normalise genus name to lowercase for case-insensitive matching
-ft[, genus_lower := tolower(GENUS)]
-
-# 1c. Flag EcM genera
-ecm_genera_lower <- ft[primary_lifestyle == "ectomycorrhizal", tolower(GENUS)]
-
-# 1d. Cross-reference: which UNITE SH codes belong to EcM genera?
+# 1b. Which UNITE SH codes are EcM?
 #     The genus column in unite_sh_taxonomy.csv stores the genus as extracted
 #     from the UNITE taxonomy string (e.g., "g__Russula" or just "Russula").
 #     Strip the "g__" prefix if present, then lowercase for matching.
@@ -90,8 +80,11 @@ unite_tax <- dplyr::mutate(
   genus_clean = tolower(sub("^g__", "", genus))
 )
 
+# EcM SH codes: same definition as the Canadian dataset (classify_ecm() in
+# 00_setup.R: FungalTraits EcM genus, or the two-thirds family rule).
+ecm_ref <- ecm_reference()
 ecm_sh_codes <- unite_tax |>
-  dplyr::filter(genus_clean %in% ecm_genera_lower) |>
+  dplyr::filter(classify_ecm(genus, family, ecm_ref) %in% c("genus", "family")) |>
   dplyr::pull(sh_code) |>
   unique()
 
@@ -178,7 +171,7 @@ if (file.exists(out_sample_ids)) {
   gf_meta_filt <- gf_meta[
     barcoding_region %in% c("ITS2", "ITSboth") &
     manipulated == "NO" &
-    !sample_type %in% c("shoot", "air", "water", "sediment") &
+    sample_type %in% GF_SAMPLE_TYPES_KEPT &
     !is.na(latitude)  & !is.na(longitude) &
     latitude  >= -90  & latitude  <= 90 &
     longitude >= -180 & longitude <= 180

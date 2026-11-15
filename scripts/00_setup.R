@@ -297,6 +297,13 @@ write_checkpoint_atomically <- function(path, write_fun) {
 # A genus that FungalTraits lists as NOT EcM is never admitted.
 FAMILY_ECM_MIN_FRAC <- 2 / 3
 
+# GlobalFungi sample types kept. EcM fungi live in soil and in roots, so only
+# those two sample types are used, for the Canadian dataset (02) and for every
+# global GlobalFungi comparison (11, 12, 13, diagnostics). An inclusion list
+# means a sample type added in a future GlobalFungi release is left out unless
+# it is added here deliberately.
+GF_SAMPLE_TYPES_KEPT <- c("soil", "root")
+
 # ecm_reference(): read FungalTraits once and return what classify_ecm() needs:
 # the EcM genera, all FungalTraits genera, and a per-family summary (number of
 # genera, number EcM, whether the family passes, and the shared EcM lineage

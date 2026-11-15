@@ -44,7 +44,7 @@ its1_meta <- dplyr::filter(meta,
                            country          == "Canada",
                            barcoding_region == "ITS1",
                            manipulated      == "NO",
-                           sample_type      %in% c("soil", "root"))
+                           sample_type      %in% GF_SAMPLE_TYPES_KEPT)
 rm(meta)
 
 # ---- Step 2: their rows of the SH abundance matrix ---------------------------

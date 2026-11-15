@@ -1,36 +1,43 @@
 # =============================================================================
-# GlobalFungi Sequence Extraction
+# 02_globalfungi.R  —  Canadian records from GlobalFungi v5
 # =============================================================================
-# Extracts Canadian EcM fungal sequence records from GlobalFungi v5.
-# Each step is checkpointed — safe to re-run; skips completed steps.
+# PURPOSE
+#   Extract the Canadian fungal records from GlobalFungi v5: samples from
+#   Canada, sequenced for ITS2 (alone or with ITS1), not experimentally
+#   manipulated, and from soil or root (the sample-type inclusion list). Each
+#   record carries the SH code GlobalFungi assigned and its UNITE taxonomy.
+#   Also tallies GlobalFungi's sample-type composition for the Methods.
 #
-# Manual prerequisites (no public API — download manually):
-#   GlobalFungi v5:  https://globalfungi.com  → Downloads
-#     data_raw/GlobalFungi/GlobalFungi_5_sample_metadata.txt       (~75 MB)
-#     data_raw/GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt (~13 GB)
-#     data_raw/GlobalFungi/GlobalFungi_5_species_abundance_ITS1_ITS2.txt
+# INPUTS (data_raw/; downloaded manually, no public API)
+#   GlobalFungi v5 (https://globalfungi.com > Downloads):
+#     GlobalFungi/GlobalFungi_5_sample_metadata.txt         (~75 MB)
+#     GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt  (~13 GB)
+#   UNITE general FASTA, _dev variant (https://unite.ut.ee/repository.php):
+#     paths$unite_fasta, PINNED to the build GlobalFungi used. UNITE renumbers
+#     and merges SH codes between builds, so another build silently breaks the
+#     taxonomy join. Do not repin without re-validating coverage first (see
+#     the gate at Step 4).
 #
-#   UNITE general FASTA (_dev variant):  https://unite.ut.ee/repository.php
-#     The reference build is PINNED, not auto-detected (paths$unite_fasta in
-#     00_setup.R). UNITE SH codes are renumbered/merged across builds, so a
-#     build other than the one GlobalFungi used to pre-assign its SH codes
-#     silently breaks this join. Do not repin without re-validating coverage
-#     (see the gate at Step 4 below) against the new build first.
+# OUTPUTS (data_derived/)
+#   checkpoints/unite_sh_taxonomy.csv             SH code -> taxonomy lookup
+#   checkpoints/globalfungi_canada_metadata.csv   Canadian sample metadata
+#   checkpoints/globalfungi_canada_ids.txt        Canadian sample IDs (for awk)
+#   checkpoints/globalfungi_canada_SH_abundance.txt  Canadian rows of the matrix
+#   globalfungi_canada_long.csv                   one row per sample x SH code
+#   globalfungi_sample_type_tally.csv             sample types, worldwide and
+#                                                 Canada-wide (Step 2b)
+#   globalfungi_canada_sample_type_filter.csv     Canadian samples per sample
+#                                                 type, kept or dropped (Step 2)
 #
-#   To update either dataset: delete the corresponding data_derived/ checkpoint
-#   files so the relevant step regenerates on the next run.
+# MANUSCRIPT ITEMS IT FEEDS
+#   Every result built on the EcM dataset (via 04); the Methods sentences on
+#   GlobalFungi's sample-type composition; Table 1 (GlobalFungi columns).
 #
-# Outputs (all in data_derived/):
-#   temp/unite_sh_taxonomy.csv              — SH code → taxonomy lookup
-#   temp/globalfungi_canada_metadata.csv    — Canada sample metadata
-#   temp/globalfungi_canada_ids.txt         — Canada sample ID list (for awk)
-#   temp/globalfungi_canada_SH_abundance.txt — Canada rows from 13 GB matrix
-#   globalfungi_canada_long.csv             — final long-format table
-#   globalfungi_sample_type_tally.csv       — sample_type composition of
-#                                             GlobalFungi v5, worldwide and
-#                                             Canada-wide (Step 2b)
-#   globalfungi_canada_sample_type_filter.csv — Canadian samples per sample
-#                                             type, kept or dropped (Step 2)
+# RE-RUN WHEN
+#   GlobalFungi or the pinned UNITE build changes, or the sample filters in
+#   Step 2 change. Each step is skipped when its output exists: delete the
+#   outputs of the step to rebuild (Step 2 needs gf_meta_out, gf_ids_out,
+#   gf_sh_subset_out and gf_long_out deleted together). Then re-run 04 onward.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -137,7 +144,8 @@ if (!file.exists(paths$unite_taxonomy)) {
 # changing the filter, delete paths$gf_meta_out, paths$gf_ids_out,
 # paths$gf_sh_subset_out and paths$gf_long_out so that Steps 2-4 rebuild.
 
-GF_SAMPLE_TYPES_KEPT <- c("soil", "root")
+# GF_SAMPLE_TYPES_KEPT ("soil", "root") is defined in 00_setup.R, so the
+# global GlobalFungi comparisons (11, 12, 13) use the same list.
 
 if (!file.exists(paths$gf_meta_out)) {
 

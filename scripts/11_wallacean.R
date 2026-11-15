@@ -1,26 +1,24 @@
 # =============================================================================
-# Wallacean Shortfall: Geographic Sampling Coverage
+# 11_wallacean.R  —  Wallacean shortfall: geographic sampling coverage
 # =============================================================================
-# How well distributed across Canada are the EcM fungal sampling locations,
-# and how many locations has each taxon been recorded from?
+# PURPOSE
+#   How widely across Canada have EcM fungi been sampled, and from how many
+#   locations is each taxon known? Few locations per taxon, and many taxa
+#   known from a single location, indicate the Wallacean shortfall.
+#   Run for three datasets, for comparison:
+#     GlobalFungi  GlobalFungi records with coordinates inside Canada
+#     GenBank      GenBank records with coordinates inside Canada
+#                  (coord_in_canada == TRUE)
+#     Combined     both, deduplicated on (sh_code, genus, species, lat, lon) so
+#                  co-located records from the two sources count once
+#   Also computes, for the GlobalFungi-only occupancy analyses, how many
+#   30 arc-second grid cells worldwide each Canadian taxon occupies (Step 5).
 #
-# Low mean locations per taxon and a high proportion of taxa known from a
-# single location are the primary indicators of the Wallacean shortfall.
+# INPUTS
+#   emf (04); the global GlobalFungi SH abundance matrix (~13 GB, data_raw);
+#   paths$unite_taxonomy (02)
 #
-# The analysis is run independently for three datasets to allow direct
-# comparison:
-#   GlobalFungi — all GF records with decimal-degree coordinates
-#   GenBank     — GenBank records with parsed coordinates (canada_basis %in%
-#                 c("both", "coordinates_only"); ~40.7% of GenBank records)
-#   Combined    — union of the above two, deduplicated on
-#                 (sh_code, genus, species, lat, lon) so co-located records
-#                 from both sources are counted once
-#
-# The geographic sampling maps are produced by 17_hutchinsonian.R
-# (Figure-S4_ecozone_sampling_map.png) and 19_sampling_maps.R
-# (Figure-S5_gbif_specimens.png); they are not duplicated here.
-#
-# Outputs (data_derived/wallacean/):
+# OUTPUTS (data_derived/wallacean/)
 #   wallacean_location_summary.csv     — unique location counts (3 datasets)
 #   wallacean_sampling_intensity.csv   — locations-per-taxon stats (3 datasets)
 #   wallacean_locs_per_sh.csv          — per-SH location counts (dataset col)
@@ -41,6 +39,13 @@
 #   derived from our own UNITE SH-code taxonomy (paths$unite_taxonomy), not
 #   from GlobalFungi's bundled species-level abundance matrix — see the Step 5
 #   header comment below for why.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Table 3, Figure 2, in-text Wallacean results. (The sampling maps come
+#   from 17 and 19.)
+#
+# RE-RUN WHEN
+#   The EcM dataset (04) changes.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -251,7 +256,7 @@ if (!file.exists(out_global_gf_sp) || file.size(out_global_gf_sp) == 0L ||
   gf_meta_filt <- gf_meta_all[
     barcoding_region %in% c("ITS2", "ITSboth") &
     manipulated == "NO" &
-    !sample_type %in% c("shoot", "air", "water", "sediment") &
+    sample_type %in% GF_SAMPLE_TYPES_KEPT &
     !is.na(latitude) & !is.na(longitude)
   ]
 
