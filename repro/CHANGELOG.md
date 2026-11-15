@@ -45,8 +45,27 @@ Changes that alter results (Phase 2 of the clean-up plan):
   reviewer's question about un-named SHs. Hand edits to its lookup table were
   removed so updates run unattended. Its "genus with no genome" count now
   excludes SHs without a genus label.
+- **Global comparators (`11` Step 5, `12`, `13`).** They still used the old
+  GlobalFungi sample-type exclusion list and the FungalTraits genus list
+  alone, unlike the Canadian data. They now use the shared soil-and-root list
+  and EcM rule (`GF_SAMPLE_TYPES_KEPT`, `classify_ecm()`).
+- **Host-name typos (`00_setup.R`, `18`).** A hand-maintained list (one entry,
+  `Abies balamifera` → `Abies balsamea`) was replaced by an automatic rule:
+  a Canadian host name not in the host list is corrected when its epithet is
+  at most 2 letters, and fewer than a third of its length, from exactly one
+  listed congener. Every unmatched name goes to
+  `eltonian_host_names_unmatched.csv`. On the current data this corrects
+  *Betula payrifera* and *Abies balsames* (4 record-by-plant rows), which the
+  old list missed. *Abies balamifera* (4 letters off) is now listed as
+  unmatched rather than corrected. The cut-off of 2: every unmatched name
+  3 letters from a host species is a distinct species (*Quercus robur* vs
+  *Q. rubra*).
 
 Changes that do not alter results (Phase 3):
+
+- **Growth-form override removed (`06`).** The one hand-entered value
+  (*Saxifraga oppositifolia* = herb) was no longer used: BIEN now supplies
+  it. Species no source resolves would be recorded as `unknown`.
 
 - Live-query results moved from `data_derived/checkpoints/` to
   `data_raw/snapshots/`.

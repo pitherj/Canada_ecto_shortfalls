@@ -7,8 +7,8 @@
 #   according to the Native Species Resolver (NSR), and (c) recorded in
 #   Canada by BIEN. No growth-form restriction: herbs count as fully as trees.
 #   Each species also gets a growth form (tree, shrub, herb...) as descriptive
-#   metadata, from BIEN traits, then GIFT, then the congener mode, then a
-#   short curated list (Steps 5-7c). This list is the denominator of possible
+#   metadata, from BIEN traits, then GIFT, then the congener mode; species
+#   none of these resolves are "unknown" (Steps 5-7c). This list is the denominator of possible
 #   host interactions in the Eltonian analysis.
 #
 # INPUTS
@@ -37,8 +37,8 @@
 #   data_derived/ecm_native_canada_host_species.csv
 #     Columns: species, host_demonstrated (always TRUE), evidence_source
 #     ("occurrence" | "table_s2" | "both"), growth_form, growth_form_source
-#     ("bien" | "gift" | "congener" | "manual" — which stage of the Step 5-7c
-#     chain supplied the growth form)
+#     ("bien" | "gift" | "congener" | "none" — which stage of the Step 5-7c
+#     chain supplied the growth form; "none" means growth_form is "unknown")
 #
 # MANUSCRIPT ITEMS IT FEEDS
 #   The Eltonian denominator (number of native host species), Figure 4,
@@ -62,7 +62,7 @@
 #   6.  Join growth forms to host species table
 #   7a. Impute missing growth_form from GIFT trait 1.2.1
 #   7b. Congener-modal fallback for any growth_form still missing
-#   7c. Curated manual overrides for any growth_form still missing after 7a/7b
+#   7c. Record any growth_form still missing after 7a/7b as "unknown"
 #
 # HOST DETERMINATION
 #
@@ -159,8 +159,8 @@ if (file.exists(native_ckpt)) {
       "  it cannot be checked for the silent batch loss described in ",
       "repro/genbank_fetch_gap_prefix_state.md.\n",
       "  To rebuild it with completeness checking (NSR query, ~5-15 min):\n",
-      "    file.remove(here::here('data_derived','checkpoints',",
-      "'bien_nsr_native_species.csv'))\n",
+      "    make data_raw/snapshots/ writable, then ",
+      "file.remove(paths$snap_bien_native)\n",
       "  Note that rebuilding re-queries NSR today and may change the host ",
       "list.", call. = FALSE
     )
@@ -271,8 +271,8 @@ if (file.exists(growthform_ckpt)) {
       "batch (~200 species losing their\n  growth form) cannot be ruled out. ",
       "Growth form is descriptive metadata only and\n  has documented ",
       "fallbacks (Steps 7a-7c), so this is not fatal. To rebuild with ",
-      "checking:\n    file.remove(here::here('data_derived','checkpoints',",
-      "'bien_ecm_growthforms.csv'))", call. = FALSE)
+      "checking:\n    make data_raw/snapshots/ writable, then ",
+      "file.remove(paths$snap_bien_growth)", call. = FALSE)
   }
 
 } else {
@@ -345,7 +345,7 @@ host_species_table <- data.frame(species = em_canada_species) |>
   dplyr::mutate(host_demonstrated = species %in% em_canada_species) |>
   dplyr::left_join(evidence_lookup, by = "species") |>
   dplyr::left_join(ecm_species_with_growthform, by = "species") |>
-  # growth_form_source records WHICH of the four stages below supplied the
+  # growth_form_source records WHICH of the three stages below supplied the
   # growth form, so the provenance of every value is auditable downstream.
   dplyr::mutate(growth_form_source = dplyr::if_else(is.na(growth_form),
                                                     NA_character_, "bien"))
@@ -431,29 +431,14 @@ if (n_na_gf_remaining > 0L) {
 
 }
 
-# ---- Step 7c: Manual growth_form overrides for species unresolved by all ----
-#               three automated sources (BIEN, GIFT, congener-modal fallback)
-# Curated, species-level corrections for cases where growth_form remained NA
-# because BIEN trait data, GIFT trait 1.2.1, and the genus-modal fallback all
-# failed to resolve a value (e.g. no other Canadian congener in the table had
-# a known growth form). Add new entries here as they surface; mirrors the
-# `typo_fixes` lookup convention in canonicalize_host() (00_setup.R).
-#   Saxifraga oppositifolia (purple saxifrage) — low cushion/mat-forming
-#   arctic-alpine herb; unambiguous from species account, but no Saxifraga
-#   congener in this host list carried a resolved growth form for the
-#   genus-modal fallback to draw on.
-manual_growth_form <- c(
-  "Saxifraga oppositifolia" = "herb"
-)
-n_na_gf_manual <- sum(is.na(host_species_table$growth_form))
-if (n_na_gf_manual > 0L) {
-  ix <- match(host_species_table$species, names(manual_growth_form))
-  matched <- !is.na(ix) & is.na(host_species_table$growth_form)
-  if (any(matched)) {
-    host_species_table$growth_form[matched] <- unname(manual_growth_form[ix[matched]])
-    host_species_table$growth_form_source[matched] <- "manual"
-  }
-}
+# ---- Step 7c: Species no source resolves -----------------------------------
+# A species for which BIEN, GIFT and the congener fallback all give no growth
+# form is recorded as "unknown", with growth_form_source "none". Growth form
+# is descriptive only: it sets the tree / non-tree split, and an "unknown"
+# species counts as non-tree there.
+unresolved_gf <- is.na(host_species_table$growth_form)
+host_species_table$growth_form[unresolved_gf]        <- "unknown"
+host_species_table$growth_form_source[unresolved_gf] <- "none"
 
 # ---- Step 8: Save -----------------------------------------------------------
 

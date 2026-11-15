@@ -47,6 +47,9 @@
 #   eltonian_host_names_metadata.csv — the DESCRIPTIVE
 #       inventory: the same rows without the root-evidence restriction, plus a
 #       `root_evidence` flag. Backs the host-name quality tables (S2, S3)
+#   eltonian_host_names_unmatched.csv — every cleaned Canadian host name not
+#       in the host list, with its count, and the automatic typo correction
+#       made, if any (see A2b)
 #   eltonian_matrix_genus.csv
 #   eltonian_matrix_sh.csv
 #   eltonian_matrix_species.csv — host x named-EcM-species
@@ -131,7 +134,8 @@
 #   Part A  Canadian scope
 #     A1    host species list            A3-A3d  interaction matrices, fill,
 #     A2    host strings; tissue rules           confidence, sensitivity
-#     A2b   split multi-plant labels     A4      coverage statistics
+#     A2b   split multi-plant labels;    A4      coverage statistics
+#           correct host-name typos
 #     A2c-d sample-type and tissue       A5-A9   host-coverage rasters and
 #           tallies (diagnostics)                bivariate map (Figure 4)
 #   Part B  Global scope
@@ -277,7 +281,7 @@ host_long_all <- dplyr::bind_rows(
     dplyr::mutate(host_field = "host_taxon")
 )
 
-# ---- A2b. Split multi-species host labels ------------------------------------
+# ---- A2b. Split multi-species host labels; correct host-name typos ----------
 # Some metadata fields name several plants for a single sample, e.g.
 # "Picea mariana, Picea glauca, Pinus banksiana". canonicalize_host() keeps only
 # the first two words of a string, so without splitting, every plant after the
@@ -322,10 +326,26 @@ host_long_all <- host_long_all |>
   dplyr::mutate(host_item = trimws(host_item)) |>
   dplyr::filter(nzchar(host_item))
 
+# Misspelled host names. Each cleaned name that is not in the host list is
+# checked by host_typo_corrections() (00_setup.R): it is corrected only when
+# its epithet is within two letters of exactly one listed congener. Every
+# unmatched name, corrected or not, is written with its record count to
+# eltonian_host_names_unmatched.csv, so new misspellings can be seen at each
+# update. Applied to the Canadian records only: in the global branch (B2) a
+# real non-Canadian species could lie within two letters of a Canadian
+# congener, and correcting it would be wrong.
+host_long_all <- dplyr::mutate(host_long_all, host_clean = clean_host_name(host_item))
+host_typos <- host_typo_corrections(host_long_all$host_clean, host_tbl$species)
+host_typos |>
+  dplyr::left_join(dplyr::count(host_long_all, host_name = host_clean, name = "n_host_items"),
+                   by = "host_name") |>
+  dplyr::arrange(status, dplyr::desc(n_host_items)) |>
+  readr::write_csv(file.path(paths$out_eltonian, "eltonian_host_names_unmatched.csv"))
+
 host_long_all <- host_long_all |>
   dplyr::mutate(
-    host_clean      = clean_host_name(host_item),
-    host_genus      = sub("^(\\S+).*", "\\1", host_clean),
+    host_clean      = correct_host_typos(host_clean, host_typos),
+    host_genus     = sub("^(\\S+).*", "\\1", host_clean),
     matched         = host_clean %in% host_tbl$species,
     match_genus     = host_genus %in% sub("^(\\S+).*", "\\1", host_tbl$species),
     pair_confidence = dplyr::if_else(n_hosts_in_record == 1L,

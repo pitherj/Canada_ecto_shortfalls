@@ -130,12 +130,12 @@ snap_30arcsec <- function(x) round(x * 120) / 120
 #   2. collapse internal whitespace
 #   3. keep only the first two whitespace-separated tokens
 #   4. strip residual per-token punctuation
-#   5. apply the curated typo-correction lookup `typo_fixes`
-#   6. case-normalize: Titlecase genus, lowercase species epithet (so that
+#   5. case-normalize: Titlecase genus, lowercase species epithet (so that
 #      "pinus banksiana" and "PINUS BANKSIANA" are both accepted)
-#   7. reject anything that is not a valid Latin name pattern (common names such
+#   6. reject anything that is not a valid Latin name pattern (common names such
 #      as "pine", or entries with digits, become NA)
-# Extend `typo_fixes` as new misspellings surface.
+# Misspellings are handled separately by correct_host_typos() (below), which
+# needs the host species list built in 06.
 canonicalize_host <- function(x) {
   if (length(x) == 0L) return(character(0L))
   out <- trimws(as.character(x))
@@ -159,10 +159,6 @@ canonicalize_host <- function(x) {
     else NA_character_
   }, character(1L))
 
-  typo_fixes <- c("Abies balamifera" = "Abies balsamea")
-  ix <- match(out, names(typo_fixes))
-  out[!is.na(ix)] <- unname(typo_fixes[ix[!is.na(ix)]])
-
   toks2 <- strsplit(out, " ", fixed = TRUE)
   out <- vapply(seq_along(toks2), function(i) {
     if (is.na(out[i])) return(NA_character_)
@@ -175,6 +171,61 @@ canonicalize_host <- function(x) {
   valid <- grepl("^[A-Z][a-z]+( [a-z][a-z-]*)?$", out)
   out[!valid] <- NA_character_
   out
+}
+
+# ---- host_typo_corrections(): find misspelled host names automatically -------
+# A cleaned host name ("Genus species") that is not in the host species list
+# may be a misspelling of one that is. This function proposes a correction
+# only when all four conditions hold:
+#   1. the genus is spelled exactly as a genus in the host list;
+#   2. the species epithet differs from a listed congener's epithet by at most
+#      HOST_TYPO_MAX_LETTERS letters (each added, dropped or swapped letter
+#      counts as one; base R adist());
+#   3. those letters are fewer than one-third of the epithet's length, so that
+#      short words from free-text labels ("Betula and Alnus" gives "Betula
+#      and", 2 letters from Betula nana) are not mistaken for typos;
+#   4. exactly one listed congener is that close (no ties).
+# The cut-off is 2 letters because, in the current data, every unmatched name
+# 3 letters from a host species is a genuinely different species (Quercus
+# robur vs Q. rubra, Picea pungens vs P. rubens), while the names 1 letter away
+# are typos (Betula payrifera, Abies balsames).
+# Returns one row per distinct input name that is not in the list:
+#   host_name, status ("corrected", "unmatched: genus in host list",
+#   "unmatched: genus not in host list"), corrected_to, letters_different.
+HOST_TYPO_MAX_LETTERS <- 2L
+
+host_typo_corrections <- function(x, host_species,
+                                  max_letters = HOST_TYPO_MAX_LETTERS) {
+  nm <- unique(x[!is.na(x) & !x %in% host_species])
+  host_genus <- sub(" .*", "", host_species)
+  purrr::map_dfr(nm, function(n) {
+    g <- sub(" .*", "", n)
+    ep <- if (grepl(" ", n)) sub("^\\S+ ", "", n) else NA_character_
+    cand <- host_species[host_genus == g & grepl(" ", host_species)]
+    if (!length(cand))
+      return(tibble::tibble(host_name = n, status = "unmatched: genus not in host list",
+                            corrected_to = NA_character_, letters_different = NA_integer_))
+    if (is.na(ep))
+      return(tibble::tibble(host_name = n, status = "unmatched: genus in host list",
+                            corrected_to = NA_character_, letters_different = NA_integer_))
+    d <- drop(adist(ep, sub("^\\S+ ", "", cand)))
+    best <- which(d == min(d))
+    ok <- min(d) <= max_letters && min(d) < nchar(ep) / 3 && length(best) == 1L
+    tibble::tibble(host_name         = n,
+                   status            = if (ok) "corrected" else "unmatched: genus in host list",
+                   corrected_to      = if (ok) cand[best] else NA_character_,
+                   letters_different = as.integer(min(d)))
+  })
+}
+
+# ---- correct_host_typos(): apply those corrections ---------------------------
+# Replaces each name for which host_typo_corrections() found a correction;
+# every other name is returned unchanged.
+correct_host_typos <- function(x, corrections) {
+  fix <- dplyr::filter(corrections, status == "corrected")
+  ix <- match(x, fix$host_name)
+  x[!is.na(ix)] <- fix$corrected_to[ix[!is.na(ix)]]
+  x
 }
 
 # =============================================================================

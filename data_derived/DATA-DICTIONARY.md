@@ -113,8 +113,8 @@ fields.
 | `species` | character | Accepted binomial of the native Canadian EcM host species. |
 | `host_demonstrated` | logical | Always `TRUE` by construction (a species is only written here if it qualified). Kept explicit for self-documentation. |
 | `evidence_source` | character | Which FungalRoot route qualified the species: `occurrence` (its own species-level record), `table_s2` (its genus is an EcM/EcM-AM genus in FungalRoot Table S2), or `both`. |
-| `growth_form` | character | Growth form used for the tree / shrub / herbaceous split (`tree`, `shrub`, `herb`, `herb*`, `forb`). |
-| `growth_form_source` | character | Which stage of the growth-form chain supplied the value: `bien` (BIEN trait database), `gift` (GIFT trait 1.2.1), `congener` (modal growth form of congeners in this list), or `manual` (curated override). Lets the provenance of every growth form be audited. |
+| `growth_form` | character | Growth form used for the tree / shrub / herbaceous split (`tree`, `shrub`, `herb`, `herb*`, `forb`), or `unknown` when no source resolves it (counted as non-tree). |
+| `growth_form_source` | character | Which stage of the growth-form chain supplied the value: `bien` (BIEN trait database), `gift` (GIFT trait 1.2.1), `congener` (modal growth form of congeners in this list), or `none` (no stage resolved it; `growth_form` is then `unknown`). Lets the provenance of every growth form be audited. |
 
 ### Shared EMF-record fields
 
@@ -363,6 +363,7 @@ GBIF section for the full field list — identical schema), plus:
 | `eltonian_host_list.csv` | Copy of `ecm_native_canada_host_species.csv` as loaded for this analysis (see that file's field table). |
 | `eltonian_host_matching.csv` | Host-name matching results for the ANALYSIS set: raw input, cleaned name, match status against the native host list, restricted to root-derived evidence (GlobalFungi root samples; GenBank records whose isolation source names root or ectomycorrhizal material). Every reported fungus–host association derives from this file. |
 | `eltonian_host_names_metadata.csv` | The same columns without the root-evidence restriction, plus a `root_evidence` flag: every host name the metadata carries, whatever the tissue. Documents host-name quality rather than interaction evidence, and **feeds Tables S2 and S3.** |
+| `eltonian_host_names_unmatched.csv` | One row per distinct cleaned Canadian host name that is not in the native host list: `host_name`, `status` (`corrected`; `unmatched: genus in host list`; `unmatched: genus not in host list`), `corrected_to` (the host species it was changed to, if corrected), `letters_different` (letters separating its epithet from the nearest listed congener), `n_host_items` (how many record-by-plant rows carry the name). Corrections are made only at 2 letters or fewer, fewer than one-third of the epithet's length, with a single nearest congener (`host_typo_corrections()`, `00_setup.R`). Diagnostic; feeds no manuscript item. |
 | `eltonian_matrix_sh.csv` / `eltonian_matrix_species.csv` / `eltonian_matrix_genus.csv` / `eltonian_matrix_genus_genus.csv` | Binary host × fungus co-occurrence matrices at SH, named-species, host-species × fungal-genus, and host-genus × fungal-genus resolution (trimmed to observed rows/columns). |
 | `eltonian_species_occurrence_counts.csv` / `eltonian_genus_occurrence_counts.csv` | Supporting-record counts per observed host–fungus pair (species and genus level); back the singleton-association statistics. |
 | `eltonian_global_fungi_to_hosts.csv` | Per named EcM fungal species (global GlobalFungi root samples): documented host species. |
