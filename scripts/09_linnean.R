@@ -293,9 +293,14 @@ if (file.exists(gbif_ckpt)) {
 #     sequence data"; paths$gbif_ecm);
 #   - records of EcM genera whose name does NOT appear in our dataset
 #     (paths$gbif_ecm_nosequence). These genera are the Table S4 candidates.
-# "EcM" uses the same definition as our sequence data (classify_ecm() in
-# 00_setup.R: FungalTraits EcM genus, or the two-thirds family rule), applied
-# to the genus and family names GBIF gives.
+# A GBIF genus counts as EcM only if FungalTraits lists it as EcM (the genus
+# rule of classify_ecm() in 00_setup.R). The two-thirds family rule used for
+# our sequence records is NOT applied to GBIF genera: a named specimen genus
+# that FungalTraits does not list is usually either a synonym of a listed
+# genus (e.g. Midotis for Wynnella) or not EcM at all (e.g. Galera, a
+# saprotroph in Hymenogastraceae, a family that passes the rule). For a
+# sequence with no genus label, by contrast, the family is the only
+# information available.
 
 if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
 
@@ -314,7 +319,7 @@ if (!is.null(gbif_raw) && nrow(gbif_raw) > 0) {
   readr::write_csv(gbif_ecm, paths$gbif_ecm)
 
   gbif_ecm_nosequence <- gbif_sp |>
-    dplyr::filter(ecm_basis %in% c("genus", "family"),
+    dplyr::filter(ecm_basis == "genus",
                   !genus_lower %in% our_genera_lower)
   n_gbif_ecm_nosequence         <- nrow(gbif_ecm_nosequence)
   n_gbif_ecm_nosequence_species <- dplyr::n_distinct(gbif_ecm_nosequence$species)
