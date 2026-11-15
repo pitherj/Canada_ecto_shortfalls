@@ -158,7 +158,7 @@ OUT_SPECIES <- file.path(out_dir, "clean_fungalroot_species.csv")
 OUT_GENERA  <- file.path(out_dir, "clean_fungalroot_genera_table_s2.csv")
 
 ckpt_species_raw      <- file.path(temp_dir, "fungalroot_species_raw.csv")
-ckpt_species_backbone <- file.path(temp_dir, "fungalroot_species_backbone.csv")
+ckpt_species_backbone <- paths$snap_fr_backbone  # raw snapshot (GBIF name matching)
 ckpt_table_s2         <- file.path(temp_dir, "fungalroot_table_s2.csv")
 
 # The three unambiguous EcM-positive raw MycorrhizalType labels (see header

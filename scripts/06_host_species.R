@@ -98,14 +98,13 @@ sf::sf_use_s2(FALSE)
 # Note: an earlier copy of clean_host_name() lived here but was never called;
 # host-name cleaning is now centralized in canonicalize_host() (00_setup.R).
 
-native_ckpt     <- file.path(paths$temp_dir, "bien_nsr_native_species.csv")
-growthform_ckpt <- file.path(paths$temp_dir, "bien_ecm_growthforms.csv")
-gift_gf_ckpt    <- file.path(paths$temp_dir, "gift_growthforms.csv")
+native_ckpt     <- paths$snap_bien_native  # raw snapshot (data_raw/snapshots)
+growthform_ckpt <- paths$snap_bien_growth  # raw snapshot
+gift_gf_ckpt    <- paths$snap_gift_growth  # raw snapshot
 # Companion to growthform_ckpt: the list of species actually SENT to BIEN. BIEN
 # returns nothing for a species it has no trait data for, so without this the
 # checkpoint cannot distinguish "no data" from "never asked" (or "batch lost").
-growthform_queried_ckpt <- file.path(paths$temp_dir,
-                                     "bien_ecm_growthforms_queried.csv")
+growthform_queried_ckpt <- paths$snap_bien_growth_queried  # raw snapshot
 
 # ---- Step 1: FungalRoot species table (occurrence route) + Table S2 genus
 #              table (genus route) ---------------------------------------

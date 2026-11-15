@@ -151,9 +151,9 @@ GB_FETCH_RETRY_PAUSE  <- 3
 GB_MAX_MISSING_FRAC   <- 0.001
 
 # Additional path variables
-gb_ids_path      <- file.path(paths$temp_dir, "genbank_emf_canada_ids.txt")
-gb_fasta_path    <- file.path(paths$temp_dir, "genbank_emf_canada.fasta")
-gb_meta_path     <- file.path(paths$temp_dir, "genbank_emf_canada_metadata.csv")
+gb_ids_path      <- paths$snap_gb_ids       # raw snapshot (data_raw/snapshots)
+gb_fasta_path    <- paths$snap_gb_fasta     # raw snapshot
+gb_meta_path     <- paths$snap_gb_meta      # raw snapshot
 gb_itsx_prefix   <- file.path(paths$temp_dir, "genbank_itsx")
 gb_itsx_its1     <- paste0(gb_itsx_prefix, ".ITS1.fasta")
 gb_itsx_its2     <- paste0(gb_itsx_prefix, ".ITS2.fasta")
@@ -161,8 +161,8 @@ gb_vsearch_query <- file.path(paths$temp_dir, "genbank_vsearch_query.fasta")
 gb_vsearch_path  <- file.path(paths$temp_dir, "genbank_vsearch_hits.txt")
 gb_ambiguous_path <- file.path(paths$temp_dir, "genbank_ambiguous_species_excluded.csv")
 gb_its1_diag_path <- file.path(paths$temp_dir, "genbank_its1_resolution_crosstab.csv")
-gb_fetch_log     <- file.path(paths$temp_dir, "genbank_fetch_log.txt")
-gb_nosequence_path <- file.path(paths$temp_dir, "genbank_no_sequence_available.csv")
+gb_fetch_log     <- paths$snap_gb_fetch_log # raw snapshot
+gb_nosequence_path <- paths$snap_gb_nosequence # raw snapshot
 
 # ---- Small local helper: read a (possibly multi-line) FASTA into a tibble --
 # ITSx and vsearch both consume/produce plain FASTA files. Base R has no

@@ -508,6 +508,25 @@ paths <- list(
   data_derived = here::here("data_derived"),
   figures      = here::here("figures"),
   checkpoints  = here::here("data_derived", "checkpoints"),
+  # ---- raw: live-query snapshots ---------------------------------------------
+  # Results of queries to services with no dated releases (GenBank, GBIF name
+  # matching, BIEN/NSR, GIFT). They cannot be downloaded again in identical
+  # form, so they are raw data: kept in data_raw/snapshots/ and deposited.
+  # Each is written by its script on a first run (when absent) and only read
+  # afterwards. To refresh one, delete it and re-run the script that writes it.
+  snapshots           = here::here("data_raw", "snapshots"),
+  snap_gb_ids         = here::here("data_raw", "snapshots", "genbank_emf_canada_ids.txt"),           # 03
+  snap_gb_fasta       = here::here("data_raw", "snapshots", "genbank_emf_canada.fasta"),             # 03
+  snap_gb_meta        = here::here("data_raw", "snapshots", "genbank_emf_canada_metadata.csv"),      # 03
+  snap_gb_nosequence  = here::here("data_raw", "snapshots", "genbank_no_sequence_available.csv"),    # 03
+  snap_gb_fetch_log   = here::here("data_raw", "snapshots", "genbank_fetch_log.txt"),                # 03
+  snap_fr_backbone    = here::here("data_raw", "snapshots", "fungalroot_species_backbone.csv"),      # 05
+  snap_bien_native    = here::here("data_raw", "snapshots", "bien_nsr_native_species.csv"),          # 06
+  snap_bien_growth    = here::here("data_raw", "snapshots", "bien_ecm_growthforms.csv"),             # 06
+  snap_bien_growth_queried = here::here("data_raw", "snapshots", "bien_ecm_growthforms_queried.csv"),# 06
+  snap_gift_growth    = here::here("data_raw", "snapshots", "gift_growthforms.csv"),                 # 06
+  snap_gb_global_meta = here::here("data_raw", "snapshots", "genbank_global_ecm_meta.csv"),          # 18
+  snap_gb_global_queried = here::here("data_raw", "snapshots", "genbank_global_ecm_genera_queried.csv"), # 18
   temp_dir     = here::here("data_derived", "checkpoints"),
 
   # ---- per-shortfall output directories --------------------------------------
@@ -580,7 +599,7 @@ paths <- list(
   # Canadian samples by sample type, kept or dropped by the sample-type
   # inclusion list (02_globalfungi.R, Step 2).
   gf_sample_type_filter = here::here("data_derived", "globalfungi_canada_sample_type_filter.csv"),
-  gb_fasta_out    = here::here("data_derived", "checkpoints", "genbank_emf_canada.fasta"),
+  gb_fasta_out    = here::here("data_raw", "snapshots", "genbank_emf_canada.fasta"),
   gf_long_out      = here::here("data_derived", "globalfungi_canada_long.csv"),
   gb_long_out      = here::here("data_derived", "genbank_emf_canada_long.csv"),
   emf_combined     = here::here("data_derived", "emf_canada_combined.csv"),

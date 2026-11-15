@@ -84,8 +84,11 @@ fields.
 
 | File | Produced by | Description |
 |---|---|---|
-| `emf_canada_em_only.csv` | `04_combine_ecm_dataset.R` | **Primary analysis dataset.** EcM fungal records from Canada (GlobalFungi + GenBank), filtered to ectomycorrhizal genera via FungalTraits, with UNITE v10 taxonomy and trait columns. One row per (sample × SH code). Auto-loaded as `emf` by `00_setup.R`. |
-| `emf_canada_combined.csv` | `04_combine_ecm_dataset.R` | Pre-EcM-filter combined dataset (all fungal guilds, both sources); carries `coord_in_canada`. Large (>200 MB). |
+| `emf_canada_em_only.csv` | `04_combine_ecm_dataset.R` | **Primary analysis dataset.** EcM fungal records from Canada (GlobalFungi + GenBank): genera listed as EcM in FungalTraits, plus records FungalTraits cannot classify whose family is at least two-thirds EcM (the family rule; see `ecm_basis`), with UNITE v10 taxonomy and trait columns. One row per (sample × SH code). Auto-loaded as `emf` by `00_setup.R`. |
+| `emf_canada_combined.csv` | `04_combine_ecm_dataset.R` | Pre-EcM-filter combined dataset (all fungal guilds, both sources), after the GenBank location rule; carries `coord_in_canada` and `location_evidence`. Large (>200 MB). |
+| `genbank_excluded_non_canadian.csv` | `04_combine_ecm_dataset.R` | GenBank records (all guilds) dropped by the location rule, with the reason in `location_evidence`. Columns: `accession`, `organism`, `sh_code`, `genus`, `species`, `country_gb`, `lat_lon_gb`, `coord_in_canada`, `location_evidence`. |
+| `ecm_family_rule_table.csv` | `04_combine_ecm_dataset.R` | Every family the EcM family rule considered (families with at least one EcM genus in FungalTraits), split by reason (`no genus label` / `genus not in FungalTraits`): `ft_genera`, `ft_ecm_genera`, `frac_ecm`, `family_passes` (frac_ecm ≥ 2/3), `n_sh`, `n_records`, `genus_labels`. |
+| `globalfungi_canada_sample_type_filter.csv` | `02_globalfungi.R` | Canadian GlobalFungi samples that pass the country, barcode and manipulation filters, by `sample_type`: `n_samples` and `kept` (TRUE for the inclusion list, soil and root). |
 | `globalfungi_canada_long.csv` | `02_globalfungi.R` | Long-format Canadian GlobalFungi records with UNITE taxonomy. One row per (sample × SH code). Large (>150 MB). |
 | `genbank_emf_canada_long.csv` | `03_genbank.R` | Long-format Canadian GenBank EcM records with UNITE taxonomy, metadata, and provenance. |
 | `clean_fungalroot_species.csv` | `05_prepare_fungalroot.R` | EcM-demonstrated plant species from FungalRoot (GBIF-backbone-matched, species rule). |
@@ -145,12 +148,14 @@ built around the same core columns. Columns unique to one file are marked.
 | `seq_length` | integer | Length of the source GenBank sequence (bp) | GenBank-derived files |
 | `country_gb`, `lat_lon_gb`, `collection_date`, `isolation_src`, `host_gb` | character | Raw GenBank record metadata fields | GenBank-derived files |
 | `its_region` | character | `"ITS2"` or `"ITSboth"`: whether the source sequence had a genuine standalone ITS1 detection in addition to ITS2 — provenance only, does **not** affect SH assignment, which uses the ITS2 fragment alone | GenBank-derived files |
-| `canada_basis` | character | Provenance of the Canada assignment for a GenBank record: `"both"` (country + coordinates both indicate Canada), `"country_only"`, `"coordinates_only"`, `"search_only"` (found only via Canada-targeted search terms), or `"coordinates_outside_canada"` (assigned in `04_combine_ecm_dataset.R` when coordinates validate outside the GADM Canada boundary) | GenBank-derived files |
+| `location_evidence` | character | For GenBank records, which case of the location rule (04) applies: kept — `"location field: Canada"`, `"no location field; coordinates inside Canada"`; dropped (only in `genbank_excluded_non_canadian.csv`) — `"location field: another country"`, `"no location field; coordinates outside Canada"`, `"no location field or coordinates"`. `NA` for GlobalFungi rows | combined, em_only, excluded |
 | `host_taxon_raw` | character | Raw host string extracted from GenBank record text, before cleaning | GenBank-derived files |
 | `host_taxon` | character | Canonicalized host taxon (via `canonicalize_host()` in `00_setup.R`); used by `18_eltonian.R` | GenBank-derived files |
-| `coord_in_canada` | logical | `TRUE` = coordinates validated inside the GADM Canada boundary; `FALSE` = coordinates present but outside; `NA` = no coordinates | combined, em_only |
-| `primary_lifestyle`, `secondary_lifestyle` | character | FungalTraits guild fields for the record's genus | em_only only |
-| `ectomycorrhiza_lineage`, `ectomycorrhiza_exploration_type` | character | FungalTraits EcM-specific fields for the record's genus | em_only only |
+| `coord_in_canada` | logical | `TRUE` = coordinates inside the Canada boundary (GADM, simplified at 1 km, buffered by 2 km; `coords_in_canada()` in `00_setup.R`); `FALSE` = coordinates present but outside; `NA` = no coordinates. Spatial analyses use only `TRUE` rows | combined, em_only |
+| `ecm_basis` | character | Which rule admitted the record as EcM: `"genus"` (FungalTraits EcM genus) or `"family"` (family rule) | em_only only |
+| `genus_label_unite` | character | UNITE's genus label as given. Equals `genus`, except for SHs with no genus label (e.g. `"Boletaceae_gen_Incertae_sedis"`), where `genus` is `NA` so they are never counted as a genus | em_only only |
+| `primary_lifestyle`, `secondary_lifestyle` | character | FungalTraits guild fields for the record's genus (`primary_lifestyle` = `"ectomycorrhizal"` and `secondary_lifestyle` = `NA` for records admitted by the family rule) | em_only only |
+| `ectomycorrhiza_lineage`, `ectomycorrhiza_exploration_type` | character | FungalTraits EcM-specific fields for the record's genus. For family-rule records: the family's lineage if all its EcM genera share one (else `NA`); exploration type `NA` | em_only only |
 
 ---
 
@@ -172,12 +177,14 @@ built around the same core columns. Columns unique to one file are marked.
 ## `checkpoints/` — Intermediate pipeline files
 
 Exempted from field-level tables (see note above). Retained to make re-runs
-cheap; delete a file to force its step to re-execute.
+cheap; delete a file to force its step to re-execute. Everything here can be
+rebuilt from `data_raw/`. The results of live queries (GenBank, GBIF name
+matching, BIEN/NSR, GIFT), which cannot, were moved to `data_raw/snapshots/` on
+14 November 2026 (see `data_raw/DATA-DICTIONARY.md`).
 Includes: `globalfungi_canada_ids.txt`, `globalfungi_canada_SH_abundance.txt`,
 `globalfungi_canada_metadata.csv`, `unite_sh_taxonomy.csv` (SH → taxonomy lookup
 parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`);
-`genbank_emf_canada.fasta`, `genbank_emf_canada_metadata.csv`,
-`genbank_emf_canada_ids.txt`, `genbank_itsx_input.fasta`,
+`genbank_itsx_input.fasta`,
 `genbank_itsx.{ITS1,ITS2,full,chimeric}.fasta`,
 `genbank_itsx.{positions,problematic,summary,no_detections}.txt`,
 `genbank_itsx_no_detections.fasta` (ITSx sub-region extraction),
@@ -186,32 +193,21 @@ parsed from the UNITE FASTA), `globalfungi_sh_unmatched.csv` (`02_globalfungi.R`
 `genbank_ambiguous_species_excluded.csv` (records dropped because tied top hits
 disagreed even at genus level), `genbank_its1_resolution_crosstab.csv`
 (reporting-only diagnostic: `taxonomic_resolution` outcome × standalone-ITS1
-presence), `genbank_no_sequence_available.csv` (UIDs individually confirmed to
-have no retrievable sequence — GenBank WGS/TLS "master" accessions, which index
-component sequences but hold none themselves — and therefore excluded from the
-Step 3b completeness check), `genbank_fetch_log.txt` (`03_genbank.R`);
+presence) (`03_genbank.R`);
 `fungalroot_dwca_extracted/` (fresh per-run extraction of the FungalRoot DwC-A
 zip: `occurrences.csv`, `measurements.csv`, `media.csv`, `eml.xml`, `meta.xml`,
-`dna_data.csv`), `fungalroot_species_raw.csv`, `fungalroot_species_backbone.csv`,
+`dna_data.csv`), `fungalroot_species_raw.csv`,
 `fungalroot_table_s2.csv` (`05_prepare_fungalroot.R`);
-`bien2_ecm_host_ranges.gpkg`, `bien_ecm_growthforms.csv`,
-`bien_ecm_growthforms_queried.csv` (the species actually sent to BIEN for the
-file above — BIEN returns nothing for a species it holds no trait data on, so
-without this "no data" and "batch never completed" are indistinguishable),
-`bien_nsr_native_species.csv` (every species queried, with the NSR
-`native_status` returned for it; natives are derived on read),
-`gift_growthforms.csv` (`06_host_species.R`);
+`bien2_ecm_host_ranges.gpkg` (`08_host_rasters.R`);
 `gbif_ecm_canada_raw.csv` (`09_linnean.R`);
 `gf_global_ecm_sample_ids.csv` (`12_wallacean_density_map.R`);
 `gf_global_comparator_cheap.csv`, `gf_global_comparator_volume.csv`
 (`13_wallacean_global_comparator.R`);
 `gf_global_root_metadata.csv`, `gf_global_ecm_sh_subset.rds` (global GlobalFungi
 root metadata and the EcM SH-code subset, both keyed to the EcM dataset and
-rebuilt when it changes), `genbank_global_ecm_meta.csv` (worldwide GenBank
-records for each EcM genus, topped up genus by genus rather than re-pulled),
-`genbank_global_ecm_genera_queried.csv` (which genera have been asked about, as
-opposed to which returned records — a genus with no GenBank records contributes
-no rows, so without this it would be re-queried on every run) (`18_eltonian.R`);
+rebuilt when it changes) (`18_eltonian.R`);
+`table_s4_*` (ITSx and vsearch working files for the Table S4 sequence check,
+rewritten on every run) (`09_linnean.R`);
 `darwinian_its_input.fasta` (MycoCosm genome ITS sequences relabelled `g1`,
 `g2`, …), `darwinian_itsx.{ITS2,full}.fasta`,
 `darwinian_itsx.{positions,problematic,summary}.txt`,
@@ -230,29 +226,28 @@ than reused, so they never hold results from an earlier lookup table.
 | `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; GBIF specimen counts. Long-format `metric,value` table (36 metrics). Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
 | `linnean_genus_coverage.csv` | All FungalTraits EcM genera flagged for whether observed in Canada. |
 | `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S5. |
-| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records for FungalTraits EcM genera whose genus **name** matches no genus in our Canadian sequence dataset (32 genera). This is the starting list checked by `09b_table_s4_check.R`; it over-counts genuine gaps because of synonyms and UNITE relabelling. |
-| `linnean_table_s4_reconciliation.csv` | Produced by `09b_table_s4_check.R`. One row per genus in the file above, with the evidence for and against "no Canadian sequence data" and the resulting category. Feeds Table S4. |
-| `linnean_gbif_ecm_nosequence_confirmed_canada.csv` | Produced by `09b_table_s4_check.R`. The subset of `linnean_gbif_ecm_nosequence_canada.csv` for genera confirmed to lack Canadian ITS sequences (categories "ITS sequences exist, none from Canada" and "No ITS sequences found"). Same fields as that file. Feeds the orange points of Figure S5. |
+| `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records of FungalTraits EcM genera whose genus name is absent from our Canadian sequence dataset: the Table S4 candidates (`09_linnean.R`, Step 6a). |
+| `linnean_table_s4.csv` | `09_linnean.R`, Step 6b. One row per candidate genus, with the sequence-matching evidence and its category. Feeds Table S4. |
+| `linnean_table_s4_sequence_matches.csv` | `09_linnean.R`, Step 6b. One row per GenBank sequence checked: genus, accession, location field, coordinates, whether Canadian, SH assignment outcome, and whether it fell in an SH in our dataset. |
+| `linnean_gbif_ecm_nosequence_confirmed_canada.csv` | `09_linnean.R`, Step 6b. The subset of `linnean_gbif_ecm_nosequence_canada.csv` for genera confirmed to lack Canadian ITS sequences (categories "ITS sequences exist, none from Canada" and "No ITS sequences found"). Same fields. Feeds the orange points of Figure S5. |
 | `linnean_gbif_plotted_counts.csv` | Produced by `19_sampling_maps.R`. Counts of GBIF points actually drawn on Figure S5 (distinct georeferenced coordinates within the Canada boundary), one row per category. Used to caption Figure S5 dynamically in the Supplemental Information. |
 
-#### `linnean_table_s4_reconciliation.csv` — fields
+#### `linnean_table_s4.csv` — fields
 
 | Field | Type | Description |
 |---|---|---|
-| `genus_gbif` | character | Genus name in the GBIF download |
-| `gbif_records` | integer | Number of GBIF specimen records for the genus |
-| `gbif_species` | integer | Number of distinct species names among those records |
-| `current_genus` | character | Index Fungorum current name (from `data_raw/table_s4_check/table_s4_genus_synonyms.csv`) |
-| `synonym_applied` | logical | `TRUE` if `current_genus` differs from `genus_gbif` |
-| `if_genus_record`, `if_current_record` | integer | Index Fungorum record numbers |
-| `source` | character | Source of the synonymy decision |
-| `n_own_genbank_canada` | integer | Records in our own GenBank download (`genbank_emf_canada_long.csv`) whose submitter-given name is in this genus and whose country field begins "Canada" |
-| `unite_labels_given` | character | Genus labels UNITE assigned to those records (shows why the genus looked absent); `NA` if none |
-| `n_genbank_its_canada_search` | integer | Records returned by the targeted GenBank query restricted to `"Canada"[Country]` |
-| `n_genbank_its_world` | integer | Records returned by the targeted worldwide GenBank query |
-| `n_genbank_its_canada_confirmed` | integer | Of the Canada-query records, those whose own country field begins "Canada" |
-| `current_genus_in_our_data` | logical | `TRUE` if `current_genus` is a genus in `emf_canada_em_only.csv` |
-| `category` | character | One of: "Synonym of a genus in our data"; "Canadian ITS sequences exist"; "ITS sequences exist, none from Canada"; "No ITS sequences found" (assigned in that order; first match wins) |
+| `genus`, `family` | character | Genus and family as given in the GBIF download |
+| `gbif_records`, `gbif_species` | integer | GBIF specimen records, and distinct species names, for the genus |
+| `ecm_basis` | character | Always `"genus"`: GBIF genera count as EcM only if FungalTraits lists them (the family rule is not applied to GBIF genera) |
+| `n_genbank_hits` | integer | GenBank records returned for the genus (`"Genus"[Organism]` + fungal ITS terms, worldwide; NCBI taxonomy may map the name to another genus, e.g. Bankera → Phellodon) |
+| `n_downloaded` | integer | Records downloaded (at most 1,000 per genus; whole-genome and master records excluded) |
+| `retrieved_on` | date | Date of the GenBank query |
+| `n_sequences` | integer | Downloaded records with a sequence |
+| `n_sh_assigned` | integer | Sequences assigned to a UNITE SH (ITS2, vsearch 98.5%, same rule as `03_genbank.R`) |
+| `n_in_our_shs` | integer | Sequences assigned to an SH present in `emf_canada_em_only.csv` |
+| `n_canadian` | integer | Records passing the GenBank location rule (location field begins "Canada", or no field and coordinates inside Canada) |
+| `our_labels` | character | Genus labels those SHs carry in our dataset (`genus`, or `genus_label_unite` where `genus` is `NA`) |
+| `category` | character | First that applies: "In our data under another name" (`n_in_our_shs` ≥ 2); "Canadian ITS sequences in GenBank, not in our dataset"; "ITS sequences exist, none from Canada"; "No ITS sequences found". Table S4 lists the last three |
 
 #### `linnean_summary.csv` — structure
 

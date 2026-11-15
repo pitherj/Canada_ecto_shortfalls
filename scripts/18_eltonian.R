@@ -1025,7 +1025,7 @@ gf_sh_path   <- file.path(here::here("data_raw"), "GlobalFungi",
 # Checkpoints for slow operations
 global_meta_ckpt <- file.path(paths$temp_dir, "gf_global_root_metadata.csv")
 global_sh_ckpt   <- file.path(paths$temp_dir, "gf_global_ecm_sh_subset.rds")
-global_gb_ckpt   <- file.path(paths$temp_dir, "genbank_global_ecm_meta.csv")
+global_gb_ckpt   <- paths$snap_gb_global_meta  # raw snapshot (data_raw/snapshots)
 
 # ---- B1. GlobalFungi: global root-sample metadata ---------------------------
 # Q1 (metadata-only approach): which Canadian host species appear as
@@ -1359,8 +1359,7 @@ gb_global_cached <- if (file.exists(global_gb_ckpt))
 # run, forever. The sidecar records what was ASKED; the cache records what came
 # back. (Absent sidecar = pre-2026-08 cache; fall back to the cache's own
 # column, which is correct for every genus that returned at least one record.)
-global_gb_queried_ckpt <- file.path(paths$temp_dir,
-                                    "genbank_global_ecm_genera_queried.csv")
+global_gb_queried_ckpt <- paths$snap_gb_global_queried  # raw snapshot
 genera_asked <- if (file.exists(global_gb_queried_ckpt))
   readr::read_csv(global_gb_queried_ckpt, show_col_types = FALSE)$genus else
   character(0L)

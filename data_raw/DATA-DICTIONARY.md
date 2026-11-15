@@ -3,9 +3,9 @@
 All external input data for the ECM_manuscript pipeline. Everything the
 pipeline generates goes to `data_derived/` instead.
 
-> **Permissions — three subdirectories must stay writable.** The bulk of this
+> **Permissions — four subdirectories must stay writable.** The bulk of this
 > directory can safely be made read-only (`chmod -R a-w data_raw`) to protect
-> the inputs from accidental modification. Three subdirectories are exceptions,
+> the inputs from accidental modification. Four subdirectories are exceptions,
 > because scripts write into them:
 >
 > | Subdirectory | Written by | When |
@@ -13,19 +13,21 @@ pipeline generates goes to `data_derived/` instead.
 > | `bien2_ranges/` | `07_bien2_ranges.R` | **every run** — it rewrites `download_log.csv` even when all ranges are already present |
 > | `biotime/` | `14_prestonian.R` | only if the BioTIME `.rds` is absent |
 > | `mycocosm_its/` | `15b_darwinian_sh_match.R` | only when the MycoCosm list contains genomes not yet in the lookup table (always true on a first run, and after a MycoCosm refresh that adds genomes) |
+> | `genbank_genus_queries/` | `09_linnean.R` | only when a Table S4 candidate genus is not yet in its query log |
 >
 > Locking those will abort the pipeline with a "Cannot open file for writing"
 > error. To protect the inputs while keeping the pipeline runnable:
 >
 > ```bash
 > chmod -R a-w data_raw
-> chmod -R u+w data_raw/bien2_ranges data_raw/biotime data_raw/mycocosm_its
+> chmod -R u+w data_raw/bien2_ranges data_raw/biotime data_raw/mycocosm_its data_raw/genbank_genus_queries
 > chmod u+w data_raw data_raw/DATA-DICTIONARY.md   # if editing this file
 > ```
 >
 > `01_spatial_data.R` also downloads into `admin_boundaries/`, `ecoregions/`
 > and `natural_earth/`, but each download is guarded by an existence check, so
-> those stay read-only once populated.
+> those stay read-only once populated. Likewise `snapshots/` is written only
+> when a snapshot file is absent (see "Live-query snapshots" below).
 
 Most files were obtained from external sources and copied into this directory.
 A few small base layers (administrative boundaries, ecoregions, Natural Earth,
@@ -104,7 +106,7 @@ data_raw/                                   # external inputs (see permissions n
 ├── mycocosm/
 │   └── mycocosm_organism_list.csv
 ├── mycocosm_its/                            # genome → GenBank ITS link (15b_darwinian_sh_match.R)
-│   ├── mycocosm_its_lookup.csv              # auto-built; rows may be hand-edited
+│   ├── mycocosm_its_lookup.csv              # auto-built
 │   └── mycocosm_its_sequences.fasta         # cached ITS sequences
 ├── climate/                                 # WorldClim 2.1 (~1.3 GB)
 │   └── wc2.1_country/CAN_wc2.1_30s_bio.tif
@@ -119,12 +121,11 @@ data_raw/                                   # external inputs (see permissions n
 ├── ecoregions/                              # auto via 01_spatial_data.R
 ├── natural_earth/                           # auto via 01_spatial_data.R
 ├── gbif/                                     # GBIF specimen ZIP (09_linnean.R)
-└── table_s4_check/                           # Table S4 check (09b_table_s4_check.R)
-    ├── table_s4_genus_synonyms.csv           # hand-curated
-    ├── index_fungorum_2026-11-12/<Genus>.xml # raw Index Fungorum responses
-    └── ncbi_genus_queries/                   # cached GenBank queries
-        ├── ncbi_query_log.csv
-        └── ncbi_query_uids.csv
+├── genbank_genus_queries/                    # Table S4 GenBank records (09_linnean.R)
+│   ├── genus_query_log.csv
+│   ├── genus_records.csv
+│   └── genus_sequences.fasta
+└── snapshots/                                # live-query results (03, 05, 06, 18)
 ```
 
 ---
@@ -775,80 +776,64 @@ absent.
 
 ---
 
-## Table S4 check: genus synonymy and targeted GenBank queries
+## GenBank ITS records for the Table S4 candidate genera
 
-**Location**: `data_raw/table_s4_check/`
-**Used by**: `09b_table_s4_check.R`
-**Why it exists**: Table S4 lists EcM genera with Canadian GBIF specimens whose
-genus name does not match any genus in our Canadian sequence dataset. Because
-that test compares names across GBIF, FungalTraits and UNITE, a reviewer
-pointed out that some listed genera are synonyms or do have Canadian sequences.
-These files hold the evidence used to check each of the 32 genera.
+**Location**: `data_raw/genbank_genus_queries/`
+**Used by**: `09_linnean.R` (Step 6b), which also writes all three files
+**Source**: NCBI GenBank nucleotide database, queried through Entrez (`rentrez`)
+**Licence**: No NCBI-imposed restrictions; submitters may retain rights
+**Access date**: First built 14 November 2026; each genus records its own `retrieved_on` date
+**Downloaded by**: Automatic. A genus not yet in `genus_query_log.csv` is downloaded on the next run. Needs `ENTREZ_KEY`.
+**Must stay writable**: yes (new candidate genera are added)
+
+**Why it exists.** Table S4 lists EcM genera with Canadian GBIF specimens that
+are absent from our sequence dataset. To tell a real gap from a genus present
+under another name, `09` assigns each candidate genus's GenBank ITS sequences
+to UNITE SHs and compares them with ours (sequence matching, so no taxonomic
+authority is needed). These files hold the downloaded GenBank records.
 
 | File | Description |
 |---|---|
-| `table_s4_genus_synonyms.csv` | **Hand-curated.** One row per genus under review, giving its Index Fungorum current name and record numbers. Built from the raw responses in `index_fungorum_2026-11-12/`. `09b_table_s4_check.R` stops if a genus under review has no row. |
-| `index_fungorum_2026-11-12/<Genus>.xml` | Raw responses from the Index Fungorum `NameSearch` web service (`https://www.indexfungorum.org/ixfwebservice/fungus.asmx/NameSearch`), one per genus plus `Boletinus_cavipes.xml`, retrieved 12 November 2026. Kept as the evidence behind the synonym table; not read by any script. |
-| `ncbi_genus_queries/ncbi_query_log.csv` | Written by `09b_table_s4_check.R` on its first run. One row per GenBank query (32 genera × Canada / worldwide). |
-| `ncbi_genus_queries/ncbi_query_uids.csv` | Written alongside the log. Every GenBank UID each query returned. |
+| `genus_query_log.csv` | One row per genus: `genus`, `query` (exact Entrez string: `"Genus"[Organism] AND "Fungi"[Organism] AND (ITS terms)`), `query_translation` (NCBI's interpretation; shows when NCBI maps a name to another taxon, e.g. Bankera → Phellodon), `n_hits`, `n_downloaded` (at most 1,000; records over 5,000 bp and whole-genome master records are excluded), `retrieved_on`. Written last for each genus, so a genus counts as downloaded only once all three files are saved. |
+| `genus_records.csv` | One row per downloaded record: `genus`, `uid`, `accession` (with version), `slen` (length, bp), `country` (GenBank location field, `/geo_loc_name`), `lat_lon`. |
+| `genus_sequences.fasta` | The sequences, with GenBank's headers (`>ACCESSION.VERSION description`). |
 
-#### `table_s4_genus_synonyms.csv` — fields
+To refresh a genus, delete its rows from all three files (or delete the folder
+to refresh all) and re-run `09_linnean.R`.
 
-| Field | Type | Description |
-|---|---|---|
-| `genus_gbif` | character | Genus name as it appears in the GBIF download |
-| `current_genus` | character | Current genus name per Index Fungorum (same as `genus_gbif` when the genus is accepted) |
-| `synonym_applied` | logical | `TRUE` if `current_genus` differs from `genus_gbif` |
-| `if_genus_record` | integer | Index Fungorum record number of the genus name |
-| `if_current_record` | integer | Index Fungorum record number of the current name |
-| `source` | character | Where the decision comes from (Index Fungorum; Reviewer 1) |
-| `note` | character | Plain-language justification, including homonyms set aside |
-
-#### `ncbi_query_log.csv` — fields
-
-| Field | Type | Description |
-|---|---|---|
-| `genus_gbif` | character | Genus queried |
-| `scope` | character | `canada` or `world` |
-| `query` | character | Exact Entrez search string sent |
-| `query_translation` | character | NCBI's interpretation of the query (shows when NCBI mapped a name to another taxon, e.g. Bankera → Phellodon) |
-| `n_hits` | integer | Number of GenBank nucleotide records returned |
-| `retrieved_on` | date | Date of the query (YYYY-MM-DD) |
-
-#### `ncbi_query_uids.csv` — fields
-
-| Field | Type | Description |
-|---|---|---|
-| `genus_gbif` | character | Genus queried |
-| `scope` | character | `canada` or `world` |
-| `uid` | character | GenBank nucleotide UID |
-| `country` | character | For `canada` rows: the record's GenBank `country` qualifier (collection locality, e.g. "Canada: Quebec"); `NA` if absent. Always `NA` for `world` rows. Only rows beginning "Canada" are counted as Canadian. |
-
-To re-query GenBank, delete `ncbi_genus_queries/` and re-run `09b_table_s4_check.R`
-(needs `ENTREZ_KEY`); counts will then reflect the new retrieval date.
+The superseded hand-curated Table S4 inputs (12 November 2026: Index Fungorum
+responses, synonym table, `09b` query cache) are in
+`../ECM_manuscript_attic/data_raw_table_s4_check_2026-11-12/`.
 
 ---
 
-## Live-query sources (no file in `data_raw/`)
+## Live-query snapshots (`data_raw/snapshots/`)
 
-Five inputs are queried directly from web services rather than downloaded as
-files, so they have no entry above. Each response is cached in
-`data_derived/checkpoints/` on first run and reused thereafter, which is what
-makes the pipeline re-runnable without re-querying.
+**Location**: `data_raw/snapshots/` (moved from `data_derived/checkpoints/` on 14 November 2026)
+
+Five inputs come from web services rather than downloadable files. Each
+script writes its query results here on a first run (when the file is absent)
+and only reads them afterwards. The files are set read-only; to refresh one,
+make it writable, delete it and re-run the script that writes it.
 
 **These services have no versioned releases.** A query re-run later will not
 return the same result: taxonomies are revised, records are added, and native-
-status checklists are refreshed. The cached responses are therefore the only
-record of what the reported numbers were computed from, and are deposited in
-the Borealis archive for that reason (see `ARCHIVING.md`).
+status checklists are refreshed. These files are therefore the only record of
+what the reported numbers were computed from. They are raw data, and are
+deposited in the Borealis archive for that reason (see `ARCHIVING.md`).
 
-| Source | Queried by | Purpose | Cached as | Licence |
+| Source | Queried by | Purpose | File(s) in `data_raw/snapshots/` | Licence |
 |---|---|---|---|---|
-| **NCBI GenBank** (Entrez) | `03_genbank.R`, `18_eltonian.R` | Canadian fungal ITS records and their metadata; global EcM records per genus for the Eltonian comparison | `genbank_emf_canada_metadata.csv`, `genbank_global_ecm_meta.csv`, and companion FASTA/vsearch files | No NCBI-imposed restrictions; submitters may retain rights |
+| **NCBI GenBank** (Entrez) | `03_genbank.R` | Canadian fungal ITS records and their metadata | `genbank_emf_canada_ids.txt` (UID list), `genbank_emf_canada.fasta`, `genbank_emf_canada_metadata.csv`, `genbank_no_sequence_available.csv` (UIDs with no retrievable sequence: whole-genome master accessions), `genbank_fetch_log.txt` (date and exact query) | No NCBI-imposed restrictions; submitters may retain rights |
+| **NCBI GenBank** (Entrez) | `18_eltonian.R` | Global EcM records per genus for the Eltonian comparison | `genbank_global_ecm_meta.csv`, `genbank_global_ecm_genera_queried.csv` (genera asked about, including those with no records) | As above |
 | **GBIF Backbone Taxonomy** | `05_prepare_fungalroot.R` (`rgbif::name_backbone_checklist()`) | Resolves plant name synonymy in FungalRoot to accepted names | `fungalroot_species_backbone.csv` | CC BY 4.0 |
-| **BIEN** | `06_host_species.R` (`BIEN::BIEN_list_country()`, `BIEN_trait_traitbyspecies()`) | Vascular plant species recorded for Canada; growth-form traits | `bien_nsr_native_species.csv`, `bien_ecm_growthforms.csv` | CC BY 4.0 |
+| **BIEN** | `06_host_species.R` (`BIEN::BIEN_list_country()`, `BIEN_trait_traitbyspecies()`) | Vascular plant species recorded for Canada; growth-form traits | `bien_nsr_native_species.csv`, `bien_ecm_growthforms.csv` (`bien_ecm_growthforms_queried.csv` would list the species sent; it predates that tracking and is absent) | CC BY 4.0 |
 | **NSR** (Native Species Resolver) | `06_host_species.R` (`NSR::NSR_simple()`, batched 500 spp/request) | Native vs introduced status for each Canadian species | `bien_nsr_native_species.csv` | CC BY 4.0 |
 | **GIFT** | `06_host_species.R` (`GIFT::GIFT_traits()`, trait 1.2.1, `agreement = 0.66`) | Growth forms for species BIEN does not cover (15 of 272 species) | `gift_growthforms.csv` | Not indicated by the source |
+
+Two other folders also hold live-query results, kept writable because the
+pipeline adds to them: `data_raw/mycocosm_its/` (15b) and
+`data_raw/genbank_genus_queries/` (09).
 
 ### NSR's underlying checklists
 
