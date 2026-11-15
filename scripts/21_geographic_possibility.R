@@ -4,12 +4,8 @@
 #   reported in the Eltonian section is geographically possible at all?
 # =============================================================================
 # STATUS OF THIS SCRIPT
-#   Written 2026-08-05 as exploratory work in temp/. Promoted into the pipeline
-#   on 2026-08-11, when its result was taken up in the revision: the manuscript
-#   now states that even under the most permissive geographic filter we could
-#   construct, half the matrix remains and the proportion of empty cells barely
-#   moves. A number that appears in the manuscript must be reproducible by
-#   scripts/run_all.R like every other, hence the promotion.
+#   Its result is reported in the manuscript and SM1, so it runs as part of
+#   the pipeline (run_all.R) like every other reported number.
 #
 #   The analysis is a SENSITIVITY CHECK, not a replacement denominator. The
 #   manuscript keeps the full matrix as its headline (framed as a metaweb --
@@ -812,8 +808,7 @@ for (i in seq_len(nrow(output5)))
 # =============================================================================
 # SECTION 10.  OUTPUT 6 - headline numbers, in one tidy file
 # =============================================================================
-# ADDED 2026-08-11 on promoting this script into the pipeline. Everything below
-# is already printed to run_log.txt, but the manuscript and the supplemental
+# Everything below is already printed to run_log.txt, but the manuscript and the supplemental
 # materials need to READ these values rather than have them typed in, so they
 # are collected here as a metric/value table like every other summary file in
 # the project.

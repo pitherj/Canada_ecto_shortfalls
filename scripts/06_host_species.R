@@ -51,8 +51,8 @@
 #   bien_nsr_native_species.csv     — EVERY BIEN Canada species queried, with
 #                                      the NSR native_status returned for it
 #                                      (expensive; independent of FungalRoot).
-#                                      Natives are derived on read. Files in the
-#                                      pre-2026-08 natives-only format are still
+#                                      Natives are derived on read. A file in the
+#                                      older natives-only format is still
 #                                      accepted, with a warning.
 #   bien_ecm_growthforms.csv        — growth form trait data from BIEN
 #   bien_ecm_growthforms_queried.csv — the species actually SENT to BIEN for the
@@ -64,13 +64,12 @@
 #                                     (used only for species lacking BIEN data)
 #
 # Download completeness (Steps 3, 5, 7a)
-#   These steps used to skip a failed batch with only a warning, which cost
-#   ~500 species (NSR) or ~200 species (BIEN) each time and, because the step is
-#   checkpointed, made the loss permanent. They now retry a failed batch, stop
-#   the script if records are still missing afterwards, and write each
-#   checkpoint only once its check has passed. See fetch_with_retry(),
-#   assert_fetch_complete() and write_checkpoint_atomically() in 00_setup.R, and
-#   repro/genbank_fetch_gap_prefix_state.md for the incident that prompted this.
+#   A failed batch would cost ~500 species (NSR) or ~200 species (BIEN), and
+#   because these steps are checkpointed the loss would be permanent. So they
+#   retry a failed batch, stop the script if records are still missing
+#   afterwards, and write each checkpoint only once its check has passed. See
+#   fetch_with_retry(), assert_fetch_complete() and
+#   write_checkpoint_atomically() in 00_setup.R; history in repro/CHANGELOG.md.
 #
 # Output:
 #   data_derived/ecm_native_canada_host_species.csv
@@ -132,7 +131,7 @@ if (file.exists(native_ckpt)) {
       !is.na(native_ckpt_tbl$native_status) & native_ckpt_tbl$native_status == "N"
     ]
   } else {
-    # Legacy format (pre-2026-08): natives ONLY, with no record of which species
+    # Older format: natives ONLY, with no record of which species
     # were queried. It is therefore impossible to tell from the file whether an
     # NSR batch failed and its ~500 species were silently dropped. The file is
     # still usable, so the pipeline is not blocked, but the limitation must not
@@ -166,8 +165,8 @@ if (file.exists(native_ckpt)) {
 
   for (i in seq_along(nsr_batches)) {
     sp_batch <- nsr_batches[[i]]
-    # Retry rather than skip: a failed NSR batch used to drop ~500 species
-    # silently, and because this step is checkpointed the loss was permanent.
+    # Retry rather than skip: a failed NSR batch would drop ~500 species, and
+    # because this step is checkpointed the loss would be permanent.
     res <- fetch_with_retry(
       function() NSR::NSR_simple(species = sp_batch,
                                  country = rep("Canada", length(sp_batch))),
@@ -272,8 +271,8 @@ if (file.exists(growthform_ckpt)) {
   n_failed_batches <- 0L
 
   for (i in seq_along(trait_batches)) {
-    # Retry rather than skip: a failed batch used to cost ~200 species their
-    # growth form, permanently, with only a warning.
+    # Retry rather than skip: a failed batch would cost ~200 species their
+    # growth form, permanently.
     res <- fetch_with_retry(
       function() BIEN::BIEN_trait_traitbyspecies(
         species = trait_batches[[i]],
@@ -346,10 +345,10 @@ if (n_na_gf > 0L) {
   if (file.exists(gift_gf_ckpt)) {
     gift_gf <- readr::read_csv(gift_gf_ckpt, show_col_types = FALSE)
   } else {
-    # Retried rather than abandoned. A failed GIFT query used to warn and carry
-    # on, which quietly pushed every species GIFT would have resolved down to
-    # the coarser congener-modal fallback (Step 7b) — a silent change in
-    # growth_form provenance with nothing in the output to show it happened.
+    # Retried rather than abandoned: if a failed GIFT query were skipped, every
+    # species GIFT would have resolved would fall to the coarser congener-modal
+    # fallback (Step 7b), changing growth_form provenance with nothing in the
+    # output to show it.
     gift_raw <- fetch_with_retry(
       function() GIFT::GIFT_traits(trait_IDs  = "1.2.1",
                                    agreement  = 0.66,

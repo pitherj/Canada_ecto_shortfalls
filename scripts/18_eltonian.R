@@ -37,12 +37,10 @@
 #       geographic assessments carried out by the other scripts.
 #   This constraint is applied throughout both Part A and Part B.
 #
-#   REVISION HISTORY. Until 2026-08 the GenBank host field was used with no
-#   tissue test at all, while GlobalFungi was root-only. The two databases were
-#   therefore held to different evidential standards, and because both feed
-#   `host_long`, the asymmetry propagated to every downstream statistic. The
-#   same revision fixed a silent data loss in the host-name cleaner, which kept
-#   only the first plant named in a multi-plant label (see Step A2b).
+#   GenBank host links are restricted to root or ectomycorrhizal material
+#   (Step A2), the same evidential standard as GlobalFungi's root samples, and
+#   multi-plant host labels are split so every named plant is a candidate host
+#   (Step A2b). History: repro/CHANGELOG.md.
 #
 #   Part A also maps this knowledge onto geographic space (steps A5-A9): which
 #   parts of Canada hold EcM host habitat, and what proportion of the host
@@ -160,18 +158,14 @@ readr::write_csv(host_tbl, file.path(paths$out_eltonian, "eltonian_host_list.csv
 # sample types these fields record the dominant plant at the site but do NOT
 # imply a direct mycorrhizal association.
 #
-# REVISION 2026-08 (root-evidence rule). The GenBank host_taxon field was
-# previously used UNCONDITIONALLY, i.e. with no tissue test at all. That held
-# the two databases to different evidential standards: GlobalFungi host links
-# were root-samples-only while GenBank host links came from soil, rhizosphere,
-# habitat descriptions or a blank tissue field on the same footing as a root
-# tip. Both branches feed `host_long`, and `matched_interactions` (Step A3) is
-# the sole ancestor of every downstream host-association statistic, so the
-# asymmetry propagated everywhere. GenBank records are now restricted to those
-# whose free-text isolation_source names root or ectomycorrhizal material,
-# using the SAME keyword rule as the tissue tally in Step A2c below. A fungus
-# sequenced from soil beside a tree is not evidence that the tree was its
-# partner.
+# Root-evidence rule. A GenBank record contributes a host association only if
+# its free-text isolation_source names root or ectomycorrhizal material, using
+# the SAME keyword rule as the tissue tally in Step A2c below. GlobalFungi host
+# links are root-samples-only, so both databases are held to one evidential
+# standard. This matters because both branches feed `host_long`, and
+# `matched_interactions` (Step A3) is the sole ancestor of every downstream
+# host-association statistic. A fungus sequenced from soil beside a tree is
+# not evidence that the tree was its partner.
 
 # ---- A2-0. Tissue keyword rules (shared by Step A2 and the tally in A2c) -----
 # Defined here, ABOVE their first use, so the host-record restriction in A2 and
@@ -262,11 +256,11 @@ host_long_all <- dplyr::bind_rows(
 # ---- A2b. Split multi-species host labels ------------------------------------
 # Some metadata fields name several plants for a single sample, e.g.
 # "Picea mariana, Picea glauca, Pinus banksiana". canonicalize_host() keeps only
-# the first two words of a string, so before this revision every plant after the
-# first was silently discarded -- Picea glauca, for instance, was named in 36 of
-# the 44 Canadian root samples and captured from none of them.
+# the first two words of a string, so without splitting, every plant after the
+# first would be lost (e.g. Picea glauca, named in 36 of the 44 Canadian root
+# samples, would be captured from none of them).
 #
-# We now split each label on commas and semicolons and treat every named plant
+# We split each label on commas and semicolons and treat every named plant
 # as its own candidate host. Because a fungus found in a sample that listed
 # eight plants is much weaker evidence than one found where only a single plant
 # was named, we record how many plants were named and derive a confidence
@@ -366,10 +360,10 @@ readr::write_csv(sample_type_tally_canada,
 
 # Companion tally over ALL EcM-positive Canadian GlobalFungi samples, i.e.
 # without the "has a dominant_plant_species entry" restriction applied above.
-# Added 2026-08 so the manuscript can state what proportion of the Canadian
-# EcM-bearing samples are root samples (3%) against the worldwide GlobalFungi
-# figure (19%, tallied in 02_globalfungi.R) -- the point being that thin root
-# coverage is a Canadian sampling gap rather than a property of the database.
+# It lets the manuscript state what proportion of the Canadian EcM-bearing
+# samples are root samples, against the worldwide GlobalFungi figure (tallied
+# in 02_globalfungi.R): thin root coverage is a Canadian sampling gap rather
+# than a property of the database.
 sample_type_tally_canada_all <- emf |>
   dplyr::filter(source == "GlobalFungi") |>
   dplyr::distinct(sample_ID, sample_type) |>
@@ -390,7 +384,7 @@ readr::write_csv(sample_type_tally_canada_all,
 # "ectomycorrhiza", "soil adjacent to Pinus albicaulis", "40 year-old
 # Douglas-fir stand").
 #
-# Since the 2026-08 revision this tally is no longer purely descriptive: Step
+# This tally is not purely descriptive: Step
 # A2 applies exactly the same root_kw test to decide which GenBank records may
 # contribute a host association. The categories below therefore also document
 # what was kept and what was excluded. Records counted under "Root /
@@ -403,9 +397,8 @@ readr::write_csv(sample_type_tally_canada_all,
 #   Root and soil both mentioned   - matches BOTH root_kw and soil_kw (e.g.
 #                                     "mycorrhizal root tips of Pinus
 #                                     albicaulis ... and soil adjacent to
-#                                     Pinus albicaulis"). Renamed in 2026-08
-#                                     from "Mixed root + soil", which implied
-#                                     a mixed sample; in this dataset all such
+#                                     Pinus albicaulis"). Not a mixed
+#                                     sample: in this dataset all such
 #                                     strings describe root material collected
 #                                     from a site where soil was also sampled,
 #                                     so they are treated as root evidence.
@@ -589,7 +582,7 @@ species_occurrence_counts <- matched_interactions |>
   ) |>
   dplyr::filter(!is.na(fungal_species)) |>
   dplyr::rename(host_species = host_clean) |>
-  # Alongside the occurrence count we carry the confidence flag (added 2026-08),
+  # Alongside the occurrence count we carry the confidence flag,
   # applying the same best-available-evidence rule used for sh_pairs and
   # species_pairs_canada. n_records_unambiguous records how many of the
   # supporting records came from a single-host sample, so a reader can see how
@@ -1059,13 +1052,10 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
 
   # Build the sample -> host lookup for every global root sample.
   #
-  # REVISION 2026-08 (multi-host split, global branch). This block previously
-  # passed each whole plant field to clean_host_name(), which keeps only a
-  # string's first two tokens -- so for a sample recorded as
-  # "Picea mariana, Picea glauca, Pinus banksiana" every plant after the first
-  # was silently discarded, exactly as in the Canadian branch (Step A2b). The
-  # labels are now split on commas and semicolons first, so every named plant
-  # is retained. Both plant fields are stacked, then split, then canonicalized.
+  # Multi-host split (global branch). clean_host_name() keeps only a string's
+  # first two tokens, so, as in the Canadian branch (Step A2b), the labels are
+  # split on commas and semicolons first and every named plant is retained.
+  # Both plant fields are stacked, then split, then canonicalized.
   gf_root_hosts <- dplyr::bind_rows(
     gf_global_root |>
       dplyr::filter(!is.na(dominant_plant_species)) |>
@@ -1122,11 +1112,10 @@ if (!is.null(gf_global_root) && nrow(gf_global_root) > 0) {
 our_sh_codes <- unique(emf$sh_code[!is.na(emf$sh_code)])
 
 # ---- Staleness check on the cache ------------------------------------------
-# This cache is keyed to the EcM SH codes, but was guarded by file.exists()
-# alone, so it was reused indefinitely no matter how much the EcM dataset
-# changed underneath it. In practice the copy in use during 2026-07/08 dated
-# from 2026-07-01 and still carried 124 SH codes that the dataset no longer
-# contained, which quietly skewed the global host-association counts.
+# This cache is keyed to the EcM SH codes. Checked only for existence, it
+# would be reused however much the EcM dataset changed, and would then skew
+# the global host-association counts. So it is checked against the current
+# SH codes.
 #
 # Unlike the GenBank cache in Part B4, rebuilding this one costs nothing but
 # time: it is a local scan of the GlobalFungi matrix, deterministic, and
@@ -1342,10 +1331,9 @@ if (!is.null(gf_sh_ecm) && !is.null(gf_root_canadian_hosts)) {
 # The search mirrors 03_genbank.R but removes AND "Canada"[Country].
 
 # ---- Staleness check on the cache ------------------------------------------
-# This cache is keyed to the EcM GENUS list, which comes from `emf`. It used to
-# be guarded by file.exists() alone, so once written it was reused forever — even
-# after the EcM dataset gained genera, which left those genera with no global
-# host associations at all and nothing to indicate it. The check below compares
+# This cache is keyed to the EcM GENUS list, which comes from `emf`. Checked
+# only for existence, it would leave genera added to the dataset with no
+# global host associations and nothing to indicate it. The check below compares
 # what the cache covers against the genera currently in the dataset, and queries
 # only the difference.
 our_genera_list <- sort(unique(trimws(emf$genus[!is.na(emf$genus)])))
@@ -1357,7 +1345,7 @@ gb_global_cached <- if (file.exists(global_gb_ckpt))
 # genus_queried column cannot show that it was asked about. Without the sidecar
 # below, such a genus would look "missing" and be re-queried on every single
 # run, forever. The sidecar records what was ASKED; the cache records what came
-# back. (Absent sidecar = pre-2026-08 cache; fall back to the cache's own
+# back. (If the sidecar is absent, fall back to the cache's own
 # column, which is correct for every genus that returned at least one record.)
 global_gb_queried_ckpt <- paths$snap_gb_global_queried  # raw snapshot
 genera_asked <- if (file.exists(global_gb_queried_ckpt))
@@ -1414,11 +1402,9 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
 
       n_failed_pages <- 0L
       for (k in seq_along(starts)) {
-        # Retry rather than skip. This loop previously used
-        # error = function(e) NULL with NO warning at all, so a transient NCBI
-        # failure dropped up to 200 global host-association records for this
-        # genus completely silently — and the result is checkpointed, so the
-        # loss was permanent.
+        # Retry rather than skip: a transient NCBI failure would otherwise drop
+        # up to 200 global host-association records for this genus, and the
+        # result is checkpointed, so the loss would be permanent.
         summ <- fetch_with_retry(
           function() rentrez::entrez_summary(
             db          = "nuccore",
@@ -1512,8 +1498,7 @@ if (!is.null(gb_global_cached) && length(genera_to_query) == 0L) {
     # APPEND to a copy of the cache rather than rewriting it whole, so the rows
     # already there keep their exact original bytes. Re-serializing them is not
     # harmless: readr::read_csv trims leading whitespace from unquoted fields,
-    # so a read/write round-trip silently edits values (it altered 5 country_gb
-    # entries when this was first written). Topping up is supposed to leave
+    # so a read/write round-trip silently edits values. Topping up is supposed to leave
     # cached records exactly as they were retrieved -- that includes their bytes.
     write_checkpoint_atomically(global_gb_ckpt, function(tmp) {
       if (!file.copy(global_gb_ckpt, tmp, overwrite = TRUE))
@@ -1556,7 +1541,7 @@ if (nrow(gb_global_meta) > 0) {
       host_clean = clean_host_name(host_taxon_gb)
     )
 
-  # REVISION 2026-08 (root-evidence rule, global scope). The Canadian GenBank
+  # Root-evidence rule, global scope. The Canadian GenBank
   # branch in Step A2 keeps only records whose isolation_source names root or
   # ectomycorrhizal material. The same test is applied here, for the same
   # reason and with the same keyword pattern. Without it the two scopes would

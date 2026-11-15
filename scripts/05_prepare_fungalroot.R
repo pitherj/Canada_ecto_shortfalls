@@ -181,12 +181,11 @@ backbone_standardize <- function(names_vec, batch_size = 200L) {
   for (i in seq_len(n_batches)) {
     idx <- seq((i - 1L) * batch_size + 1L,
                min(i * batch_size, length(names_vec)))
-    # Retry rather than fabricate. Previously a failed batch was replaced with
-    # matchType = "NONE" rows, so a transient GBIF outage was indistinguishable
-    # in the output from "GBIF does not recognize these names" — the affected
-    # species kept their unstandardized names and were silently excluded from
-    # any name-matched join downstream. Row counts stayed correct, which is
-    # precisely what made it invisible.
+    # Retry rather than fabricate. A failed batch must not be filled with
+    # matchType = "NONE" rows: a transient GBIF outage would then look like
+    # "GBIF does not recognize these names", and the affected species would
+    # keep unstandardized names and drop out of every name-matched join while
+    # row counts stayed correct.
     res <- fetch_with_retry(
       function() rgbif::name_backbone_checklist(
         name_data = data.frame(scientificName = names_vec[idx])),

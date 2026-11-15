@@ -267,16 +267,8 @@ if (!file.exists(out_fig_world)) {
         title.position = "top"
       )
     ) +
-#    ggplot2::labs(
-#      title    = "GlobalFungi EcM sampling density",
-#      subtitle = "Samples per 100 × 100 km cell | Mollweide equal-area projection"
-#    ) +
     ggplot2::theme_bw(base_size = 11) +
     ggplot2::theme(
-#      plot.title    = ggplot2::element_text(face = "bold", hjust = 0.5,
-#                                            margin = ggplot2::margin(b = 4)),
-#      plot.subtitle = ggplot2::element_text(hjust = 0.5, colour = "grey40",
-#                                            margin = ggplot2::margin(b = 8)),
       legend.position = c(0.95, 0.75)
     )
 

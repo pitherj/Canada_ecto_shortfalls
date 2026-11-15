@@ -542,6 +542,8 @@ paths <- list(
   out_wallacean     = here::here("data_derived", "wallacean"),
   out_prestonian    = here::here("data_derived", "prestonian"),
   out_darwinian     = here::here("data_derived", "darwinian"),
+  # Stand-alone checks in scripts/diagnostics/ (not run by run_all.R)
+  out_diagnostics   = here::here("data_derived", "diagnostics"),
   # SH-level genome coverage (15b_darwinian_sh_match.R)
   darwinian_genome_sh   = here::here("data_derived", "darwinian", "darwinian_genome_sh_assignments.csv"),
   darwinian_sh_coverage = here::here("data_derived", "darwinian", "darwinian_sh_coverage.csv"),
@@ -684,7 +686,7 @@ paths <- list(
 for (d in c(paths$checkpoints, paths$figures, paths$biotime_db,
             paths$out_linnean, paths$out_wallacean, paths$out_prestonian,
             paths$out_darwinian, paths$out_raunkiaeran, paths$out_hutchinsonian,
-            paths$out_eltonian, paths$out_geo_possibility,
+            paths$out_eltonian, paths$out_geo_possibility, paths$out_diagnostics,
             here::here("data_derived", "spatial"))) {
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
 }

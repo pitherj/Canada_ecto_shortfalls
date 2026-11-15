@@ -166,13 +166,11 @@ if (!file.exists(paths$gf_meta_out)) {
 }
 
 # ---- Step 2b: Sample-type composition of GlobalFungi v5 ---------------------
-# ADDED 2026-08. The manuscript describes what GlobalFungi is made of ("soil
-# and soil-derived substrates account for X% of its samples, roots for Y%"),
-# and separately makes the point that thin root coverage in Canada is a
-# Canadian sampling gap rather than a property of the database. Those
-# percentages used to be typed into the prose. This step computes them from
-# the raw metadata so the manuscript can read them from a file, like every
-# other reported number in the project.
+# The manuscript describes what GlobalFungi is made of ("soil and
+# soil-derived substrates account for X% of its samples, roots for Y%"), and
+# notes that thin root coverage in Canada is a Canadian sampling gap rather
+# than a property of the database. This step computes those percentages from
+# the raw metadata, so the manuscript reads them from a file.
 #
 # Two scopes are tallied and stacked in one long-format file:
 #   scope = "worldwide"  every sample in the raw metadata file

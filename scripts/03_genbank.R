@@ -20,8 +20,7 @@
 #   records it is missing and append them, rather than skipping the step (which
 #   would make the gap permanent) or re-downloading everything (which would mix
 #   retrieval dates). See the GB_FETCH_* / GB_MAX_MISSING_FRAC constants below.
-#   This behaviour was added in 2026-08 after a silent loss of 3,001 of 60,911
-#   records; repro/genbank_fetch_gap_prefix_state.md documents that incident.
+#   Why these guards exist: repro/CHANGELOG.md.
 #
 # Prerequisites:
 #   02_globalfungi.R must have been run (provides UNITE lookup)
@@ -121,15 +120,14 @@ ITSX_MAX_INPUT_LENGTH <- 50000L
 SH_MAX_UNMATCHED_FRAC <- 0.01
 
 # ---- Batch-download completeness guards (Steps 1, 2, 3) ---------------------
-# Steps 1-3 retrieve records from NCBI in batches. Until 2026-08 a batch that
-# hit a transient network or server error was skipped with only a warning: the
-# affected records were left out of the checkpoint, nothing compared records
-# returned against records requested, and the checkpoint was written as though
-# complete. Because those steps are guarded by if (!file.exists(...)), every
-# later run then reused the truncated checkpoint and the loss became permanent.
-# That is how 3,001 of 60,911 records went missing from the original pull. The
-# three constants below, together with the guards and the repair path in Steps
-# 2, 3 and 3b, close that hole.
+# Steps 1-3 retrieve records from NCBI in batches, and a batch can fail on a
+# transient network or server error. Because these steps are skipped when
+# their checkpoint exists, a checkpoint written with records missing would be
+# reused on every later run and the loss would become permanent. The three
+# constants below, together with the guards and the repair path in Steps 2, 3
+# and 3b, prevent that: failed batches are retried, records returned are
+# compared with records requested, and a checkpoint is written only once it is
+# complete. (History: repro/CHANGELOG.md.)
 #
 # GB_FETCH_MAX_ATTEMPTS — how many times a single batch is tried before it is
 #   declared failed. NCBI's eutils endpoints time out sporadically under load
