@@ -44,7 +44,7 @@
 #   To force a genome to be searched again, delete its row from the lookup.
 #
 # INPUTS
-#   paths$mycocosm_list   — MycoCosm genome list (manual export; see 15_darwinian.R)
+#   paths$mycocosm_list   — MycoCosm genome list (copied by hand; see 15_darwinian.R)
 #   paths$unite_fasta     — pinned UNITE reference FASTA (same file as 03_genbank.R)
 #   emf                   — Canadian EcM dataset (loaded by 00_setup.R)
 #   ENTREZ_KEY in .Renviron (only needed when new genomes must be searched)
@@ -84,11 +84,11 @@ SH_IDENTITY     <- 0.985    # vsearch identity threshold for SH assignment
 # Automatic GenBank search limits.
 #   STRAIN_MIN_CHARS: strain codes shorter than this (after removing spaces and
 #     punctuation, e.g. "11") match too many unrelated records to be trusted;
-#     those genomes go to manual review instead.
+#     those genomes are reported as not assessed.
 #   MAX_HITS_PER_QUERY: if GenBank cannot find the strain phrase it may quietly
 #     drop that term and return every ITS record for the species. A hit count
-#     above this limit is treated as that failure, and the genome goes to
-#     manual review rather than downloading thousands of summaries.
+#     above this limit is treated as that failure, and the genome is reported
+#     as not assessed rather than downloading thousands of summaries.
 #   MAX_ITS_LENGTH: records longer than this are whole-genome or scaffold
 #     records, not ITS deposits, and are ignored.
 STRAIN_MIN_CHARS   <- 3L
