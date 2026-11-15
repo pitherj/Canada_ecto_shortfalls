@@ -654,14 +654,8 @@ paths <- list(
   table_s4_genbank_dir = here::here("data_raw", "genbank_genus_queries"),
   table_s4             = here::here("data_derived", "linnean", "linnean_table_s4.csv"),
   table_s4_sequences   = here::here("data_derived", "linnean", "linnean_table_s4_sequence_matches.csv"),
-  # SUPERSEDED (09b_table_s4_check.R, retired 2026-11-14); kept until the SM1
-  # Table S4 code is rewritten in Phase 5.
-  # Table S4 check (09b_table_s4_check.R): hand-curated synonym table and the
-  # cached GenBank query results (raw inputs), plus the per-genus result table
-  # and the GBIF records of genera confirmed to lack Canadian ITS sequences.
-  table_s4_synonyms       = here::here("data_raw", "table_s4_check", "table_s4_genus_synonyms.csv"),
-  table_s4_ncbi_dir       = here::here("data_raw", "table_s4_check", "ncbi_genus_queries"),
-  table_s4_reconciliation = here::here("data_derived", "linnean", "linnean_table_s4_reconciliation.csv"),
+  # GBIF records of genera confirmed (Table S4, 09) to lack Canadian ITS
+  # sequences: the orange points of Figure S5.
   gbif_ecm_nosequence_confirmed = here::here("data_derived", "linnean", "linnean_gbif_ecm_nosequence_confirmed_canada.csv"),
   eltonian_global        = here::here("data_derived", "eltonian", "eltonian_global_host_associations.csv"),
   eltonian_host_matching = here::here("data_derived", "eltonian", "eltonian_host_matching.csv"),
