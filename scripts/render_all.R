@@ -20,7 +20,7 @@
 #   (quarto install tinytex)
 #
 # OUTPUTS
-#   manuscript/_output/  rendered documents (not tracked in git)
+#   manuscript/_output/<document>/  rendered documents (not tracked in git)
 #
 # MANUSCRIPT ITEMS IT FEEDS
 #   All of them: this produces the documents.
@@ -42,24 +42,35 @@ if (!nzchar(Sys.which("quarto"))) stop("Quarto not found on PATH (https://quarto
 
 # ---- 1. Render each document -------------------------------------------------
 # Quarto is run from inside manuscript/, so each document finds its
-# references.bib and facets.csl beside it. A failed render stops the script.
+# references.bib and facets.csl beside it. Each document gets its own folder in
+# _output/, because Quarto empties --output-dir at every render. A failed
+# render stops the script.
 for (d in docs) {
   message("Rendering ", d, " ...")
+  doc_dir <- file.path(out_dir, tools::file_path_sans_ext(d))
   status <- withr::with_dir(ms_dir,
-    system2("quarto", c("render", shQuote(d), "--output-dir", shQuote(out_dir))))
+    system2("quarto", c("render", shQuote(d), "--output-dir", shQuote(doc_dir))))
   if (status != 0L) stop("Quarto failed to render ", d, " (exit status ", status, ").")
 }
 
 # ---- 2. Check the rendered text for missing values ---------------------------
-# Each Word and HTML output is converted to plain text with Quarto's bundled
-# pandoc. Lines after the reference-list heading are not checked.
-rendered <- list.files(out_dir, pattern = "\\.(docx|html)$", full.names = TRUE)
+# Each Word and HTML output is converted to Markdown with Quarto's bundled
+# pandoc, which keeps code formatting as `backticks`. Text in code formatting
+# is removed before checking, because the documents deliberately write NA as
+# a value there (e.g. SM2: "sh_code = NA"). Lines after the reference-list
+# heading are not checked.
+rendered <- list.files(out_dir, pattern = "\\.(docx|html)$", full.names = TRUE,
+                       recursive = TRUE)
 na_pattern <- "(^|[^[:alpha:]])NA([^[:alpha:]]|$)"
 
 problems <- purrr::map_dfr(rendered, function(f) {
-  txt <- system2("quarto", c("pandoc", shQuote(f), "-t", "plain", "--wrap=none"),
+  txt <- system2("quarto", c("pandoc", shQuote(f), "-t", "gfm", "--wrap=none"),
                  stdout = TRUE)
-  ref_start <- grep("^(References|REFERENCES|Literature cited)\\s*$", txt)
+  txt <- gsub("`[^`]*`", "", txt)                 # drop code-formatted text
+  txt <- gsub("<[^>]+>", " ", txt)                # drop any leftover HTML tags
+  # drop embedded image data (long runs of base64 text with no spaces)
+  txt <- txt[!grepl("^\\S{100,}$", trimws(txt))]
+  ref_start <- grep("^#*\\s*(References|REFERENCES|Literature cited)\\s*(\\{.*\\})?\\s*$", txt)
   if (length(ref_start)) txt <- txt[seq_len(ref_start[1] - 1L)]
   hits <- grep(na_pattern, txt)
   tibble::tibble(file = rep(basename(f), length(hits)),
