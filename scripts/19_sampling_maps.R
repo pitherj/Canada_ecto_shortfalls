@@ -35,6 +35,14 @@
 #   assembly (04_combine_ecm_dataset.R), so here we simply filter on
 #   coord_in_canada == TRUE. Each map is skipped if BOTH its white and grey
 #   files (and, for Figure S5, its plotted-count table) already exist.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure 1, Figure S5 (and the Figure S5 caption counts).
+#
+# RE-RUN WHEN
+#   The EcM dataset (04), the GBIF tables or Table S4 categories (09), or the
+#   Canada boundary (01) change. Figures are skipped when they exist: delete
+#   the Figure 1/S5 files and linnean_gbif_plotted_counts.csv to rebuild.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

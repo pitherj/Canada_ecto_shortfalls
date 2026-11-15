@@ -1,23 +1,70 @@
 # =============================================================================
-# Prepare FungalRoot Data: Download, Parse, Classify, Standardize
+# 05_prepare_fungalroot.R  —  EcM host plants demonstrated by FungalRoot
 # =============================================================================
-# Produces a computationally reproducible table of EcM host plant species
-# "demonstrated" by the FungalRoot database, used to determine which plant
-# genera (and species) count as EcM hosts for the Eltonian and Hutchinsonian
-# shortfall analyses.
+# PURPOSE
+#   Build a reproducible list of plant species and genera that the FungalRoot
+#   database shows to be EcM hosts, by two independent routes (a species rule
+#   from FungalRoot occurrence records; a genus rule from FungalRoot's Table
+#   S2). The routes are written as two tables; 06_host_species.R combines them
+#   with OR. Rules and data-quality notes: METHOD NOTES below.
 #
-# Sources (two independent sources):
-#   1. GBIF DwC-A archive of the FungalRoot occurrence data (species rule)
-#     GBIF dataset key: 744edc21-8dd2-474e-8a0b-b8c3d56a3c2d
-#     Download URL pattern:
-#       https://api.gbif.org/v1/occurrence/download/request/<KEY>.zip
-#     OR download interactively from:
-#       https://www.gbif.org/occurrence/download?dataset_key=744edc21-...
-#   2. FungalRoot's own published genus-level recommendation, Supplementary
-#      Table S2 (Soudzilovskaia et al. 2020 New Phytologist, supporting
-#      information), sheet "Table S2" — genus rule. Scanned by file
-#      extension from data_raw/fungalroot/ (one .xlsx expected).
+# INPUTS
+#   data_raw/fungalroot/744edc21-...zip  GBIF DwC-A archive of the FungalRoot
+#       occurrences (GBIF dataset 744edc21-8dd2-474e-8a0b-b8c3d56a3c2d; found by
+#       prefix; downloaded with rgbif::occ_download() if absent, or from
+#       https://www.gbif.org/occurrence/download?dataset_key=744edc21-...)
+#   data_raw/fungalroot/*.xlsx  FungalRoot Supplementary Tables S1-S4
+#       (Soudzilovskaia et al. 2020, New Phytologist); exactly one .xlsx;
+#       sheet "Table S2" is used
+#   GBIF Backbone Taxonomy via rgbif::name_backbone_checklist() (first run
+#       only; the result is a raw snapshot)
 #
+# OUTPUTS
+#   data_raw/snapshots/fungalroot_species_backbone.csv  GBIF backbone results
+#       for the candidate species (written once, then only read)
+#   data_derived/checkpoints/: fungalroot_dwca_extracted/,
+#       fungalroot_species_raw.csv (parsed binomial x MycorrhizalType pairs),
+#       fungalroot_table_s2.csv (parsed Table S2, before filtering)
+#   data_derived/clean_fungalroot_species.csv         species rule
+#   data_derived/clean_fungalroot_genera_table_s2.csv genus rule
+#   (fields below)
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   The native EcM host list (06), and through it the Eltonian results
+#   (Figure 4, Tables S2 and S3) and the host rasters.
+#
+# RE-RUN WHEN
+#   The FungalRoot archive or workbook changes, or the qualifying labels
+#   change. Delete the checkpoints (and, for new name matching, make the
+#   backbone snapshot writable and delete it). Then re-run 06 onward.
+#   Runtime: the backbone lookup takes a few minutes (200 names per request);
+#   the Table S2 read is near-instant.
+#
+# OUTPUT FIELDS
+#     UpdatedPlantBinomial — backbone-resolved accepted name
+#     UpdatedGenus         — genus parsed from UpdatedPlantBinomial; retained
+#                            for transparency, not used for genus-level
+#                            qualification (that comes from Table S2)
+#     ecm_demonstrated     — always TRUE in this table (only demonstrated
+#                            species are retained; kept as an explicit column
+#                            for self-documentation and so downstream code
+#                            does not have to infer it)
+#     evidence             — the qualifying raw MycorrhizalType label(s)
+#                            backing the call, semicolon-separated
+#     PlantBinomial         — the raw FungalRoot name(s) (pre-backbone),
+#                            semicolon-separated when more than one raw
+#                            synonym resolves to the same accepted name
+#     evidence_source      — always "occurrence" in this table; distinguishes
+#                            this route from the Table S2 genus route below
+#
+#   data_derived/clean_fungalroot_genera_table_s2.csv  (genus rule)
+#     Genus                 — genus name as given in Table S2
+#     mycorrhizal_type      — Table S2's MycorrhizalTypeGenus call ("EcM" or
+#                            "EcM-AM" only; this table is pre-filtered to
+#                            qualifying genera)
+#     evidence_source      — always "table_s2"
+#
+# METHOD NOTES
 # DwC-A structure:
 #   occurrences.csv: core file; column 0 = ID (primary key), column 44 = scientificName
 #   measurements.csv: extension; coreid links to occurrences.csv ID;
@@ -82,60 +129,6 @@
 #   Batched at 200 names per request. Table S2 genera are NOT sent through
 #   this backbone lookup (see Step 3b) — Table S2 is genus-level only, and
 #   genus-level synonymy is not resolved by this script.
-#
-# Raw data files (data_raw/fungalroot/):
-#   744edc21-...zip — GBIF DwC-A archive (scanned by prefix; downloaded via
-#                     rgbif::occ_download() if absent)
-#   *.xlsx          — FungalRoot Supplementary Tables S1-S4 workbook (scanned
-#                     by extension; must contain exactly one .xlsx file);
-#                     "Table S2" sheet is used here.
-#
-# Checkpoints (data_derived/checkpoints/):
-#   fungalroot_dwca_extracted/        — extracted DwC-A directory
-#   fungalroot_species_raw.csv        — parsed (PlantBinomial, MycorrhizalType)
-#                                        before classification, one row per
-#                                        distinct raw occurrence/measurement pair
-#   fungalroot_species_backbone.csv   — rgbif backbone results for the
-#                                        EcM-demonstrated candidate species
-#   fungalroot_table_s2.csv           — parsed Table S2 (Genus,
-#                                        MycorrhizalTypeGenus), pre-filter
-#
-# Output:
-#   data_derived/clean_fungalroot_species.csv  (species rule)
-#     UpdatedPlantBinomial — backbone-resolved accepted name
-#     UpdatedGenus         — genus parsed from UpdatedPlantBinomial; retained
-#                            for transparency, not used for genus-level
-#                            qualification (that comes from Table S2)
-#     ecm_demonstrated     — always TRUE in this table (only demonstrated
-#                            species are retained; kept as an explicit column
-#                            for self-documentation and so downstream code
-#                            does not have to infer it)
-#     evidence             — the qualifying raw MycorrhizalType label(s)
-#                            backing the call, semicolon-separated
-#     PlantBinomial         — the raw FungalRoot name(s) (pre-backbone),
-#                            semicolon-separated when more than one raw
-#                            synonym resolves to the same accepted name
-#     evidence_source      — always "occurrence" in this table; distinguishes
-#                            this route from the Table S2 genus route below
-#
-#   data_derived/clean_fungalroot_genera_table_s2.csv  (genus rule)
-#     Genus                 — genus name as given in Table S2
-#     mycorrhizal_type      — Table S2's MycorrhizalTypeGenus call ("EcM" or
-#                            "EcM-AM" only; this table is pre-filtered to
-#                            qualifying genera)
-#     evidence_source      — always "table_s2"
-#
-#   NOTE — this script writes TWO output tables. A Canadian native species can
-#   qualify as an EcM host via either route (its own row in the species table,
-#   OR its genus appearing in the genus table) without itself appearing in the
-#   species table. 06_host_species.R reads both and performs the OR merge.
-#
-# Runtime notes:
-#   - rgbif backbone queries: a few minutes, scales with the number of
-#     EcM-demonstrated candidate species (a small fraction of all ~17,000
-#     raw FungalRoot occurrence/measurement rows).
-#   - Table S2 read (Step 3b): near-instant; no API calls involved.
-#   - Delete checkpoint files to force re-run of individual steps.
 # =============================================================================
 
 library(here)

@@ -1,24 +1,37 @@
 # =============================================================================
-# Combine Sources and Filter for EcM Fungi
+# 04_combine_ecm_dataset.R  —  Combine sources; keep Canadian EcM records
 # =============================================================================
-# Step 1: Stack GlobalFungi and GenBank long-format tables, harmonise columns,
-#         check ALL coordinates against the Canada boundary (coord_in_canada),
-#         and keep only GenBank records whose own location evidence places
-#         them in Canada (the GenBank location rule, 1b).
-#         Outputs: data_derived/emf_canada_combined.csv
-#                  data_derived/genbank_excluded_non_canadian.csv (dropped
-#                  GenBank records, with the reason)
+# PURPOSE
+#   Step 1: stack the GlobalFungi and GenBank records, check every coordinate
+#           against the Canada boundary (coord_in_canada), and keep only
+#           GenBank records whose own location evidence places them in Canada
+#           (the GenBank location rule, 1b).
+#   Step 2: keep ectomycorrhizal (EcM) records only: genera listed as EcM in
+#           FungalTraits v1.2, plus records FungalTraits cannot classify whose
+#           family is at least two-thirds EcM in FungalTraits (the family rule).
+#   The result, emf_canada_em_only.csv, is the dataset every later script uses
+#   (loaded as `emf` by 00_setup.R).
 #
-# Step 2: Keep ectomycorrhizal (EcM) records only: genera listed as EcM in
-#         FungalTraits v1.2, plus records FungalTraits cannot classify whose
-#         family is at least two-thirds EcM in FungalTraits (the family rule).
-#         Outputs: data_derived/emf_canada_em_only.csv (primary dataset for
-#                  all downstream analyses)
-#                  data_derived/ecm_family_rule_table.csv
+# INPUTS
+#   paths$gf_long_out    GlobalFungi records (02_globalfungi.R)
+#   paths$gb_long_out    GenBank records (03_genbank.R)
+#   paths$canada_bound   Canada boundary (01_spatial_data.R)
+#   paths$fungaltraits   FungalTraits v1.2 (data_raw, pinned)
 #
-# Prerequisites:
-#   02_globalfungi.R → data_derived/globalfungi_canada_long.csv
-#   03_genbank.R     → data_derived/genbank_emf_canada_long.csv
+# OUTPUTS (data_derived/)
+#   emf_canada_combined.csv            all guilds, after the location rule
+#   genbank_excluded_non_canadian.csv  GenBank records dropped, with the reason
+#   emf_canada_em_only.csv             the EcM dataset
+#   ecm_family_rule_table.csv          families considered by the family rule
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Every result: all shortfall analyses read the EcM dataset.
+#
+# RE-RUN WHEN
+#   02 or 03 outputs change, the boundary (01) changes, or FungalTraits is
+#   repinned. Each step is skipped when its output exists: delete
+#   emf_canada_combined.csv (Step 1) and/or emf_canada_em_only.csv (Step 2).
+#   Then re-run 05 onward.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

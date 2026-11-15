@@ -1,7 +1,7 @@
 # =============================================================================
 # Darwinian Shortfall, part 2: genome coverage by Species Hypothesis (SH)
 # =============================================================================
-# WHY THIS SCRIPT EXISTS
+# PURPOSE
 #   15_darwinian.R matches MycoCosm genomes to our EcM species by NAME. That
 #   cannot say anything about the ~1,190 Canadian SHs that UNITE leaves
 #   un-named (labels such as "Cortinarius_sp"), because an un-named SH has no
@@ -62,6 +62,15 @@
 #   darwinian_sh_summary.csv            — summary counts (feeds the manuscript)
 #   darwinian_genomes_not_assessed.csv  — genomes not linked to an SH, with
 #                                         the reason
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   The SH-level Darwinian result (main text, beside the named-species
+#   result) and the reviewer response on un-named SHs.
+#
+# RE-RUN WHEN
+#   The EcM dataset changes (04), the MycoCosm list is refreshed (new genomes
+#   are searched automatically), or the UNITE build is repinned. Outputs are
+#   rewritten on every run.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

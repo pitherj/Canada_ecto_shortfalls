@@ -1,10 +1,10 @@
 # =============================================================================
-# Wallacean Shortfall: Global GlobalFungi Comparator Metrics
+# 13_wallacean_global_comparator.R  —  Global GlobalFungi comparator metrics
 # =============================================================================
-# Computes summary metrics describing the FULL global GlobalFungi v5 database
-# for use as a comparator against the Canada-specific dataset in Table 1 of the
-# manuscript ("EcM Fungal Records Dataset").
-#
+# PURPOSE
+#   Summarize the whole of GlobalFungi v5 as a comparator for the Canadian
+#   dataset in Table 1, using the same sample filters and EcM definition as
+#   the Canadian data. Two independently guarded stages:
 # Two independently-guarded stages, each following the per-step sentinel
 # pattern used throughout this pipeline:
 #
@@ -14,8 +14,8 @@
 #       Canadian dataset in 02_globalfungi.R
 #     - Global EcM SH codes / genera / named species detected as columns in
 #       the abundance matrix. Identification logic is identical to
-#       12_wallacean_density_map.R Step 1 (UNITE x FungalTraits genus
-#       cross-reference, with the same exact-match-then-prefix-fallback rule
+#       12_wallacean_density_map.R Step 1 (classify_ecm(): FungalTraits
+#       genus or two-thirds family rule; the same exact-match-then-prefix rule
 #       for matching SH codes to matrix column names).
 #     - Global unique EcM sampling locations, derived from the existing
 #       checkpoint data_derived/checkpoints/gf_global_ecm_sample_ids.csv
@@ -33,18 +33,23 @@
 #       quality-filtered, with EcM fungal records" count in Table S1;
 #       derived from the same in-memory EcM-column matrix subset used for
 #       the two metrics above, so no additional matrix read is required)
-#     Output: data_derived/checkpoints/gf_global_comparator_volume.csv
 #
-# Prerequisites:
-#   data_derived/checkpoints/unite_sh_taxonomy.csv         (from 02_globalfungi.R)
-#   data_derived/checkpoints/gf_global_ecm_sample_ids.csv  (from
-#                                                       12_wallacean_density_map.R —
-#                                                       run that script first if absent)
+# INPUTS
+#   paths$unite_taxonomy (02); paths$fungaltraits;
+#   data_derived/checkpoints/gf_global_ecm_sample_ids.csv (12; run 12 first);
+#   GlobalFungi v5 metadata and SH abundance matrix (data_raw)
 #
-# Note on Stage 2: this is a NEW, expensive pipeline stage. It is split out
-# from Stage 1 so that Table S1 can render with the cheap comparator numbers
-# even before Stage 2 has been run. Delete the Stage 2 output file to force
-# re-computation.
+# OUTPUTS
+#   data_derived/checkpoints/gf_global_comparator_cheap.csv   (Stage 1)
+#   data_derived/checkpoints/gf_global_comparator_volume.csv  (Stage 2)
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Table 1 (GlobalFungi-wide column), Table S1.
+#
+# RE-RUN WHEN
+#   12 is re-run, or GlobalFungi, the UNITE build, FungalTraits, the EcM rules
+#   or the sample filters change. Delete the stage's output to recompute.
+#   Stage 1 can be rendered before the expensive Stage 2 has been run.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

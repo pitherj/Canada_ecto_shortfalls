@@ -17,8 +17,14 @@
 #   paths$emf_data      combined EcM dataset (auto-loaded as `emf`); GlobalFungi
 #                       rows give per-sample EcM read sums.
 #
-# OUTPUT (figures/)
+# OUTPUTS (figures/)
 #   Figure-S3_depth_discard.png   (paths$fig_depth_discard)
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure S3.
+#
+# RE-RUN WHEN
+#   The EcM dataset (04) or the GlobalFungi records (02) change.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

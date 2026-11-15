@@ -1,31 +1,34 @@
 # =============================================================================
-# Build BIEN2 EcM Host Rasters
+# 08_host_rasters.R  —  Rasterize the BIEN2 host ranges
 # =============================================================================
-# Loads BIEN2 modelled range shapefiles for all EcM host plant species native
-# to Canada (from 06_host_species.R), and rasterizes them at 0.5° resolution.
+# PURPOSE
+#   Load the BIEN2 range shapefiles of the native Canadian EcM host species,
+#   keep those overlapping Canada, and rasterize them at 0.5 degrees: host
+#   species richness per cell, and one presence layer per species.
 #
-# Range shapefiles must already be present in data_raw/bien2_ranges/ — run
-# scripts/07_bien2_ranges.R first.
+#   Workflow: 1. load the host list (06); 2. load the range shapefiles;
+#   3. keep ranges overlapping Canada; 4. rasterize (richness per cell, and a
+#   per-species stack masked to the Canada boundary).
 #
-# Workflow:
-#   1.  Load host species list (output of 06_host_species.R)
-#   2.  Load BIEN2 range shapefiles from data_raw/bien2_ranges/
-#   3.  Filter ranges to those overlapping Canada
-#   4.  Rasterize: count host species richness per 0.5° cell
+# INPUTS
+#   data_derived/ecm_native_canada_host_species.csv  (06)
+#   data_raw/bien2_ranges/                            (07)
+#   paths$canada_bound                                (01)
 #
-# Checkpoint files (data_derived/checkpoints/):
-#   bien2_ecm_host_ranges.gpkg      — BIEN2 range polygons (filtered to Canada)
+# OUTPUTS
+#   data_derived/checkpoints/bien2_ecm_host_ranges.gpkg  ranges overlapping Canada
+#   data_derived/spatial/bien_host_richness_0.5deg.tif   host species richness
+#   data_derived/spatial/bien_host_species_stack.tif     one binary layer per
+#                                                        host species (named)
 #
-# Outputs:
-#   data_derived/spatial/bien_host_richness_0.5deg.tif    — host species richness
-#   data_derived/spatial/bien_host_species_stack.tif      — per-species binary raster
-#                                                      stack (one layer per host
-#                                                      species; named by species)
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure 4 and the Eltonian habitat results (via 18); the
+#   geographic-possibility check (21).
 #
-# Runtime notes:
-#   - Step 2 (shapefile loading) ~1–5 min depending on species count
-#   - Step 4 (rasterization loop) ~5–20 min
-#   Both steps are checkpointed; delete checkpoint files to force re-run.
+# RE-RUN WHEN
+#   The host list (06), the ranges (07) or the Canada boundary (01) change.
+#   Delete the checkpoint and rasters to rebuild. Runtime: ~1-5 min to load
+#   shapefiles, ~5-20 min to rasterize.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

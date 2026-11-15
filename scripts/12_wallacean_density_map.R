@@ -1,39 +1,36 @@
 # =============================================================================
-# Wallacean Shortfall: GlobalFungi EcM Sampling Density Maps
+# 12_wallacean_density_map.R  —  Global GlobalFungi EcM sampling density
 # =============================================================================
-# Produces two raster-style density maps showing the number of GlobalFungi
-# samples per 100 km × 100 km grid cell in which at least one ectomycorrhizal
-# (EcM) SH code was detected:
+# PURPOSE
+#   Map the number of GlobalFungi samples with at least one EcM SH code, per
+#   100 x 100 km grid cell, worldwide (Mollweide equal-area projection).
+#   EcM samples are identified by SH presence:
+#     1. UNITE taxonomy for every SH code (paths$unite_taxonomy).
+#     2. EcM SH codes flagged with the same definition as the Canadian
+#        dataset (classify_ecm() in 00_setup.R: FungalTraits EcM genus, or
+#        the two-thirds family rule).
+#     3. Only those columns are read from the 13 GB abundance matrix.
+#     4. A sample is kept if it has at least one EcM read.
+#     5. The same quality filters as the Canadian dataset (02): ITS2 or
+#        ITSboth; not manipulated; sample_type in GF_SAMPLE_TYPES_KEPT (soil,
+#        root); valid coordinates.
 #
-#   (1) World map  — Mollweide equal-area projection
-#   (2) Canada map — Canada Albers Equal Area Conic (crs_albers)
+# INPUTS
+#   paths$unite_taxonomy (02); paths$fungaltraits; GlobalFungi v5 metadata and
+#   SH abundance matrix (data_raw)
 #
-# EcM sample identification (Option C — SH-presence filter):
-#   1. Load UNITE SH taxonomy (data_derived/checkpoints/unite_sh_taxonomy.csv)
-#      to obtain genus labels for every SH code in GlobalFungi v5.
-#   2. Flag EcM SH codes with the same definition as the Canadian dataset
-#      (classify_ecm() in 00_setup.R: FungalTraits EcM genus, or the
-#      two-thirds family rule).
-#   3. Read only those EcM-genus SH columns from the 13 GB abundance matrix
-#      (data_raw/GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt).
-#   4. Retain any sample with at least one EcM SH read (row sum > 0).
-#   5. Join with sample metadata; apply quality filters identical to those
-#      used for the Canadian dataset in 02_globalfungi.R:
-#        - barcoding_region %in% c("ITS2", "ITSboth")
-#        - manipulated == "NO"
-#        - sample_type %in% GF_SAMPLE_TYPES_KEPT (soil, root)
-#        - valid (non-NA, in-range) latitude and longitude
+# OUTPUTS
+#   figures/Figure-S2_gf_sampling_density_world.png
+#   data_derived/checkpoints/gf_global_ecm_sample_ids.csv  sample IDs and
+#       coordinates passing all filters (also read by 13)
 #
-# Outputs (figures/):
-#   Figure-S2_gf_sampling_density_world.png   — global density map (Figure S2)
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure S2; the global sampling-location count in Table 1 (via 13).
 #
-# Checkpoints (data_derived/checkpoints/):
-#   gf_global_ecm_sample_ids.csv     — sample IDs + lat/lon passing all filters
-#
-# Runtime note:
-#   Step 3 reads selected columns from a ~13 GB file via data.table::fread().
-#   On a modern laptop this typically takes 5–15 minutes. All subsequent steps
-#   are fast. The checkpoint file means this step only runs once.
+# RE-RUN WHEN
+#   GlobalFungi, the UNITE build, FungalTraits, the EcM rules or the sample
+#   filters change. Delete the checkpoint and the figure to rebuild. Step 3
+#   reads the 13 GB matrix: 5-15 minutes.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

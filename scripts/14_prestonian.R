@@ -1,25 +1,39 @@
 # =============================================================================
-# Prestonian Shortfall: Temporal Data Coverage
+# 14_prestonian.R  —  Prestonian shortfall: temporal data coverage
 # =============================================================================
-# Do any of the EcM fungal taxa recorded in our Canadian dataset appear in
-# BioTIME — a global database of time-series biodiversity data? Matching
-# our taxa to BioTIME quantifies the Prestonian shortfall: the degree to
-# which temporal change in EcM fungal communities is undocumented.
+# PURPOSE
+#   Do the EcM fungal taxa in our Canadian dataset appear in BioTIME, the
+#   global database of biodiversity time series? The share that does not
+#   measures the Prestonian shortfall: how little of the temporal change in
+#   EcM fungal communities is documented. For matched taxa, STUDY_ID and study
+#   metadata show whether the records are true time series (more than one
+#   year at a location) and which realm and biome they come from.
 #
-# BioTIME is downloaded directly from:
-#   RDS:      https://biotime.st-andrews.ac.uk/dl_request.php?dl=raw_rds
-#   Metadata: https://biotime.st-andrews.ac.uk/dl_request.php?dl=metadata_csv
+# INPUTS
+#   emf (04)
+#   data_raw/biotime/*.rds  BioTIME raw data (found by extension; downloaded
+#       as biotime_raw.rds if absent, from
+#       https://biotime.st-andrews.ac.uk/dl_request.php?dl=raw_rds)
+#   data_raw/biotime/*.csv  BioTIME study metadata, REQUIRED (downloaded as
+#       biotime_metadata.csv if absent, from
+#       https://biotime.st-andrews.ac.uk/dl_request.php?dl=metadata_csv)
 #
-# The RDS contains a data frame with columns including:
-#   STUDY_ID, ID_ALL_RAW_DATA, YEAR, taxon, genus, species, valid_name, ...
-# We filter to Fungi records and match valid_name against our EcM species list.
-# At genus level we also identify any BioTIME species from our EcM genera.
+# OUTPUTS (data_derived/prestonian/)
+#   prestonian_biotime_matches.csv      — BioTIME records for matched EcM taxa
+#   prestonian_taxon_summary.csv        — per-taxon summary: match level,
+#                                                 n_records, year range, n_locations,
+#                                                 max_years_at_location, has_repeat_sampling
+#   prestonian_location_timeseries.csv  — per-taxon x location x year detail
+#   prestonian_study_metadata.csv       — metadata for studies with EcM matches
+#   prestonian_summary.csv              — aggregate statistics
 #
-# For matched taxa we use STUDY_ID and study metadata to characterise whether
-# those records represent true time-series (duration > 1 year), and what
-# realm/biome they come from.
+# MANUSCRIPT ITEMS IT FEEDS
+#   In-text Prestonian results.
 #
-# Workflow:
+# RE-RUN WHEN
+#   The EcM dataset (04) or BioTIME changes.
+#
+# WORKFLOW
 #   1.  Load or download BioTIME RDS and metadata CSV
 #   2.  Filter metadata to fungi studies (taxa + organisms both contain "fungi")
 #   3.  Filter main BioTIME data to those study IDs
@@ -27,21 +41,9 @@
 #   5.  Spatial-temporal assessment: group by (valid_name, latitude, longitude),
 #       count distinct years per location — n_years > 1 = genuine time-series
 #   6.  Save summary and matched records
-#
-# Raw data files (data_raw/biotime/):
-#   *.rds          — BioTIME raw data (scanned by extension; downloaded as
-#                    biotime_raw.rds if absent); metadata CSV is REQUIRED
-#   *.csv          — BioTIME study metadata (scanned by extension; downloaded
-#                    as biotime_metadata.csv if absent)
-#
-# Outputs:
-#   data_derived/prestonian_biotime_matches.csv      — BioTIME records for matched EcM taxa
-#   data_derived/prestonian_taxon_summary.csv        — per-taxon summary: match level,
-#                                                 n_records, year range, n_locations,
-#                                                 max_years_at_location, has_repeat_sampling
-#   data_derived/prestonian_location_timeseries.csv  — per-taxon x location x year detail
-#   data_derived/prestonian_study_metadata.csv       — metadata for studies with EcM matches
-#   data_derived/prestonian_summary.csv              — aggregate statistics
+#   The BioTIME RDS has columns including STUDY_ID, ID_ALL_RAW_DATA, YEAR,
+#   taxon, genus, species, valid_name. Matching is on valid_name (species,
+#   exact) and on genus.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

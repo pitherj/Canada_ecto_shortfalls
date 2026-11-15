@@ -24,6 +24,16 @@
 # NOTE
 #   Every step checks whether its output already exists and skips if so, so the
 #   script is safe to re-run. Delete an output file to force it to regenerate.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Every map (Figures 1, 3, 4, S1, S2, S4, S5) and every "inside Canada"
+#   decision: the coordinate test in 04, the host-raster masks (08, 18),
+#   Canada's climate space (17) and the Figure S5 point filter (19).
+#
+# RE-RUN WHEN
+#   A boundary, ecoregion or Natural Earth input changes, or the
+#   simplification tolerance changes: delete the output concerned. Then re-run
+#   04 onward (the boundary affects which records count as in Canada).
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

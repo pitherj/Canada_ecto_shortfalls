@@ -1,38 +1,37 @@
 # =============================================================================
-# Download BIEN2 Range Shapefiles from biendata.org
+# 07_bien2_ranges.R  —  Download BIEN2 modelled host ranges
 # =============================================================================
-# Downloads modelled range shapefiles for all native Canadian EcM host species
-# from biendata.org (Moulatlet et al. 2025, PNAS), then unzips each archive
-# into a per-species subdirectory under data_raw/bien2_ranges/.
+# PURPOSE
+#   Download the BIEN2 modelled range shapefile of every native Canadian EcM
+#   host species from biendata.org (Moulatlet et al. 2025, PNAS: "General laws
+#   of biodiversity: Climatic niches predict plant range size and ecological
+#   dominance globally"), and unzip each into its own folder.
 #
-# This script is part of Group 0 (data acquisition) and must be run before
-# 08_host_rasters.R.  It depends on the host species list produced by
-# 06_host_species.R.
-#
-# Citation:
-#   Moulatlet GM et al. (2025) General laws of biodiversity: Climatic niches
-#   predict plant range size and ecological dominance globally. PNAS.
-#   Data portal: https://www.biendata.org
-#
-# Prerequisites:
+# INPUTS
 #   data_derived/ecm_native_canada_host_species.csv  (06_host_species.R)
+#   biendata.org (https://www.biendata.org), over the internet
 #
-# Outputs (per species):
-#   data_raw/bien2_ranges/<Genus_species>.zip          — downloaded archive
-#   data_raw/bien2_ranges/<Genus_species>/<files>      — unzipped shapefile
-# Summary log:
-#   data_raw/bien2_ranges/download_log.csv             — per-species status log
+# OUTPUTS (data_raw/bien2_ranges/; this folder must stay writable)
+#   <Genus_species>.zip            downloaded archive
+#   <Genus_species>/<files>        unzipped shapefile
+#   download_log.csv               per-species status, rewritten every run
 #
-# Re-run behaviour:
-#   - Species with an existing unzipped .shp are pre-filtered out before the
-#     loop (no wasted iterations).
+# MANUSCRIPT ITEMS IT FEEDS
+#   The host rasters (08) and so Figure 4 and the Eltonian habitat results;
+#   the geographic-possibility check (21).
+#
+# RE-RUN WHEN
+#   The host list (06) gains species. Already-downloaded species are skipped.
+#   Then re-run 08 onward.
+#
+# RE-RUN BEHAVIOUR
+#   - Species with an unzipped .shp are skipped.
 #   - Species logged as not_available / unzip_error / network_error are skipped.
 #   - Species logged as rate_limited ARE retried on the next run.
-#   - Species with an existing .zip but no .shp are unzipped without
-#     re-downloading.
-#   - HTTP 429 triggers a wait of RATE_LIMIT_WAIT_SEC then retries (up to
-#     MAX_RETRIES times); if all retries fail the species is logged as
-#     rate_limited and the run continues.
+#   - Species with a .zip but no .shp are unzipped without re-downloading.
+#   - HTTP 429 triggers a wait of RATE_LIMIT_WAIT_SEC, then retries (up to
+#     MAX_RETRIES times); if all fail, the species is logged as rate_limited
+#     and the run continues.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

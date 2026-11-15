@@ -1,35 +1,38 @@
 # =============================================================================
-# Darwinian Shortfall: Genomic Data Coverage
+# 15_darwinian.R  —  Darwinian shortfall: genome coverage by name
 # =============================================================================
-# How many EcM fungal taxa in our Canadian dataset have genome sequences
-# available in MycoCosm (the JGI fungal genomics portal)?
+# PURPOSE
+#   How many EcM fungal taxa in our Canadian dataset have a genome in
+#   MycoCosm (the JGI fungal genomics portal)? Genomes are matched to our
+#   genera and named species by NAME. The SH-level match, which also covers
+#   un-named SHs, is in 15b_darwinian_sh_match.R.
+#   Workflow: 1. load the MycoCosm list (fungi only); 2. extract each genome's
+#   genus; 3. match to our EcM genera and species; 4. report coverage.
 #
-# MycoCosm data (data_raw/mycocosm_organism_list.csv):
-#   The automated export from the MycoCosm portal requires JGI login and
-#   the bulk-export link was not functioning at time of data collection.
-#   Data were obtained manually:
-#     1. Navigate to https://mycocosm.jgi.doe.gov/fungi/fungi.info.html
-#        (the JGI "All Fungi" portal page, no login required)
-#     2. The page displays a table of all fungal genomes; select all rows
-#        and copy the table content
-#     3. Paste into a spreadsheet and save as:
-#          data_raw/mycocosm/mycocosm_organism_list.csv
-#     4. Manually rename the column headers to:
-#          id, taxon_name, assembly_length, num_genes, publication
-#   Because the source page lists only fungi, no kingdom/phylum filtering
-#   is required.
+# INPUTS
+#   emf (04)
+#   data_raw/mycocosm/mycocosm_organism_list.csv: copied by hand from the
+#   MycoCosm portal, because the bulk export needs a JGI login and was not
+#   working at the time of collection:
+#     1. Open https://mycocosm.jgi.doe.gov/fungi/fungi.info.html ("All Fungi";
+#        no login needed).
+#     2. Select all rows of the genome table and copy them.
+#     3. Paste into a spreadsheet; rename the headers to id, taxon_name,
+#        assembly_length, num_genes, publication; save as the file above.
+#   The page lists only fungi, so no kingdom filter is needed.
 #
-# Workflow:
-#   1.  Load MycoCosm organism list
-#   2.  Note record count (already fungi-only)
-#   3.  Extract genus from taxon_name; match against our EcM genus list
-#   4.  Report coverage statistics
+# OUTPUTS (data_derived/darwinian/)
+#   darwinian_mycocosm_matches.csv     — all MycoCosm records whose genus matches an EcM genus
+#   darwinian_genus_summary.csv        — per-genus genome count
+#   darwinian_species_matches.csv      — EcM species with an exact species-level genome match
+#   darwinian_summary.csv              — summary statistics (genus- and species-level)
 #
-# Outputs:
-#   data_derived/darwinian_mycocosm_matches.csv     — all MycoCosm records whose genus matches an EcM genus
-#   data_derived/darwinian_genus_summary.csv        — per-genus genome count
-#   data_derived/darwinian_species_matches.csv      — EcM species with an exact species-level genome match
-#   data_derived/darwinian_summary.csv              — summary statistics (genus- and species-level)
+# MANUSCRIPT ITEMS IT FEEDS
+#   In-text Darwinian results (named species and genera).
+#
+# RE-RUN WHEN
+#   The EcM dataset (04) changes or the MycoCosm list is refreshed (then also
+#   re-run 15b).
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

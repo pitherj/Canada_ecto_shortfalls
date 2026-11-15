@@ -3,7 +3,7 @@
 #   Sensitivity analysis: how much of the "full potential interaction matrix"
 #   reported in the Eltonian section is geographically possible at all?
 # =============================================================================
-# STATUS OF THIS SCRIPT
+# PURPOSE
 #   Its result is reported in the manuscript and SM1, so it runs as part of
 #   the pipeline (run_all.R) like every other reported number.
 #
@@ -81,6 +81,19 @@
 
 # =============================================================================
 # SECTION 0.  Setup, configuration, and the random seed
+#
+# INPUTS
+#   emf (04); the native host list (06); BIEN ranges and host rasters (07,
+#   08); ecoregions (01); eltonian_summary.csv and
+#   eltonian_species_occurrence_counts.csv (18), whose denominator this script
+#   must reproduce exactly or it stops.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   The in-text Eltonian sensitivity sentence and the SM1 paragraph on the
+#   geographic-possibility check.
+#
+# RE-RUN WHEN
+#   18 is re-run, or any of its inputs change. Must run after 18.
 # =============================================================================
 # Sourcing 00_setup.R gives us the canonical `paths` list, the CRS constants,
 # and the loaded `emf` occurrence table. It is read-only for our purposes: the

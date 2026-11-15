@@ -1,18 +1,55 @@
 # =============================================================================
-# EcM Native Host Species for Canada (BIEN-based)
+# 06_host_species.R  —  Native Canadian EcM host plant species
 # =============================================================================
-# Assemble a list of EcM host plant species that are (a) demonstrated as EcM
-# hosts by FungalRoot via EITHER of two independent routes (see NOTE below),
-# (b) native to Canada according to the Native Status Resolver (NSR), and
-# (c) present in the BIEN range database. No growth-form restriction is
-# applied at this stage — herbaceous species are included on the same
-# footing as trees and shrubs.
+# PURPOSE
+#   List the plant species that are (a) EcM hosts according to FungalRoot, by
+#   either of two routes (HOST DETERMINATION below), (b) native to Canada
+#   according to the Native Species Resolver (NSR), and (c) recorded in
+#   Canada by BIEN. No growth-form restriction: herbs count as fully as trees.
+#   Each species also gets a growth form (tree, shrub, herb...) as descriptive
+#   metadata, from BIEN traits, then GIFT, then the congener mode, then a
+#   short curated list (Steps 5-7c). This list is the denominator of possible
+#   host interactions in the Eltonian analysis.
 #
-# In addition, BIEN trait data are used to assign each species a growth form
-# (e.g., tree, shrub, herb), purely as descriptive metadata for downstream
-# figures/tables. Where multiple trait values exist for a species, the most
-# frequently reported value is retained.
+# INPUTS
+#   data_derived/clean_fungalroot_species.csv          species route (05)
+#   data_derived/clean_fungalroot_genera_table_s2.csv  genus route (05)
+#   BIEN (BIEN::BIEN_list_country(), BIEN_trait_traitbyspecies()), NSR
+#   (NSR::NSR_simple(), 500 species per request), GIFT (GIFT::GIFT_traits(),
+#   trait 1.2.1): queried on a first run only; results are raw snapshots
 #
+# OUTPUTS
+#   Raw snapshots (data_raw/snapshots/; written once, then only read):
+#   bien_nsr_native_species.csv     — EVERY BIEN Canada species queried, with
+#                                      the NSR native_status returned for it
+#                                      (expensive; independent of FungalRoot).
+#                                      Natives are derived on read. A file in the
+#                                      older natives-only format is still
+#                                      accepted, with a warning.
+#   bien_ecm_growthforms.csv        — growth form trait data from BIEN
+#   bien_ecm_growthforms_queried.csv — the species actually SENT to BIEN for the
+#                                      file above. BIEN returns nothing for a
+#                                      species it has no data on, so this is the
+#                                      only way to tell "no data" from "never
+#                                      asked" or "batch lost".
+#   gift_growthforms.csv            — growth form trait data from GIFT
+#                                     (used only for species lacking BIEN data)
+#   data_derived/ecm_native_canada_host_species.csv
+#     Columns: species, host_demonstrated (always TRUE), evidence_source
+#     ("occurrence" | "table_s2" | "both"), growth_form, growth_form_source
+#     ("bien" | "gift" | "congener" | "manual" — which stage of the Step 5-7c
+#     chain supplied the growth form)
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   The Eltonian denominator (number of native host species), Figure 4,
+#   Tables S2 and S3, the host rasters (07, 08).
+#
+# RE-RUN WHEN
+#   05 outputs change (Step 4 is always recomputed), or a fresh BIEN/NSR/GIFT
+#   query is wanted (make the snapshot writable and delete it). Then re-run
+#   07 onward.
+#
+# WORKFLOW
 # Workflow:
 #   1.  Load the FungalRoot species-level table (occurrence route) AND the
 #       Table S2 genus-level table (genus route) — see NOTE
@@ -26,10 +63,11 @@
 #   7a. Impute missing growth_form from GIFT trait 1.2.1
 #   7b. Congener-modal fallback for any growth_form still missing
 #   7c. Curated manual overrides for any growth_form still missing after 7a/7b
-#   8.  Save (with host_demonstrated flag and evidence_source — see NOTE)
+#
+# HOST DETERMINATION
 #
 # NOTE on EcM-host determination:
-# Host status is now derived from TWO independent routes, combined with OR:
+# Host status is derived from TWO independent routes, combined with OR:
 #   (a) SPECIES ROUTE: data_derived/clean_fungalroot_species.csv (produced by
 #       05_prepare_fungalroot.R from GBIF DwC-A occurrence-level "Mycorrhiza
 #       type" records). A species qualifies directly if FungalRoot carries
@@ -47,23 +85,7 @@
 # self-documentation, mirroring the `ecm_demonstrated` convention in
 # clean_fungalroot_species.csv).
 #
-# Checkpoint files (data_derived/checkpoints/):
-#   bien_nsr_native_species.csv     — EVERY BIEN Canada species queried, with
-#                                      the NSR native_status returned for it
-#                                      (expensive; independent of FungalRoot).
-#                                      Natives are derived on read. A file in the
-#                                      older natives-only format is still
-#                                      accepted, with a warning.
-#   bien_ecm_growthforms.csv        — growth form trait data from BIEN
-#   bien_ecm_growthforms_queried.csv — the species actually SENT to BIEN for the
-#                                      file above. BIEN returns nothing for a
-#                                      species it has no data on, so this is the
-#                                      only way to tell "no data" from "never
-#                                      asked" or "batch lost".
-#   gift_growthforms.csv            — growth form trait data from GIFT
-#                                     (used only for species lacking BIEN data)
-#
-# Download completeness (Steps 3, 5, 7a)
+# DOWNLOAD COMPLETENESS (Steps 3, 5, 7a)
 #   A failed batch would cost ~500 species (NSR) or ~200 species (BIEN), and
 #   because these steps are checkpointed the loss would be permanent. So they
 #   retry a failed batch, stop the script if records are still missing
@@ -71,19 +93,12 @@
 #   fetch_with_retry(), assert_fetch_complete() and
 #   write_checkpoint_atomically() in 00_setup.R; history in repro/CHANGELOG.md.
 #
-# Output:
-#   data_derived/ecm_native_canada_host_species.csv
-#     Columns: species, host_demonstrated (always TRUE), evidence_source
-#     ("occurrence" | "table_s2" | "both"), growth_form, growth_form_source
-#     ("bien" | "gift" | "congener" | "manual" — which stage of the Step 5-7c
-#     chain supplied the growth form)
-#
-# Runtime notes:
+# RUNTIME (first run)
 #   - Step 2 (BIEN_list_country) ~5 min
 #   - Step 3 (NSR batched)       ~5–15 min (depends on server)
 #   - Step 4 (FungalRoot select) seconds — always recomputed, not checkpointed
 #   - Step 5 (BIEN traits)       ~10–30 min
-#   Steps 2-3 and 5 are checkpointed; delete checkpoint files to force re-run.
+#   Steps 2-3 and 5 write raw snapshots (see OUTPUTS).
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

@@ -1,7 +1,7 @@
 # =============================================================================
-# Eltonian Shortfall: Host–Fungus Interaction Knowledge
+# 18_eltonian.R  —  Eltonian shortfall: host-fungus interaction knowledge
 # =============================================================================
-#
+# PURPOSE
 # PART A — Canadian scope
 #   What proportion of potential EcM host–fungus interactions in Canada have
 #   been observed in our dataset?
@@ -21,6 +21,94 @@
 #                  full SH abundance matrix (13 GB) — fungal species per sample
 #     GenBank:     global query for our EcM genera (no Canada filter)
 #
+#   Part A also maps this knowledge onto geographic space (steps A5-A9): which
+#   parts of Canada hold EcM host habitat, and what proportion of the host
+#   species present in each 0.5-degree grid cell have EcM sequence data? The
+#   host species counted as "having data" are exactly those flagged `matched`
+#   in the Part A host-matching table, so the maps and the interaction
+#   analyses share one definition of a documented host.
+#
+#   Every association rests on root-derived evidence (ROOT-EVIDENCE RULE).
+#
+# INPUTS
+#   emf (04); data_derived/ecm_native_canada_host_species.csv (06)
+#   paths$canada_bound (01); bien_host_richness_0.5deg.tif and
+#   bien_host_species_stack.tif (08); paths$unite_taxonomy (02)
+#   GlobalFungi v5 metadata and SH abundance matrix (13 GB, data_raw)
+#   Global GenBank records for our EcM genera: raw snapshots in
+#   data_raw/snapshots/ (genbank_global_ecm_meta.csv,
+#   genbank_global_ecm_genera_queried.csv); genera not yet queried are
+#   fetched from NCBI (ENTREZ_KEY in .Renviron)
+#
+# OUTPUTS (data_derived/eltonian/ unless shown)
+#   eltonian_host_list.csv
+#   eltonian_host_matching.csv — the ANALYSIS table: one
+#       row per (record x named plant), root-derived evidence only
+#   eltonian_host_names_metadata.csv — the DESCRIPTIVE
+#       inventory: the same rows without the root-evidence restriction, plus a
+#       `root_evidence` flag. Backs the host-name quality tables (S2, S3)
+#   eltonian_matrix_genus.csv
+#   eltonian_matrix_sh.csv
+#   eltonian_matrix_species.csv — host x named-EcM-species
+#       binary matrix, trimmed to taxa with >= 1 observed pair (same
+#       convention as the genus/SH matrices above)
+#   eltonian_species_occurrence_counts.csv — per host-species x
+#       named-fungal-species pair, count of supporting samples/records
+#       (occurrences); backs the singleton-association statistic in
+#       eltonian_summary.csv
+#   eltonian_matrix_genus_genus.csv — host-genus x fungal-genus
+#       binary matrix (both axes collapsed to genus from the species-exact
+#       `matched` interactions), trimmed to taxa with >= 1 observed pair,
+#       same convention as the SH/species/genus matrices above
+#   eltonian_genus_occurrence_counts.csv — per host-genus x
+#       fungal-genus pair, count of supporting samples/records (occurrences);
+#       backs the genus-level singleton-association statistic in
+#       eltonian_summary.csv
+#   eltonian_interactions.rds  — assembled interaction
+#       objects retained for downstream reuse
+#   eltonian_summary.csv
+#   eltonian_global_host_coverage.csv    — Q1: Canadian hosts with global data
+#   eltonian_global_host_to_fungi.csv    — Q2: per-host EcM fungal associations
+#   eltonian_global_fungi_to_hosts.csv   — Q3: per-fungal-species host associations
+#   eltonian_global_gb_fungi_to_hosts.csv — Q3, GenBank scope
+#   eltonian_pair_confidence.csv — how many observed
+#       host x fungus pairs rest on samples that named a single candidate plant
+#       ("unambiguous") versus several ("ambiguous"), for both the SH-code and
+#       the named-species pair sets
+#   eltonian_sensitivity_confidence.csv — the headline
+#       Canadian numbers recomputed from unambiguous (single-host-sample)
+#       evidence only, as a sensitivity check on the pair set above
+#   eltonian_sample_type_tally_canada.csv — diagnostic: sample_type
+#       composition of EcM-positive Canadian GF samples with a
+#       dominant_plant_species entry
+#   eltonian_sample_type_tally_canada_all.csv — diagnostic:
+#       sample_type composition of ALL EcM-positive Canadian GF samples (no
+#       dominant_plant_species restriction), for comparison with the worldwide
+#       GlobalFungi tally written by 02_globalfungi.R
+#   eltonian_sample_type_tally_global.csv — diagnostic: sample_type
+#       composition of EcM-positive global GF samples (>=1 of our Canadian
+#       EcM SH codes detected) with a dominant_plant_species entry
+#   eltonian_genbank_tissue_tally_canada.csv — diagnostic: tissue-type
+#       composition of Canadian GenBank EcM records with host information
+#       (host_taxon), keyword-binned from the free-text isolation_src field
+#   eltonian_host_raster_summary.csv — 0.5-degree grid-cell
+#       summary of host-habitat coverage (Part A, step A8)
+#   data_derived/spatial/bien_host_data_richness_0.5deg.tif   — host spp. with EcM data
+#   data_derived/spatial/bien_host_data_proportion_0.5deg.tif — proportion with EcM data
+#   figures/Figure-04_host_bivariate_map.png      (paths$fig_host_bivariate)      -- white bg, used in manuscript
+#   figures/Figure-04_host_bivariate_map_grey.png (paths$fig_host_bivariate_grey) -- #F2F2F2 bg, Figure 5 panel source
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure 4, Tables S2 and S3, in-text Eltonian results (Canadian and
+#   global), and the inputs to the sensitivity check in 21.
+#
+# RE-RUN WHEN
+#   The EcM dataset (04), the host list (06) or the host rasters (08) change.
+#   The global GlobalFungi SH cache is rebuilt automatically when the EcM SH
+#   codes change; the global GenBank snapshot is topped up for new genera.
+#   Then re-run 21.
+#
+# ROOT-EVIDENCE RULE
 # IMPORTANT NOTE on the root-evidence rule:
 #   Every fungus-host association reported by this script rests on root-derived
 #   evidence, by two different mechanisms:
@@ -35,86 +123,22 @@
 #       non-root tissue, a habitat description, or a blank field are excluded
 #       from all association analyses; they remain in the taxonomic and
 #       geographic assessments carried out by the other scripts.
-#   This constraint is applied throughout both Part A and Part B.
+#   This constraint is applied throughout both Part A and Part B. Multi-plant
+#   host labels are split so every named plant is a candidate host (Step A2b).
+#   History: repro/CHANGELOG.md.
 #
-#   GenBank host links are restricted to root or ectomycorrhizal material
-#   (Step A2), the same evidential standard as GlobalFungi's root samples, and
-#   multi-plant host labels are split so every named plant is a candidate host
-#   (Step A2b). History: repro/CHANGELOG.md.
-#
-#   Part A also maps this knowledge onto geographic space (steps A5-A9): which
-#   parts of Canada hold EcM host habitat, and what proportion of the host
-#   species present in each 0.5-degree grid cell have EcM sequence data? The
-#   host species counted as "having data" are exactly those flagged `matched`
-#   in the Part A host-matching table, so the maps and the interaction
-#   analyses share one definition of a documented host.
-#
-# Prerequisite files:
-#   data_derived/ecm_native_canada_host_species.csv  (06_host_species.R)
-#   data_derived/spatial/canada_simple.gpkg          (01_spatial_data.R)
-#   data_derived/spatial/bien_host_richness_0.5deg.tif  (08_host_rasters.R)
-#   data_derived/spatial/bien_host_species_stack.tif    (08_host_rasters.R)
-#   data_raw/GlobalFungi/GlobalFungi_5_sample_metadata.txt    (full global)
-#   data_raw/GlobalFungi/GlobalFungi_5_SH_abundance_ITS1_ITS2.txt (full, 13 GB)
-#   data_derived/unite_sh_taxonomy.csv               (02_globalfungi.R)
-#
-# Outputs:
-#   data_derived/eltonian/eltonian_host_list.csv
-#   data_derived/eltonian/eltonian_host_matching.csv — the ANALYSIS table: one
-#       row per (record x named plant), root-derived evidence only
-#   data_derived/eltonian/eltonian_host_names_metadata.csv — the DESCRIPTIVE
-#       inventory: the same rows without the root-evidence restriction, plus a
-#       `root_evidence` flag. Backs the host-name quality tables (S2, S3)
-#   data_derived/eltonian/eltonian_matrix_genus.csv
-#   data_derived/eltonian/eltonian_matrix_sh.csv
-#   data_derived/eltonian/eltonian_matrix_species.csv — host x named-EcM-species
-#       binary matrix, trimmed to taxa with >= 1 observed pair (same
-#       convention as the genus/SH matrices above)
-#   data_derived/eltonian/eltonian_species_occurrence_counts.csv — per host-species x
-#       named-fungal-species pair, count of supporting samples/records
-#       (occurrences); backs the singleton-association statistic in
-#       eltonian_summary.csv
-#   data_derived/eltonian/eltonian_matrix_genus_genus.csv — host-genus x fungal-genus
-#       binary matrix (both axes collapsed to genus from the species-exact
-#       `matched` interactions), trimmed to taxa with >= 1 observed pair,
-#       same convention as the SH/species/genus matrices above
-#   data_derived/eltonian/eltonian_genus_occurrence_counts.csv — per host-genus x
-#       fungal-genus pair, count of supporting samples/records (occurrences);
-#       backs the genus-level singleton-association statistic in
-#       eltonian_summary.csv
-#   data_derived/eltonian/eltonian_interactions.rds  — assembled interaction
-#       objects retained for downstream reuse
-#   data_derived/eltonian/eltonian_summary.csv
-#   data_derived/eltonian/eltonian_global_host_coverage.csv    — Q1: Canadian hosts with global data
-#   data_derived/eltonian/eltonian_global_host_to_fungi.csv    — Q2: per-host EcM fungal associations
-#   data_derived/eltonian/eltonian_global_fungi_to_hosts.csv   — Q3: per-fungal-species host associations
-#   data_derived/eltonian/eltonian_global_gb_fungi_to_hosts.csv — Q3, GenBank scope
-#   data_derived/eltonian/eltonian_pair_confidence.csv — how many observed
-#       host x fungus pairs rest on samples that named a single candidate plant
-#       ("unambiguous") versus several ("ambiguous"), for both the SH-code and
-#       the named-species pair sets
-#   data_derived/eltonian/eltonian_sensitivity_confidence.csv — the headline
-#       Canadian numbers recomputed from unambiguous (single-host-sample)
-#       evidence only, as a sensitivity check on the pair set above
-#   data_derived/eltonian/eltonian_sample_type_tally_canada.csv — diagnostic: sample_type
-#       composition of EcM-positive Canadian GF samples with a
-#       dominant_plant_species entry
-#   data_derived/eltonian/eltonian_sample_type_tally_canada_all.csv — diagnostic:
-#       sample_type composition of ALL EcM-positive Canadian GF samples (no
-#       dominant_plant_species restriction), for comparison with the worldwide
-#       GlobalFungi tally written by 02_globalfungi.R
-#   data_derived/eltonian/eltonian_sample_type_tally_global.csv — diagnostic: sample_type
-#       composition of EcM-positive global GF samples (>=1 of our Canadian
-#       EcM SH codes detected) with a dominant_plant_species entry
-#   data_derived/eltonian/eltonian_genbank_tissue_tally_canada.csv — diagnostic: tissue-type
-#       composition of Canadian GenBank EcM records with host information
-#       (host_taxon), keyword-binned from the free-text isolation_src field
-#   data_derived/eltonian/eltonian_host_raster_summary.csv — 0.5-degree grid-cell
-#       summary of host-habitat coverage (Part A, step A8)
-#   data_derived/spatial/bien_host_data_richness_0.5deg.tif   — host spp. with EcM data
-#   data_derived/spatial/bien_host_data_proportion_0.5deg.tif — proportion with EcM data
-#   figures/Figure-04_host_bivariate_map.png      (paths$fig_host_bivariate)      -- white bg, used in manuscript
-#   figures/Figure-04_host_bivariate_map_grey.png (paths$fig_host_bivariate_grey) -- #F2F2F2 bg, Figure 5 panel source
+# CONTENTS
+#   Part A  Canadian scope
+#     A1    host species list            A3-A3d  interaction matrices, fill,
+#     A2    host strings; tissue rules           confidence, sensitivity
+#     A2b   split multi-plant labels     A4      coverage statistics
+#     A2c-d sample-type and tissue       A5-A9   host-coverage rasters and
+#           tallies (diagnostics)                bivariate map (Figure 4)
+#   Part B  Global scope
+#     B1-B2 GlobalFungi root samples; Q1 (hosts with global records)
+#     B3    Q2 and Q3 from the global SH matrix; B3b sample-type tally
+#     B4    global GenBank records for our EcM genera
+#   Part C  Assemble and save the interaction list
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

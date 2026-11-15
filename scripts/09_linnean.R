@@ -1,45 +1,48 @@
 # =============================================================================
-# Linnean Shortfall: Taxonomic Richness
+# 09_linnean.R  —  Linnean shortfall: taxonomic richness; Table S4
 # =============================================================================
-# How many EcM fungal taxa are recorded in Canada, at each taxonomic level?
-# How does this compare to the global inventory of known EcM species and genera?
+# PURPOSE
+#   How many EcM fungal taxa are recorded in Canada, at each taxonomic level,
+#   and how does this compare with the global inventory of known EcM genera?
+#   Species-level assignment rates are reported per source (the proportion of
+#   SH codes with a species-level UNITE name, for GlobalFungi and GenBank).
+#   Also builds Table S4: EcM genera documented in Canada by GBIF specimens
+#   but absent from our dataset, each checked by sequence matching (Step 6b).
 #
-# Species-level assignment rates are reported per source:
-#   GlobalFungi: proportion of SH codes with a species-level UNITE name
-#   GenBank:     proportion of SH codes with a species-level UNITE name
+#   Workflow: 1. richness counts (SH codes, genera, species, lineages);
+#   2. GlobalFungi singleton SH codes; 3. observed genera vs the global EcM
+#   genus inventory (FungalTraits); 4. species-level assignment rates;
+#   5-6a. GBIF specimen records; 6b. Table S4 by sequence matching.
 #
-# Workflow:
-#   1.  Taxonomic richness counts (SH codes, genera, species, lineages)
-#   2.  GlobalFungi singleton SH codes (total abundance = 1)
-#   3.  Compare observed genera to global EcM genus inventory (FungalTraits)
-#   4.  Species-level assignment rates by source
-#   5.  GBIF physical specimen records for Canadian EcM fungi
-#   6.  Table S4: EcM genera with Canadian specimens but no Canadian ITS
-#       sequences in our dataset, checked by sequence matching (Step 6b)
+# INPUTS
+#   emf (04); paths$fungaltraits; paths$van_galen_per_sample
+#   data_raw/gbif/<key>.zip  GBIF occurrence download (preserved and living
+#                            specimens, Canada, Kingdom Fungi)
+#   NCBI GenBank via Entrez (only for Table S4 candidate genera not yet
+#   downloaded; ENTREZ_KEY in .Renviron); ITSx and vsearch on PATH
 #
-# Raw data downloaded:
-#   data_raw/gbif/<key>.zip           — GBIF occurrence download zip (preserved/living
-#                                      specimens, Canada, Kingdom Fungi)
-#   data_raw/genbank_genus_queries/   — GenBank ITS records for each Table S4
-#                                      candidate genus (query log, records with
-#                                      location fields, sequences); cached, and
-#                                      extended automatically for new genera
+# OUTPUTS
+#   data_raw/genbank_genus_queries/  GenBank ITS records of the Table S4
+#       candidate genera (query log, records with location fields,
+#       sequences); extended automatically for new genera
+#   data_derived/checkpoints/gbif_ecm_canada_raw.csv  parsed GBIF records
+#   data_derived/linnean/
+#     linnean_summary.csv               richness and related metrics
+#     linnean_genus_coverage.csv        FungalTraits EcM genera, observed or not
+#     linnean_gbif_ecm_canada.csv       GBIF records of genera in our data
+#     linnean_gbif_ecm_nosequence_canada.csv  GBIF records of Table S4
+#                                       candidate genera
+#     linnean_gbif_ecm_nosequence_confirmed_canada.csv  those confirmed to
+#                                       lack Canadian ITS sequences (Figure S5)
+#     linnean_table_s4.csv              one row per candidate genus (Table S4)
+#     linnean_table_s4_sequence_matches.csv  one row per sequence checked
 #
-# Checkpoint files (data_derived/temp/):
-#   gbif_ecm_canada_raw.csv          — parsed GBIF records (pre-EcM filter)
+# MANUSCRIPT ITEMS IT FEEDS
+#   Table 1, Table 2, Table S4, Figure S5 (via 19), in-text Linnean results.
 #
-# Outputs:
-#   data_derived/linnean_summary.csv
-#   data_derived/linnean_genus_coverage.csv
-#   data_derived/linnean_gbif_ecm_canada.csv  — GBIF EcM specimen records
-#   data_derived/linnean/linnean_gbif_ecm_nosequence_canada.csv — GBIF records
-#        of the Table S4 candidate genera
-#   data_derived/linnean/linnean_gbif_ecm_nosequence_confirmed_canada.csv —
-#        those confirmed to lack Canadian ITS sequences (Figure S5)
-#   data_derived/linnean/linnean_table_s4.csv — one row per candidate genus,
-#        with its category (feeds Table S4)
-#   data_derived/linnean/linnean_table_s4_sequence_matches.csv — one row per
-#        GenBank sequence checked
+# RE-RUN WHEN
+#   The EcM dataset (04) changes. Table S4 downloads only genera not already
+#   in data_raw/genbank_genus_queries/. Then re-run 19.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

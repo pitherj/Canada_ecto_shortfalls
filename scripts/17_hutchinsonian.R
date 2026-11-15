@@ -78,6 +78,13 @@
 #   - Deterministic: no random sampling, so no seed is required.
 #   - Sentinel-file guard: the climate-gap figure (Steps 6-9) is rebuilt only if
 #     BOTH versions do not yet exist. Delete one or both to force regeneration.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure 3, Figure S4, Table S1, in-text Hutchinsonian results.
+#
+# RE-RUN WHEN
+#   The EcM dataset (04), the Canada boundary (01), WorldClim or the
+#   ecoregions change.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

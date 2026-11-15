@@ -1,12 +1,32 @@
 # =============================================================================
-# Raunkiæran Shortfall: Functional Trait Coverage
+# 16_raunkiaeran.R  —  Raunkiæran shortfall: functional trait coverage
 # =============================================================================
-# How well are the functional traits of Canadian EcM fungal genera documented?
+# PURPOSE
+#   How well documented are the functional traits of the Canadian EcM fungal
+#   genera? The trait source is FungalTraits v1.2 (Põlme et al. 2020), which
+#   is genus-level. Genera admitted to the EcM dataset by the family rule (04)
+#   have no FungalTraits entry, so they count as having no trait data.
+#   Analyses: 1. per-trait coverage among our genera; 2. documented traits per
+#   genus (of six); 3. value distributions; 4. genera with a documented host
+#   specificity; 5. genera absent from FungalTraits.
 #
-# FungalTraits v1.2 (Põlme et al. 2020) is the trait source. It is genus-level.
+# INPUTS
+#   emf (04); paths$fungaltraits
 #
-# Trait set
-# ---------
+# OUTPUTS (data_derived/raunkiaeran/)
+#   raunkiaeran_trait_coverage.csv      - per-trait coverage counts and %
+#   raunkiaeran_genus_summary.csv       - per-genus count of documented traits
+#   raunkiaeran_trait_distributions.csv - value tallies for each trait
+#   raunkiaeran_specific_hosts.csv      - genera with documented host specificity
+#   raunkiaeran_absent_genera.csv       - genera absent from FungalTraits entirely
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Table 4, in-text Raunkiæran results.
+#
+# RE-RUN WHEN
+#   The EcM dataset (04) changes, or FungalTraits is repinned.
+#
+# TRAIT SET
 # Only SIX FungalTraits columns carry trait information that is meaningful for
 # EcM fungi. We assess coverage for exactly these six:
 #
@@ -25,21 +45,6 @@
 #       photobiont, plant-pathogen, animal-biotroph, aquatic-habitat traits);
 #   (b) uninformative: growth_form_template is "filamentous_mycelium" for all
 #       327 EcM genera, so it carries no information about the shortfall.
-#
-# Analyses:
-#   1. Per-trait coverage: how many of our Canadian EcM genera have a
-#      documented (non-missing) value for each of the six traits.
-#   2. Per-genus count of documented traits (of six).
-#   3. Value distributions for each trait.
-#   4. Genera with a documented host-specificity entry.
-#   5. Genera (if any) absent from FungalTraits entirely.
-#
-# Outputs (all in data_derived/raunkiaeran/):
-#   raunkiaeran_trait_coverage.csv      - per-trait coverage counts and %
-#   raunkiaeran_genus_summary.csv       - per-genus count of documented traits
-#   raunkiaeran_trait_distributions.csv - value tallies for each trait
-#   raunkiaeran_specific_hosts.csv      - genera with documented host specificity
-#   raunkiaeran_absent_genera.csv       - genera absent from FungalTraits entirely
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

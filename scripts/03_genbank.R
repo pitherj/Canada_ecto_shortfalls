@@ -1,76 +1,77 @@
 # =============================================================================
-# GenBank Sequence Retrieval and SH Assignment
+# 03_genbank.R  —  GenBank records: retrieval and SH assignment
 # =============================================================================
-# Retrieves fungal ITS sequences from GenBank for Canadian records, extracts
-# the ITS2 sub-region with ITSx (the GenBank-side analogue of GlobalFungi's
-# ITS2/ITSboth restriction), and assigns each ITS2 fragment to UNITE Species
-# Hypotheses via vsearch at 98.5% identity (matches GlobalFungi's documented
-# BLASTn SH-assignment criterion). Ties are resolved with dark-taxa awareness
-# and a genus-level fallback (Step 6). Each step is checkpointed — safe to
-# re-run; skips completed steps. See the GenBank methods in
-# manuscript/supplemental_SM1.qmd for the full rationale and
-# citations.
+# PURPOSE
+#   Retrieve fungal ITS records from GenBank that mention Canada, extract the
+#   ITS2 region with ITSx (the GenBank-side match to GlobalFungi's ITS2
+#   restriction), and assign each ITS2 fragment to a UNITE SH with vsearch at
+#   98.5% identity (GlobalFungi's SH criterion). Ties are resolved with
+#   dark-taxon awareness and a genus-level fallback (Step 6). Which records are
+#   actually Canadian is decided later, in 04, from each record's own location
+#   field and coordinates. Full rationale and citations: the GenBank methods in
+#   SM1 (manuscript/supplemental_SM1.qmd).
 #
-# Download completeness (Steps 1-3b)
-#   The retrieval steps compare records returned against records requested and
-#   stop if they come up short; failed batches are retried before being declared
-#   lost; and a checkpoint is only put in place once its completeness check has
-#   passed, so a failed run cannot leave a truncated file for a later run to
-#   adopt. If a checkpoint exists but is INCOMPLETE, Steps 2/3/3b fetch only the
-#   records it is missing and append them, rather than skipping the step (which
-#   would make the gap permanent) or re-downloading everything (which would mix
-#   retrieval dates). See the GB_FETCH_* / GB_MAX_MISSING_FRAC constants below.
-#   Why these guards exist: repro/CHANGELOG.md.
+# INPUTS
+#   paths$unite_fasta, paths$unite_taxonomy  (pinned UNITE build; 02)
+#   NCBI GenBank via Entrez; ENTREZ_KEY in .Renviron
+#     (free key: https://www.ncbi.nlm.nih.gov/account/)
+#   On PATH: ITSx (>= 1.1) with its HMM profiles
+#            (https://microbiology.se/software/itsx/); HMMER 3.x
+#            (brew install hmmer / sudo apt install hmmer); vsearch
+#            (brew install vsearch / sudo apt install vsearch)
 #
-# Prerequisites:
-#   02_globalfungi.R must have been run (provides UNITE lookup)
-#   ITSx (>= 1.1) + HMMER (3.x) installed on PATH:
-#     HMMER:  brew install hmmer  (macOS)  /  sudo apt install hmmer  (Ubuntu)
-#     ITSx:   https://microbiology.se/software/itsx/ — put the 'ITSx' script
-#             (and its bundled HMM-profile directory) on PATH
-#   vsearch installed on PATH:
-#     macOS:  brew install vsearch
-#     Ubuntu: sudo apt install vsearch
-#     Other:  https://github.com/torognes/vsearch/releases
-#   NCBI API key in .Renviron:  ENTREZ_KEY=<your key>
-#     Free key: https://www.ncbi.nlm.nih.gov/account/
+# OUTPUTS
+#   Raw snapshots (data_raw/snapshots/; written once, then only read):
+#     genbank_emf_canada_ids.txt, genbank_emf_canada.fasta,
+#     genbank_emf_canada_metadata.csv, genbank_no_sequence_available.csv
+#     (UIDs with no retrievable sequence: whole-genome "master" records),
+#     genbank_fetch_log.txt
+#   Intermediate files (data_derived/checkpoints/): ITSx and vsearch inputs
+#     and outputs, genbank_ambiguous_species_excluded.csv (genus-ambiguous
+#     ties), genbank_its1_resolution_crosstab.csv (reporting only)
+#   data_derived/genbank_emf_canada_long.csv: the annotated table; carries
+#     its_region and taxonomic_resolution, and rows with sh_code = NA where a
+#     record is resolved only to genus. Two host columns: host_taxon_raw (from
+#     the `host` qualifier, else parsed from isolation_source) and host_taxon
+#     (canonicalized by canonicalize_host() in 00_setup.R; used downstream).
 #
-# Search strategy:
+# MANUSCRIPT ITEMS IT FEEDS
+#   Every result built on the EcM dataset (via 04); Table 1 (GenBank columns).
+#
+# RE-RUN WHEN
+#   The UNITE build is repinned (delete the ITSx/vsearch checkpoints and the
+#   long table), or a fresh GenBank pull is wanted (make the snapshots
+#   writable and delete them; the result will carry the new retrieval date).
+#   Then re-run 04 onward.
+#
+# SEARCH
 #   "Canada"[All Fields] AND "Fungi"[Organism]
 #    AND ("internal transcribed spacer"[All Fields] OR "ITS"[All Fields])
 #   NCBI has no search field for a record's collection country, so "Canada" is
-#   matched anywhere in the record (including submitter addresses). Which
-#   records are actually Canadian is decided afterwards, in
-#   04_combine_ecm_dataset.R, from each record's own location field and
-#   coordinates.
+#   matched anywhere in the record, including submitter addresses.
 #
-# Outputs (all in data_derived/ or data_derived/temp/):
-#   temp/genbank_emf_canada_ids.txt          — GenBank UIDs
-#   temp/genbank_emf_canada.fasta            — retrieved FASTA sequences
-#   temp/genbank_emf_canada_metadata.csv     — esummary metadata
-#   temp/genbank_no_sequence_available.csv   — UIDs individually confirmed to
-#                                              have no retrievable sequence
-#                                              (WGS/TLS "master" records), and
-#                                              therefore excluded from the
-#                                              Step 3b completeness requirement
-#   temp/genbank_itsx.ITS2.fasta             — ITSx-extracted ITS2 regions
-#   temp/genbank_itsx.ITS1.fasta             — ITSx-extracted ITS1 (its_region flag only)
-#   temp/genbank_vsearch_query.fasta         — ITS2 fragments (>=100 bp, sanitized)
-#   temp/genbank_vsearch_hits.txt            — vsearch blast6 output (tied hits)
-#   temp/genbank_ambiguous_species_excluded.csv — records excluded (genus-ambiguous ties)
-#   temp/genbank_its1_resolution_crosstab.csv    — ITS1-discard diagnostic (reporting only)
-#   genbank_emf_canada_long.csv              — final annotated table; carries
-#                                              its_region and taxonomic_resolution
-#                                              columns, and may contain rows with
-#                                              sh_code = NA (genus-resolved)
+# DOWNLOAD COMPLETENESS (Steps 1-3b)
+#   The retrieval steps compare records returned with records requested and
+#   stop if any are missing; failed batches are retried before being declared
+#   lost; and a checkpoint is written only once its check has passed, so a
+#   failed run cannot leave a truncated file for a later run to adopt. If a
+#   checkpoint exists but is incomplete, Steps 2, 3 and 3b fetch only the
+#   missing records and append them (re-downloading everything would mix
+#   retrieval dates). See the GB_FETCH_* / GB_MAX_MISSING_FRAC constants.
+#   Why these guards exist: repro/CHANGELOG.md.
 #
-# Host name handling:
-#   The final table carries two host columns:
-#     host_taxon_raw  — the value extracted from the structured `host`
-#                       qualifier (or, as fallback, regex-parsed from the
-#                       `isolation_source` field). Preserved for traceability.
-#     host_taxon      — canonicalized form used by all downstream analyses.
-#                       See canonicalize_host() defined below for the rules.
+# CONTENTS
+#    1. Settings and completeness guards
+#    2. Local helpers (FASTA reading, batch fetch with retry, completeness
+#       guard, sequence and metadata fetch, no-sequence confirmation)
+#    3. Step 1   Search GenBank and save UIDs
+#    4. Step 2   Batch-fetch FASTA sequences
+#    5. Step 3   Batch-fetch metadata (esummary)
+#    6. Step 3b  Reconcile the two checkpoints; assert completeness
+#    7. Step 4   Extract ITS2 with ITSx
+#    8. Step 4b  ITS2 minimum length; sanitize for vsearch
+#    9. Step 5   UNITE SH assignment with vsearch (98.5%)
+#   10. Step 6   Resolve ties, annotate hosts, save
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))

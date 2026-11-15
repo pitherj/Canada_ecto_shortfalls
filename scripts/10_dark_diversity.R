@@ -12,13 +12,20 @@
 #   paths$canada_bound,
 #   paths$lakes_albers    basemap layers (01_spatial_data.R)
 #
-# OUTPUT (figures/)
+# OUTPUTS (figures/)
 #   Figure-S1_dark_diversity.png        (paths$fig_dark_diversity)      -- white bg, used in SI
 #   Figure-S1_dark_diversity_grey.png   (paths$fig_dark_diversity_grey) -- #F2F2F2 bg, Figure 5 panel source
 #
 # SOURCE
 #   van Galen LG et al. (2025) The biogeography and conservation of Earth's
 #   'dark' ectomycorrhizal fungi. Current Biology 35: R563-R574.
+#
+# MANUSCRIPT ITEMS IT FEEDS
+#   Figure S1 (and its grey panel, used in Figure 5).
+#
+# RE-RUN WHEN
+#   The van Galen raster or the Canada boundary (01) changes. Delete the
+#   Figure S1 files to rebuild.
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
