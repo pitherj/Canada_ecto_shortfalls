@@ -69,6 +69,26 @@ Changes that do not alter results (Phase 3):
 
 - Live-query results moved from `data_derived/checkpoints/` to
   `data_raw/snapshots/`.
+
+Changes made with the manuscript update (Phase 5), which do not alter results:
+
+- **Genus labels in `linnean_summary.csv` (`09`).** Since the family rule,
+  the EcM genera in our data are no longer all FungalTraits EcM genera (124 in
+  all, 116 of them on the FungalTraits list). Two labels were renamed so each
+  says what it counts: "Unique EcM genera (combined dataset,
+  FungalTraits-filtered)" became "Unique EcM genera (combined dataset)", and
+  "EcM genera observed in Canada" (with its percentage) became "FungalTraits
+  EcM genera observed in Canada". A new metric, "Unique EcM genera of the
+  named species (combined dataset)", counts the genera the named species
+  belong to (111), which the manuscript had described with the all-records
+  figure. The dashboard reads the old labels and must be updated at its
+  refresh.
+- **GBIF checkpoint read (`09`).** When `09` read its saved GBIF table
+  instead of importing the GBIF ZIP, empty text fields became missing values
+  and were written as `NA`, so the three GBIF output files differed in bytes
+  (not in records or counts) between a from-scratch run and a re-run. The
+  checkpoint is now read with only the literal `NA` treated as missing; the
+  re-run output is byte-identical to the from-scratch output.
 - Shared helpers in `00_setup.R` (EcM definition, coordinate test, FASTA
   input/output, SH assignment), used by `04`, `09` and `15b`.
 - Diagnostics in `scripts/diagnostics/`. The ITS1 exclusion check cited in the

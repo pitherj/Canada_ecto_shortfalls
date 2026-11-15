@@ -223,7 +223,7 @@ than reused, so they never hold results from an earlier lookup table.
 
 | File | Description |
 |---|---|
-| `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; GBIF specimen counts. Long-format `metric,value` table (36 metrics). Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
+| `linnean_summary.csv` | Taxonomic richness at SH/genus/species level; singleton statistics; per-source species-assignment rates; GBIF specimen counts. Long-format `metric,value` table (39 metrics). Backs the in-text Linnean numbers and Table 1/Table 2 in the manuscript. |
 | `linnean_genus_coverage.csv` | All FungalTraits EcM genera flagged for whether observed in Canada. |
 | `linnean_gbif_ecm_canada.csv` | GBIF physical specimen records for Canadian EcM genera **with** sequence data in Canada. Feeds Figure S5. |
 | `linnean_gbif_ecm_nosequence_canada.csv` | GBIF specimen records of FungalTraits EcM genera whose genus name is absent from our Canadian sequence dataset: the Table S4 candidates (`09_linnean.R`, Step 6a). |
@@ -253,7 +253,7 @@ than reused, so they never hold results from an earlier lookup table.
 
 | Field | Type | Description |
 |---|---|---|
-| `metric` | character | Name of the reported statistic (36 rows — e.g. "Unique UNITE v10 SH codes (combined dataset)", "GlobalFungi: singleton SH codes (% of GF Canadian SHs)", "GBIF: physical EcM specimen records — genera WITH sequence data (Canada)"; see `09_linnean.R` for the full list) |
+| `metric` | character | Name of the reported statistic (39 rows — e.g. "Unique UNITE v10 SH codes (combined dataset)", "GlobalFungi: singleton SH codes (% of GF Canadian SHs)", "GBIF: physical EcM specimen records — genera WITH sequence data (Canada)"; see `09_linnean.R` for the full list) |
 | `value` | character | Reported value (count or percentage; stored as text to allow mixed numeric/formatted entries) |
 
 #### `linnean_genus_coverage.csv` — fields

@@ -59,6 +59,11 @@ n_genus   <- dplyr::n_distinct(emf$genus, na.rm = TRUE)  # na.rm: records admitt
 n_species <- dplyr::n_distinct(
   emf$species[!is.na(emf$species) & !grepl("_sp$", emf$species)]
 )
+# Genera that the named species belong to (fewer than n_genus, because some
+# genera are represented only by SHs without a species name).
+n_genus_named <- dplyr::n_distinct(
+  emf$genus[!is.na(emf$species) & !grepl("_sp$", emf$species)], na.rm = TRUE
+)
 n_lineage <- dplyr::n_distinct(
   emf$ectomycorrhiza_lineage[!is.na(emf$ectomycorrhiza_lineage)]
 )
@@ -214,8 +219,13 @@ n_sp_gb_only  <- length(setdiff(gb_sp_names, gf_sp_names))
 # Set these with usethis::edit_r_environ() or Sys.setenv().
 
 if (file.exists(gbif_ckpt)) {
+  # na = "NA": only the literal "NA" written by write_csv() is missing. An empty
+  # field stays an empty string, exactly as in the table imported from the ZIP,
+  # so a run that reads this checkpoint writes the same files as one that
+  # imports the ZIP.
   gbif_raw <- readr::read_csv(
     gbif_ckpt,
+    na = "NA",
     show_col_types = FALSE,
     col_types = readr::cols(
       decimalLatitude  = readr::col_double(),
@@ -565,9 +575,10 @@ linnean_summary <- tibble::tibble(
     "Unique UNITE v10 SH codes (combined dataset, all records)",
     "Unique UNITE v10 SH codes (records with coordinates only)",
     "Named-species SH codes (records with coordinates only)",
-    "Unique EcM genera (combined dataset, FungalTraits-filtered)",
+    "Unique EcM genera (combined dataset)",
     "Unique EcM genera (records with coordinates only)",
     "Unique named species (UNITE taxonomy, excl. _sp; combined dataset)",
+    "Unique EcM genera of the named species (combined dataset)",
     "Unique named species (records with coordinates only)",
     "All SH codes: shared between GlobalFungi and GenBank",
     "All SH codes: GlobalFungi only (not in GenBank)",
@@ -581,8 +592,8 @@ linnean_summary <- tibble::tibble(
     "Unique named species: GenBank only",
     "Unique EcM lineages observed in Canada (lineage definitions from FungalTraits)",
     "Known EcM genera globally (FungalTraits)",
-    "EcM genera observed in Canada",
-    "% of global EcM genera observed in Canada",
+    "FungalTraits EcM genera observed in Canada",
+    "% of FungalTraits EcM genera observed in Canada",
     "Canadian EcM genera absent from FungalTraits EcM list",
     "GlobalFungi: unique SH codes (Canadian dataset)",
     "GlobalFungi: singleton SH codes (total abundance = 1 across Canadian samples)",
@@ -602,7 +613,7 @@ linnean_summary <- tibble::tibble(
     "GBIF: EcM genera represented (genera without sequence data)"
   ),
   value = c(
-    n_sh, n_sh_coords, n_named_sh_coords, n_genus, n_genus_coords, n_species, n_species_coords,
+    n_sh, n_sh_coords, n_named_sh_coords, n_genus, n_genus_coords, n_species, n_genus_named, n_species_coords,
     n_sh_all_shared, n_sh_all_gf_only, n_sh_all_gb_only,
     n_sp_sh_total, n_sp_sh_shared, n_sp_sh_gf_only, n_sp_sh_gb_only,
     n_sp_shared, n_sp_gf_only, n_sp_gb_only,
