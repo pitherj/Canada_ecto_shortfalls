@@ -402,7 +402,8 @@ write_fasta_tbl <- function(tbl, path) {
 # among them; otherwise it is credited to none ("ambiguous_tie").
 # `seqs` needs columns `key` (a short unique label) and `seq`. Returns one row
 # per key: outcome ("sh_assigned", "ambiguous_tie", "no_unite_hit",
-# "no_its2"), `sh_codes` ("; "-separated) and best identity.
+# "no_its2"), `sh_codes` ("; "-separated; only for "sh_assigned"),
+# `unite_names` (UNITE names of the tied best hits) and best identity.
 assign_its2_to_sh <- function(seqs, work_prefix, identity = 0.985,
                               min_len = 100L, threads = 4L) {
   itsx_bin    <- Sys.which("ITSx")
@@ -449,6 +450,7 @@ assign_its2_to_sh <- function(seqs, work_prefix, identity = 0.985,
     dplyr::summarise(best_identity = max(pident),
                      n_tie_ids     = dplyr::n_distinct(tie_id),
                      sh_codes      = paste(sort(unique(sh_code)), collapse = "; "),
+                     unite_names   = paste(sort(unique(unite_sp)), collapse = "; "),
                      .groups = "drop")
   dplyr::select(seqs, key) |>
     dplyr::left_join(per_key, by = "key") |>
@@ -459,7 +461,7 @@ assign_its2_to_sh <- function(seqs, work_prefix, identity = 0.985,
         n_tie_ids > 1L     ~ "ambiguous_tie",
         TRUE               ~ "sh_assigned"),
       sh_codes = dplyr::if_else(outcome == "sh_assigned", sh_codes, NA_character_)) |>
-    dplyr::select(key, outcome, sh_codes, best_identity)
+    dplyr::select(key, outcome, sh_codes, unite_names, best_identity)
 }
 
 # ---- read_big_tsv_subset(): read selected columns from a very large TSV -------
@@ -527,6 +529,12 @@ paths <- list(
   snap_gift_growth    = here::here("data_raw", "snapshots", "gift_growthforms.csv"),                 # 06
   snap_gb_global_meta = here::here("data_raw", "snapshots", "genbank_global_ecm_meta.csv"),          # 18
   snap_gb_global_queried = here::here("data_raw", "snapshots", "genbank_global_ecm_genera_queried.csv"), # 18
+  # MycoCosm genome -> same-strain GenBank ITS link (15b). Also live-query
+  # results, but kept in their own writable folder because 15b adds rows for
+  # newly listed genomes.
+  mycocosm_its_dir    = here::here("data_raw", "mycocosm_its"),
+  mycocosm_its_lookup = here::here("data_raw", "mycocosm_its", "mycocosm_its_lookup.csv"),
+  mycocosm_its_seqs   = here::here("data_raw", "mycocosm_its", "mycocosm_its_sequences.fasta"),
   temp_dir     = here::here("data_derived", "checkpoints"),
 
   # ---- per-shortfall output directories --------------------------------------
@@ -534,6 +542,11 @@ paths <- list(
   out_wallacean     = here::here("data_derived", "wallacean"),
   out_prestonian    = here::here("data_derived", "prestonian"),
   out_darwinian     = here::here("data_derived", "darwinian"),
+  # SH-level genome coverage (15b_darwinian_sh_match.R)
+  darwinian_genome_sh   = here::here("data_derived", "darwinian", "darwinian_genome_sh_assignments.csv"),
+  darwinian_sh_coverage = here::here("data_derived", "darwinian", "darwinian_sh_coverage.csv"),
+  darwinian_sh_summary  = here::here("data_derived", "darwinian", "darwinian_sh_summary.csv"),
+  darwinian_not_assessed = here::here("data_derived", "darwinian", "darwinian_genomes_not_assessed.csv"),
   out_raunkiaeran   = here::here("data_derived", "raunkiaeran"),
   out_hutchinsonian = here::here("data_derived", "hutchinsonian"),
   out_eltonian      = here::here("data_derived", "eltonian"),

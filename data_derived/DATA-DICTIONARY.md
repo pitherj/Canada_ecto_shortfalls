@@ -578,7 +578,7 @@ is not adopted are given in SM1 and in the script header.
 | `darwinian_sh_summary.csv` | SH-level genome coverage, named and un-named SHs separately (`15b_darwinian_sh_match.R`). Long-format `metric,value` table (16 metrics). |
 | `darwinian_sh_coverage.csv` | One row per Canadian SH: named or un-named, and whether any genome falls in it (`15b`). |
 | `darwinian_genome_sh_assignments.csv` | One row per MycoCosm genome in a Canadian EcM genus: its ITS accession, outcome, and the SH(s) credited (`15b`). |
-| `darwinian_its_needs_review.csv` | The genomes in the file above that were not assigned to an SH, with the GenBank query used — the to-do list for manual checking (`15b`). |
+| `darwinian_genomes_not_assessed.csv` | The genomes in the file above that were not assigned to an SH, with the reason and the GenBank query used. Reported as not assessed; nothing is resolved by hand. |
 
 The first four files come from `15_darwinian.R`, which matches genomes to
 species **by name**. The last four come from `15b_darwinian_sh_match.R`, which
@@ -638,14 +638,14 @@ to an SH; 38 of 2,822 Canadian SHs have a genome (37 of 1,629 named; 1 of
 | `n_genomes` | integer | Number of genomes credited to this SH (0 if none) | No |
 | `genomes` | character | Semicolon-separated MycoCosm names of those genomes | Yes |
 | `has_genome` | logical | `n_genomes > 0` | No |
-| `genus_has_genome` | logical | `TRUE` if any MycoCosm genome carries this SH's genus name (a name-based check, independent of sequence matching) | No |
+| `genus_has_genome` | logical | `TRUE` if any MycoCosm genome carries this SH's genus name (a name-based check, independent of sequence matching); `NA` when the SH has no genus label | Yes |
 
-**Record count**: 2,822 rows (one per SH code in `emf_canada_em_only.csv`;
+**Record count**: one row per SH code in `emf_canada_em_only.csv` (2,719 on 14 November 2026;
 matches the Linnean summary).
 
-#### `darwinian_genome_sh_assignments.csv` and `darwinian_its_needs_review.csv` — fields
+#### `darwinian_genome_sh_assignments.csv` and `darwinian_genomes_not_assessed.csv` — fields
 
-Both files share these fields. The review file holds only the rows whose
+Both files share these fields. The not-assessed file holds only the rows whose
 `outcome` is not `sh_assigned`, and adds `query` and `n_hits` (as in
 `data_raw/mycocosm_its/mycocosm_its_lookup.csv`).
 
@@ -654,7 +654,7 @@ Both files share these fields. The review file holds only the rows whose
 | `taxon_name` | character | Full MycoCosm genome name | No |
 | `genus`, `epithet`, `strain` | character | Name parts, as in the lookup table | `epithet`, `strain`: yes |
 | `its_accession` | character | GenBank ITS accession used | Yes |
-| `source` | character | `auto` or `manual`, from the lookup table | No |
+| `source` | character | Always `auto`, from the lookup table | No |
 | `outcome` | character | `sh_assigned` (all tied best UNITE hits share one identity); `ambiguous_tie` (tied hits belong to different species or different un-named SHs, so no SH is credited); `no_unite_hit_at_98.5` (ITS2 matches no UNITE reference at ≥ 98.5%); `no_its2_extracted` (ITSx found no ITS2 of ≥ 100 bp, e.g. an ITS1-only record); `no_its_accession (<status>)` (no accession; `<status>` is the lookup status) | No |
 | `credited_sh` | character | SH code(s) credited, semicolon-separated. More than one only when a named species is split across SHs and the genome ties equally with each. Empty unless `outcome = sh_assigned`. | Yes |
 | `unite_names` | character | UNITE species label(s) of the tied best hits | Yes |

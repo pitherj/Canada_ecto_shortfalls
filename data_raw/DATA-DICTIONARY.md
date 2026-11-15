@@ -488,16 +488,16 @@ then the longest.
 **How the file is maintained.**
 - On each run, only genomes **not already in the lookup** are searched for.
   Existing rows are reused unchanged, so results are stable between runs.
-- A row can be resolved by hand: enter the GenBank accession in
-  `its_accession`, set `status` to `matched` and `source` to `manual`, and say
-  how it was found in `notes`. Manual rows are never overwritten.
-- To force an automatic row to be searched again, delete that row.
+- Rows are never edited by hand: genomes the search cannot resolve are
+  reported as not assessed (`data_derived/darwinian/darwinian_genomes_not_assessed.csv`),
+  so updates run unattended.
+- To force a row to be searched again, delete that row.
 - Genomes that have dropped off the MycoCosm list keep their row but are not
   counted.
 
 | File | Description |
 |---|---|
-| `mycocosm_its_lookup.csv` | One row per genome: the search sent, its outcome, and the chosen ITS accession. Written by `15b`; may be hand-edited as above. |
+| `mycocosm_its_lookup.csv` | One row per genome: the search sent, its outcome, and the chosen ITS accession. Written by `15b`. |
 | `mycocosm_its_sequences.fasta` | The ITS sequences for every accession in the lookup with `status = matched`, as downloaded from GenBank. Headers are GenBank's (`>ACCESSION.VERSION description`). Only missing accessions are downloaded on later runs; the download stops with an error, saving nothing, if any requested accession fails to arrive. |
 
 #### `mycocosm_its_lookup.csv` — fields
@@ -514,7 +514,7 @@ then the longest.
 | `its_accession` | character | Chosen GenBank accession, with version (e.g. `MZ570244.1`). Empty unless `status = matched`. | Yes |
 | `its_length` | integer | Length of that record, in base pairs | Yes |
 | `status` | character | `matched` (strain-verified record found); `no_strain_code` (name has no usable strain code, or one shorter than 3 characters); `no_verified_hit` (no hit, or no hit with a matching strain field); `too_many_hits` (over 500 hits, a sign that GenBank ignored the strain term) | No |
-| `source` | character | `auto` (written by the automatic search) or `manual` (hand-entered; never overwritten) | No |
+| `source` | character | Always `auto` (written by the automatic search) | No |
 | `retrieved_on` | date | Date the automatic search ran (YYYY-MM-DD) | No |
 | `notes` | character | When several records passed the strain check, the other accessions; for manual rows, how the accession was found | Yes |
 
@@ -851,9 +851,9 @@ the other ten cover regions outside Canada and do not affect this analysis.
 
 **GenBank is also queried by `15b_darwinian_sh_match.R`**, for same-strain ITS
 sequences of MycoCosm genomes. Unlike the queries above, those results are
-cached in `data_raw/mycocosm_its/` rather than in `data_derived/checkpoints/`,
-because the lookup table can be hand-edited and must survive a clean rebuild of
-`data_derived/` (see the "MycoCosm genome → GenBank ITS lookup" entry).
+cached in their own writable folder, `data_raw/mycocosm_its/`, because `15b`
+adds rows whenever MycoCosm lists new genomes (see the "MycoCosm genome →
+GenBank ITS lookup" entry).
 
 **Access dates.** GenBank was queried 29 June 2026 (`03_genbank.R`,
 `18_eltonian.R`) and 14 November 2026 (`15b_darwinian_sh_match.R`). The NSR checklist refresh

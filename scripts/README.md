@@ -88,7 +88,7 @@ shortfall analyses (in manuscript order) and the sampling maps.
 | 13 | `13_wallacean_global_comparator.R` | Global GF comparator metrics | global GF SH matrix | `gf_global_comparator_*.csv` | Table 1 (GlobalFungi-wide column) |
 | 14 | `14_prestonian.R` | Temporal coverage vs. BioTIME | BioTIME, `emf` | `prestonian_*` | in-text Prestonian |
 | 15 | `15_darwinian.R` | Genome availability vs. MycoCosm, matched by species name | MycoCosm list, `emf` | `darwinian_summary.csv`, `darwinian_mycocosm_matches.csv`, `darwinian_species_matches.csv`, `darwinian_genus_summary.csv` | in-text Darwinian |
-| 15b | `15b_darwinian_sh_match.R` | Genome availability per UNITE SH, matched by sequence: links each MycoCosm genome to a same-strain GenBank ITS sequence, then assigns it to an SH (ITSx + vsearch at 98.5%, as in 03). Covers un-named SHs, which name matching cannot | MycoCosm list, NCBI GenBank, UNITE FASTA, `emf`, `data_raw/mycocosm_its/` | `data_raw/mycocosm_its/*` (lookup + sequences), `darwinian_sh_summary.csv`, `darwinian_sh_coverage.csv`, `darwinian_genome_sh_assignments.csv`, `darwinian_its_needs_review.csv` | reviewer response on un-named SHs (not yet cited in the manuscript) |
+| 15b | `15b_darwinian_sh_match.R` | Genome availability per UNITE SH, matched by sequence: links each MycoCosm genome to a same-strain GenBank ITS sequence, then assigns it to an SH (ITSx + vsearch at 98.5%, as in 03). Covers un-named SHs, which name matching cannot | MycoCosm list, NCBI GenBank, UNITE FASTA, `emf`, `data_raw/mycocosm_its/` | `data_raw/mycocosm_its/*` (lookup + sequences), `darwinian_sh_summary.csv`, `darwinian_sh_coverage.csv`, `darwinian_genome_sh_assignments.csv`, `darwinian_genomes_not_assessed.csv` | reviewer response on un-named SHs (not yet cited in the manuscript) |
 | 16 | `16_raunkiaeran.R` | Trait coverage from FungalTraits | FungalTraits, `emf` | `raunkiaeran_*` | Table 4 |
 | 17 | `17_hutchinsonian.R` | Climate-space coverage, per-ecozone coverage, ecozone sampling map | `emf`, WorldClim, ecoregions (used to build ecozone polygons) | `hutchinsonian_*` (incl. `hutchinsonian_ecozone_sample_counts.csv`), `Figure-03_climate_gap.png` (+ `..._grey.png`), `Figure-S4_ecozone_sampling_map.png` (+ `..._grey.png`) | Figure 3, Figure S4, Table S1 |
 | 18 | `18_eltonian.R` | Host–fungus interaction coverage (Canada + global; root-derived evidence only), host habitat coverage, host bivariate map | `emf`, host list, host rasters (08), global GF/GenBank | `eltonian_*` (incl. `eltonian_host_raster_summary.csv`, `eltonian_pair_confidence.csv`, `eltonian_sensitivity_confidence.csv`, `eltonian_sample_type_tally_canada_all.csv`), `bien_host_data_richness_0.5deg.tif`, `bien_host_data_proportion_0.5deg.tif`, `Figure-04_host_bivariate_map.png` (+ `..._grey.png`) | Figure 4, Tables S2 and S3, in-text Eltonian |
@@ -111,9 +111,9 @@ shortfall analyses (in manuscript order) and the sampling maps.
   but both start from the same MycoCosm list. After refreshing
   `data_raw/mycocosm/mycocosm_organism_list.csv`, re-run both. `15b` then
   searches GenBank only for the newly added genomes, and lists any it cannot
-  resolve in `data_derived/darwinian/darwinian_its_needs_review.csv`. Those
-  can be resolved by hand in `data_raw/mycocosm_its/mycocosm_its_lookup.csv`
-  (see `data_raw/DATA-DICTIONARY.md`). After any hand edit, re-run `15b`.
+  link to an SH, with the reason, in
+  `data_derived/darwinian/darwinian_genomes_not_assessed.csv`. These are
+  reported as not assessed; nothing is resolved by hand.
 - `21_geographic_possibility.R` reads `eltonian_summary.csv` and
   `eltonian_species_occurrence_counts.csv` and **stops** unless its own
   recomputed denominator reproduces them exactly, so it must run after

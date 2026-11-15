@@ -24,7 +24,6 @@
 #   On each run, only genomes NOT already in the table are searched for in
 #   GenBank. Rows already present are reused unchanged, so results are stable
 #   between runs and a twice-yearly update only queries newly added genomes.
-#   Rows can be edited by hand (set source = "manual"); see "MANUAL REVIEW".
 #
 #   Automatic search, per genome:
 #     1. Split the MycoCosm name into genus, epithet and strain code
@@ -37,13 +36,12 @@
 #     4. If several records pass, prefer those whose title says they include
 #        ITS2, then the longest.
 #
-# MANUAL REVIEW
-#   Genomes the automatic search cannot resolve are written to
-#     data_derived/darwinian/darwinian_its_needs_review.csv
-#   To resolve one by hand, edit its row in the lookup table: put the GenBank
-#   accession in its_accession, set status = "matched", source = "manual" and
-#   say how it was found in notes. Manual rows are never overwritten. To force
-#   an automatic row to be searched again, delete that row.
+# GENOMES NOT ASSESSED
+#   Genomes the automatic search cannot link to an SH (no same-strain ITS
+#   record, no ITS2 region, no UNITE match, or a tie between SHs) are written,
+#   with the reason, to paths$darwinian_not_assessed. They are reported as not
+#   assessed; nothing is resolved by hand, so every update runs unattended.
+#   To force a genome to be searched again, delete its row from the lookup.
 #
 # INPUTS
 #   paths$mycocosm_list   — MycoCosm genome list (manual export; see 15_darwinian.R)
@@ -62,7 +60,8 @@
 #   darwinian_sh_coverage.csv           — one row per Canadian SH: named or
 #                                         un-named, and whether it has a genome
 #   darwinian_sh_summary.csv            — summary counts (feeds the manuscript)
-#   darwinian_its_needs_review.csv      — genomes needing manual checking
+#   darwinian_genomes_not_assessed.csv  — genomes not linked to an SH, with
+#                                         the reason
 # =============================================================================
 
 source(here::here("scripts", "00_setup.R"))
@@ -87,50 +86,20 @@ STRAIN_MIN_CHARS   <- 3L
 MAX_HITS_PER_QUERY <- 500L
 MAX_ITS_LENGTH     <- 5000L
 
-# File locations. The lookup and sequences are raw data (downloaded, plus hand
-# edits), so they live in data_raw/, in their own folder because
-# data_raw/mycocosm/ is write-protected.
-its_dir        <- here::here("data_raw", "mycocosm_its")
-lookup_path    <- file.path(its_dir, "mycocosm_its_lookup.csv")
-seq_cache_path <- file.path(its_dir, "mycocosm_its_sequences.fasta")
+# File locations (paths list in 00_setup.R). The lookup and sequences are
+# raw data (live-query results), so they live in data_raw/, in their own
+# folder because data_raw/mycocosm/ is write-protected.
+its_dir        <- paths$mycocosm_its_dir
+lookup_path    <- paths$mycocosm_its_lookup
+seq_cache_path <- paths$mycocosm_its_seqs
 dir.create(its_dir, showWarnings = FALSE, recursive = TRUE)
 
-itsx_input  <- file.path(paths$temp_dir, "darwinian_its_input.fasta")
-itsx_prefix <- file.path(paths$temp_dir, "darwinian_itsx")
-itsx_its2   <- paste0(itsx_prefix, ".ITS2.fasta")
-vs_query    <- file.path(paths$temp_dir, "darwinian_vsearch_query.fasta")
-vs_hits     <- file.path(paths$temp_dir, "darwinian_vsearch_hits.txt")
+out_assign  <- paths$darwinian_genome_sh
+out_cover   <- paths$darwinian_sh_coverage
+out_summary <- paths$darwinian_sh_summary
+out_review  <- paths$darwinian_not_assessed
 
-out_assign  <- file.path(paths$out_darwinian, "darwinian_genome_sh_assignments.csv")
-out_cover   <- file.path(paths$out_darwinian, "darwinian_sh_coverage.csv")
-out_summary <- file.path(paths$out_darwinian, "darwinian_sh_summary.csv")
-out_review  <- file.path(paths$out_darwinian, "darwinian_its_needs_review.csv")
-
-# ---- Small helper: read a FASTA file into a table ----------------------------
-# Same helper as in 03_genbank.R. Returns one row per sequence: `header`
-# (without the leading ">") and `seq` (joined across wrapped lines).
-read_fasta_tbl <- function(path) {
-  if (!file.exists(path)) {
-    return(tibble::tibble(header = character(0), seq = character(0)))
-  }
-  lines <- readr::read_lines(path)
-  header_idx <- which(startsWith(lines, ">"))
-  if (length(header_idx) == 0L) {
-    return(tibble::tibble(header = character(0), seq = character(0)))
-  }
-  seq_end <- c(header_idx[-1] - 1L, length(lines))
-  tibble::tibble(
-    header = sub("^>", "", lines[header_idx]),
-    seq = purrr::map2_chr(header_idx + 1L, seq_end, function(s, e) {
-      if (s > e) return("")
-      paste0(lines[s:e], collapse = "")
-    })
-  )
-}
-
-write_fasta_tbl <- function(tbl, path) {
-  readr::write_lines(paste0(">", tbl$header, "\n", tbl$seq), path)
-}
+# read_fasta_tbl() and write_fasta_tbl() are defined in 00_setup.R.
 
 # ---- Small helper: normalize a strain code for comparison --------------------
 # Strain codes are written inconsistently ("CBS 559.96", "CBS559.96",
@@ -379,14 +348,22 @@ if (length(missing_acc) > 0L) {
 }
 
 # =============================================================================
-# Step 4: Extract ITS2 (ITSx) and assign to UNITE SHs (vsearch, 98.5%)
+# Steps 4-5: Extract ITS2 (ITSx), assign to UNITE SHs (vsearch, 98.5%), and
+#            decide which SH(s) each genome is credited to
 # =============================================================================
-# Same tools and settings as Steps 4-5 of 03_genbank.R. Unlike that script,
-# these steps re-run every time (they take seconds for ~150 sequences), so a
-# changed lookup table can never leave stale results behind.
+# assign_its2_to_sh() (00_setup.R) applies the rule used for our own GenBank
+# data in 03_genbank.R: ITS2 only, fragments of at least ITS2_MIN_LENGTH bp,
+# vsearch at SH_IDENTITY against the pinned UNITE FASTA, every reference tied
+# for the best match kept. Ties: each tied hit is reduced to a "tie identity"
+# (the species name for a named species, the SH code for an un-named "_sp"
+# SH). If all tied hits share one identity, the genome is credited to every SH
+# code among them (a named species can be split across several SHs);
+# otherwise it is credited to none ("ambiguous_tie").
 #
-# Each sequence is relabelled with a short key ("g1", "g2", ...) so results can
-# be joined back to the genome without parsing GenBank headers.
+# These steps re-run every time (seconds for ~150 sequences), so a changed
+# lookup table can never leave stale results behind. Each sequence is
+# labelled with a short key ("g1", "g2", ...) so results join back to the
+# genome without parsing GenBank headers.
 
 matched <- lookup_now |>
   dplyr::filter(status == "matched", !is.na(its_accession)) |>
@@ -394,99 +371,22 @@ matched <- lookup_now |>
   dplyr::left_join(dplyr::select(cache, accession, seq),
                    by = c("its_accession" = "accession"))
 
-its2 <- tibble::tibble(key = character(0), seq = character(0))
-hits <- tibble::tibble(key = character(0), target_id = character(0),
-                       identity = numeric(0))
-
-if (nrow(matched) > 0L) {
-  itsx_bin    <- Sys.which("ITSx")
-  vsearch_bin <- Sys.which("vsearch")
-  if (!nzchar(itsx_bin))    stop("ITSx not found on PATH (see 03_genbank.R header).")
-  if (!nzchar(vsearch_bin)) stop("vsearch not found on PATH (see 03_genbank.R header).")
-
-  # Remove outputs from any previous run so a failed step cannot leave old
-  # files to be read by mistake.
-  unlink(c(Sys.glob(paste0(itsx_prefix, "*")), vs_query, vs_hits))
-
-  write_fasta_tbl(dplyr::transmute(matched, header = key, seq), itsx_input)
-  ret <- system(paste(shQuote(itsx_bin), "-i", shQuote(itsx_input),
-                      "-o", shQuote(itsx_prefix), "-t F",
-                      "--save_regions ITS2", "--cpu 4",
-                      "--graphical F", "--silent T"))
-  if (ret != 0L) stop("ITSx failed with exit code ", ret)
-
-  # ITSx headers look like "g12|F|ITS2"; keep the key. Apply the length floor
-  # and replace non-nucleotide characters with N, as in 03_genbank.R.
-  its2 <- read_fasta_tbl(itsx_its2) |>
-    dplyr::transmute(key = sub("\\|.*$", "", header),
-                     seq = gsub("[^ACGTUNRYSWKMBDHV]", "N", toupper(seq))) |>
-    dplyr::filter(nchar(seq) >= ITS2_MIN_LENGTH)
-
-  if (nrow(its2) > 0L) {
-    write_fasta_tbl(dplyr::rename(its2, header = key), vs_query)
-    # --maxaccepts 0 --maxrejects 0: exhaustive search, so the true best match
-    # is found; --top_hits_only: report every reference tied for best.
-    ret <- system(paste(shQuote(vsearch_bin),
-                        "--usearch_global", shQuote(vs_query),
-                        "--db", shQuote(paths$unite_fasta),
-                        "--id", SH_IDENTITY, "--strand both",
-                        "--maxaccepts 0", "--maxrejects 0",
-                        "--blast6out", shQuote(vs_hits),
-                        "--top_hits_only", "--threads 4", "--quiet"))
-    if (ret != 0L) stop("vsearch failed with exit code ", ret)
-    if (file.exists(vs_hits) && file.size(vs_hits) > 0) {
-      hits <- readr::read_tsv(vs_hits, col_names = FALSE, show_col_types = FALSE,
-                              col_types = readr::cols(.default = "c")) |>
-        dplyr::transmute(key = X1, target_id = X2, identity = as.numeric(X3))
-    }
-  }
-}
-
-# =============================================================================
-# Step 5: Decide which SH(s) each genome is credited to
-# =============================================================================
-# UNITE FASTA headers look like
-#   "Tuber_thailandicum|KP196332|SH0885023.10FU|reps|k__Fungi;...;s__Tuber_thailandicum"
-# so the SH code is the third "|"-separated field and the species the first.
-#
-# Ties (several UNITE references equally good) are handled as in 03_genbank.R.
-# Each tied hit is reduced to a "tie identity": the species name for a named
-# species, or the SH code itself for an un-named ("_sp") SH.
-#   - All tied hits share one identity -> the genome is credited to every SH
-#     code among them. (A named species can be split across several SHs; the
-#     genome belongs to that species, so each of its tied SHs is credited.)
-#   - Identities differ -> the genome cannot be placed in one SH and is credited
-#     to none ("ambiguous_tie").
-
-hits <- hits |>
-  dplyr::mutate(
-    sh_code   = sub("^[^|]+\\|[^|]+\\|([^|]+)\\|.*$", "\\1", target_id),
-    unite_sp  = sub("\\|.*$", "", target_id),
-    is_dark   = grepl("_sp$", unite_sp),
-    tie_id    = dplyr::if_else(is_dark, sh_code, unite_sp)
-  )
-
-per_genome <- hits |>
-  dplyr::group_by(key) |>
-  dplyr::summarise(
-    best_identity   = max(identity),
-    n_tie_ids       = dplyr::n_distinct(tie_id),
-    sh_codes        = paste(sort(unique(sh_code)), collapse = "; "),
-    unite_names     = paste(sort(unique(unite_sp)), collapse = "; "),
-    .groups = "drop"
-  )
+per_genome <- if (nrow(matched) > 0L)
+  assign_its2_to_sh(dplyr::select(matched, key, seq),
+                    file.path(paths$temp_dir, "darwinian"),
+                    identity = SH_IDENTITY, min_len = ITS2_MIN_LENGTH) else
+  tibble::tibble(key = character(0), outcome = character(0), sh_codes = character(0),
+                 unite_names = character(0), best_identity = numeric(0))
 
 assignments <- lookup_now |>
   dplyr::left_join(dplyr::select(matched, taxon_name, key), by = "taxon_name") |>
   dplyr::left_join(per_genome, by = "key") |>
   dplyr::mutate(
-    has_its2 = key %in% its2$key,
     outcome = dplyr::case_when(
-      status != "matched"       ~ paste0("no_its_accession (", status, ")"),
-      !has_its2                 ~ "no_its2_extracted",
-      is.na(n_tie_ids)          ~ "no_unite_hit_at_98.5",
-      n_tie_ids > 1L            ~ "ambiguous_tie",
-      TRUE                      ~ "sh_assigned"
+      status != "matched"         ~ paste0("no_its_accession (", status, ")"),
+      outcome == "no_its2"        ~ "no_its2_extracted",
+      outcome == "no_unite_hit"   ~ "no_unite_hit_at_98.5",
+      TRUE                        ~ outcome
     ),
     credited_sh = dplyr::if_else(outcome == "sh_assigned", sh_codes, NA_character_)
   ) |>
@@ -495,8 +395,8 @@ assignments <- lookup_now |>
 
 readr::write_csv(assignments, out_assign, na = "")
 
-# Genomes needing a person to look at them: no accession found, or an accession
-# that did not lead to an SH.
+# Genomes not assessed: no accession found, or an accession that did not lead
+# to an SH. Written with the reason; reported as not assessed.
 review <- assignments |>
   dplyr::filter(outcome != "sh_assigned") |>
   dplyr::left_join(dplyr::select(lookup_now, taxon_name, query, n_hits), by = "taxon_name") |>
@@ -541,7 +441,9 @@ coverage <- canada_sh |>
   dplyr::mutate(
     n_genomes        = dplyr::coalesce(n_genomes, 0L),
     has_genome       = n_genomes > 0L,
-    genus_has_genome = genus %in% genome_genera
+    # NA when the SH has no genus label (genus = NA, see 04): its genus, and
+    # so whether that genus has a genome, is unknown.
+    genus_has_genome = dplyr::if_else(is.na(genus), NA, genus %in% genome_genera)
   ) |>
   dplyr::arrange(sh_code)
 
@@ -556,7 +458,7 @@ n_unnamed   <- sum(!coverage$named)
 g_sh        <- sum(coverage$has_genome)
 g_named     <- sum(coverage$has_genome & coverage$named)
 g_unnamed   <- sum(coverage$has_genome & !coverage$named)
-unnamed_no_genus_genome <- sum(!coverage$named & !coverage$genus_has_genome)
+unnamed_no_genus_genome <- sum(!coverage$named & coverage$genus_has_genome %in% FALSE)
 
 # Named species (UNITE labels) with a genome via the SH route, for comparison
 # with the name-based count in 15_darwinian.R.
@@ -572,7 +474,7 @@ summary_tbl <- tibble::tibble(
     "MycoCosm genomes in EcM genera present in Canada",
     "Genomes with a same-strain ITS accession",
     "Genomes assigned to a UNITE SH (98.5% ITS2)",
-    "Genomes not assigned to an SH (see needs_review file)",
+    "Genomes not assigned to an SH (see genomes_not_assessed file)",
     "Canadian SHs (all)",
     "Canadian SHs with >= 1 genome",
     "% of Canadian SHs with >= 1 genome",
@@ -604,5 +506,5 @@ readr::write_csv(summary_tbl, out_summary)
 
 message("Step 6: ", g_sh, " of ", n_sh, " Canadian SHs have >= 1 genome (",
         g_named, " named, ", g_unnamed, " un-named). ",
-        nrow(review), " genome(s) listed for manual review.")
+        nrow(review), " genome(s) not assessed.")
 print(outcome_counts)
