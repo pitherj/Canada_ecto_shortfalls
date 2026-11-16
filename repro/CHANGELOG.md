@@ -89,6 +89,19 @@ Changes made with the manuscript update (Phase 5), which do not alter results:
   (not in records or counts) between a from-scratch run and a re-run. The
   checkpoint is now read with only the literal `NA` treated as missing; the
   re-run output is byte-identical to the from-scratch output.
+
+Change made with the manuscript update (Phase 5), which alters one result:
+
+- **Global-scope host counts (`18`).** Global GenBank host pairs used the
+  submitter's species label as found, worldwide, so the global table included
+  137 fungal names not in our Canadian named-species list (other species, and
+  labels such as "Inocybe sp. 4 SGT-2012"). The count of named species with a
+  documented host anywhere therefore described a different set of species
+  from its denominator (the Canadian named species). Global GenBank pairs now
+  count only if the label matches one of our Canadian named species; the
+  GlobalFungi pairs were already limited to Canadian SHs. Named species with a
+  documented host anywhere: 644 → 507 (species lacking one: 706 → 843, 52% →
+  62%). The maximum number of hosts for one species (21) is unchanged.
 - Shared helpers in `00_setup.R` (EcM definition, coordinate test, FASTA
   input/output, SH assignment), used by `04`, `09` and `15b`.
 - Diagnostics in `scripts/diagnostics/`. The ITS1 exclusion check cited in the

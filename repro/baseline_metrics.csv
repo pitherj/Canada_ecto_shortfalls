@@ -69,7 +69,7 @@
 "eltonian_summary::Mean EcM genera documented per Canadian host species (averaged over hosts with >= 1 association)","21.8"
 "eltonian_summary::Named EcM fungal species detected anywhere in the Canadian dataset (full column denominator)","1350"
 "eltonian_summary::Named EcM fungal species with >= 1 documented host species (Canada scope)","291"
-"eltonian_summary::Named EcM fungal species with >= 1 documented host species (global scope; GlobalFungi root + GenBank worldwide)","644"
+"eltonian_summary::Named EcM fungal species with >= 1 documented host species (global scope; GlobalFungi root + GenBank worldwide)","507"
 "eltonian_summary::Observed host x EcM-genus interaction pairs (Canadian scope)","392"
 "eltonian_summary::Observed host x named-species pairs supported by exactly 1 occurrence (sample/record)","532"
 "eltonian_summary::Observed host-genus x fungal-genus pairs supported by exactly 1 occurrence (sample/record)","49"

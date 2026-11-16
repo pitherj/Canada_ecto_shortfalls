@@ -1631,13 +1631,17 @@ if (nrow(gb_global_meta) > 0) {
     dplyr::distinct(host_species = host_clean, fungal_genus = genus_queried)
 
   # Host → named EcM species (global, GenBank, from organism field)
+  # The organism field is the submitter's own label, worldwide, so it includes
+  # species not in our Canadian dataset and labels such as "Inocybe sp. 4".
+  # Only records whose label is one of our Canadian named species are kept
+  # (all_named_fungal_species, Part A), so that the global-scope counts below
+  # describe the same species as the Canadian ones. The GlobalFungi pairs are
+  # already restricted to Canadian SHs.
   host_species_global_gb <- gb_global_root |>
     dplyr::filter(!is.na(host_clean), host_clean %in% host_tbl$species,
                   !is.na(organism), nzchar(trimws(organism))) |>
     dplyr::mutate(fungal_species = trimws(organism)) |>
-    dplyr::filter(!grepl("^(Fungi|Basidiomycota|Ascomycota|uncultured|sp\\.|NA)$",
-                         fungal_species, ignore.case = TRUE),
-                  nchar(fungal_species) > 3L) |>
+    dplyr::filter(fungal_species %in% all_named_fungal_species) |>
     dplyr::distinct(host_species = host_clean, fungal_species)
 
 } else {
